@@ -28,11 +28,13 @@ describe('App', () => {
       { title: 'Albert Einstein', description: 'German physicist', url: '' },
     ])
     fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:736',
       title: 'Albert Einstein',
       summary: 'German-born theoretical physicist.',
       latestRevisionId: 1234,
       categories: ['Physicists'],
       links: ['Physics', 'Nobel Prize in Physics'],
+      images: [],
     })
 
     const wrapper = mount(App)
@@ -48,6 +50,8 @@ describe('App', () => {
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
     expect(wrapper.text()).toContain('German-born theoretical physicist.')
     expect(wrapper.text()).toContain('Revision: 1234')
+    expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
+    expect(wrapper.findAll('.world-view__portal')).toHaveLength(2)
   })
 
   it('shows an error message when the article fails to load', async () => {
