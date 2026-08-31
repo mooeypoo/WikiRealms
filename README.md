@@ -42,4 +42,21 @@ A world is generated from a specific article revision and an engine version, mak
 
 ## Status
 
-Project planning and architecture phase.
+Initial implementation underway. Project scaffold and Wikipedia title search (Milestones 1–2) are in place.
+
+## Getting started
+
+```bash
+npm install
+npm run dev    # start the dev server
+npm run build  # production build
+npm test       # run the test suite (vitest)
+```
+
+## Project structure
+
+- `src/core/` — pure domain logic (e.g. search result normalization)
+- `src/adapters/` — external integrations (Wikipedia API, etc.)
+- `src/engine/` — world generation and navigation logic (future)
+- `src/ui/` — Vue components and composables
+- `tests/` — test suite, mirroring the `src/` structure (kept separate so `src/` can ship cleanly)
