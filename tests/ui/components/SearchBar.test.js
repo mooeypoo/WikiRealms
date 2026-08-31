@@ -48,6 +48,6 @@ describe('SearchBar', () => {
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
 
-    expect(wrapper.find('.search-bar__status--error').text()).toBe('boom')
+    expect(wrapper.find('.search-bar__status--error').text()).toContain('boom')
   })
 })

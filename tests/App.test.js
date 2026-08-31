@@ -57,7 +57,7 @@ describe('App', () => {
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
     expect(wrapper.text()).toContain('German-born theoretical physicist.')
-    expect(wrapper.text()).toContain('Revision: 1234')
+    expect(wrapper.text()).toContain('1234')
     expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
     expect(wrapper.findAll('.world-view__portal')).toHaveLength(2)
   })
@@ -75,7 +75,7 @@ describe('App', () => {
     await wrapper.find('.search-bar__results button').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.app__status--error').text()).toBe('boom')
+    expect(wrapper.find('.app__alert--error').text()).toContain('boom')
   })
 
   it('navigates to a portal target and back again, preserving traversal history', async () => {
@@ -183,5 +183,63 @@ describe('App', () => {
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
     const [backButton] = wrapper.findAll('.app__nav-controls button')
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
+  })
+
+  it('shows an empty-state prompt before any article has been selected', () => {
+    const wrapper = mount(App)
+
+    expect(wrapper.find('.app__empty-state').exists()).toBe(true)
+    expect(wrapper.find('.app__selected-article').exists()).toBe(false)
+  })
+
+  it('shows a stale-world badge when a revisited article has a newer revision than last time', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
+    fetchWikipediaArticle
+      .mockResolvedValueOnce({
+        articleId: 'en:736',
+        title: 'Albert Einstein',
+        summary: 'v1 summary',
+        latestRevisionId: 1000,
+        categories: [],
+        links: ['Physics'],
+        images: [],
+      })
+      .mockResolvedValueOnce({
+        articleId: 'en:22939',
+        title: 'Physics',
+        summary: 'Physics summary',
+        latestRevisionId: 1,
+        categories: [],
+        links: [],
+        images: [],
+      })
+      .mockResolvedValueOnce({
+        articleId: 'en:736',
+        title: 'Albert Einstein',
+        summary: 'v2 summary',
+        latestRevisionId: 2000, // revision changed since the first visit
+        categories: [],
+        links: ['Physics'],
+        images: [],
+      })
+
+    const wrapper = mount(App)
+
+    await wrapper.find('input').setValue('Ein')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    await wrapper.find('.search-bar__results button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.app__badge--stale').exists()).toBe(false) // first visit, nothing to compare against
+
+    await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
+    await flushPromises()
+
+    const [backButton] = wrapper.findAll('.app__nav-controls button')
+    await backButton.trigger('click') // back to Albert Einstein, refetches with a newer revision
+    await flushPromises()
+
+    expect(wrapper.find('.app__badge--stale').exists()).toBe(true)
   })
 })

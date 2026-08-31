@@ -1,10 +1,12 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: system-ui, sans-serif;
 }
 
 body {
   margin: 0;
+  background: #fafafa;
+  color: #1a1a1a;
 }
 
 #app {
