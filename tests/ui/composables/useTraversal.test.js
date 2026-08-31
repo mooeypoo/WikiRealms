@@ -129,4 +129,27 @@ describe('useTraversal', () => {
     expect(backstack.value).toEqual([])
     expect(forwardstack.value).toEqual([])
   })
+
+  it('restore() hydrates state directly, bypassing navigateTo push semantics', () => {
+    const { current, backstack, forwardstack, canGoBack, canGoForward, restore } = useTraversal()
+
+    restore({ current: 'B', backstack: ['A'], forwardstack: ['C'] })
+
+    expect(current.value).toBe('B')
+    expect(backstack.value).toEqual(['A'])
+    expect(forwardstack.value).toEqual(['C'])
+    expect(canGoBack.value).toBe(true)
+    expect(canGoForward.value).toBe(true)
+  })
+
+  it('restore() defaults to an empty/idle state when given no arguments', () => {
+    const { current, backstack, forwardstack, navigateTo, restore } = useTraversal()
+
+    navigateTo('A')
+    restore()
+
+    expect(current.value).toBeNull()
+    expect(backstack.value).toEqual([])
+    expect(forwardstack.value).toEqual([])
+  })
 })

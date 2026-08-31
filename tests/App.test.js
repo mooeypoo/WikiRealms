@@ -8,14 +8,22 @@ vi.mock('../src/adapters/wikipediaSearchAdapter.js', () => ({
 vi.mock('../src/adapters/wikipediaArticleAdapter.js', () => ({
   fetchWikipediaArticle: vi.fn(),
 }))
+vi.mock('../src/adapters/snapshotStorage.js', () => ({
+  saveSnapshotToStorage: vi.fn(),
+  loadSnapshotFromStorage: vi.fn().mockReturnValue(null),
+  clearSnapshotFromStorage: vi.fn(),
+}))
 
 import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js'
 import { fetchWikipediaArticle } from '../src/adapters/wikipediaArticleAdapter.js'
+import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/snapshotStorage.js'
 
 beforeEach(() => {
   vi.useFakeTimers()
   searchWikipediaTitles.mockReset()
   fetchWikipediaArticle.mockReset()
+  saveSnapshotToStorage.mockReset()
+  loadSnapshotFromStorage.mockReset().mockReturnValue(null)
 })
 
 afterEach(() => {
@@ -118,5 +126,62 @@ describe('App', () => {
     await flushPromises()
 
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+  })
+
+  it('persists a snapshot to storage whenever traversal changes', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:736',
+      title: 'Albert Einstein',
+      summary: 'German-born theoretical physicist.',
+      latestRevisionId: 1234,
+      categories: [],
+      links: [],
+      images: [],
+    })
+
+    const wrapper = mount(App)
+
+    await wrapper.find('input').setValue('Ein')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    await wrapper.find('.search-bar__results button').trigger('click')
+    await flushPromises()
+
+    expect(saveSnapshotToStorage).toHaveBeenCalled()
+    const [snapshot] = saveSnapshotToStorage.mock.calls.at(-1)
+    expect(snapshot.navigation.current).toBe('Albert Einstein')
+    expect(snapshot.articleCache['Albert Einstein'].title).toBe('Albert Einstein')
+  })
+
+  it('restores traversal and article cache from a persisted snapshot on mount', async () => {
+    loadSnapshotFromStorage.mockReturnValue({
+      schemaVersion: '1.0',
+      createdAt: '2026-08-31T00:00:00Z',
+      appVersion: '0.1.0',
+      engineVersion: 'v1',
+      worlds: {},
+      navigation: { current: 'Albert Einstein', backstack: ['Physics'], forwardstack: [] },
+      articleCache: {},
+      generationCache: {},
+      uiState: {},
+    })
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:736',
+      title: 'Albert Einstein',
+      summary: 'German-born theoretical physicist.',
+      latestRevisionId: 1234,
+      categories: [],
+      links: [],
+      images: [],
+    })
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
+    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+    const [backButton] = wrapper.findAll('.app__nav-controls button')
+    expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
   })
 })

@@ -58,5 +58,27 @@ export function useTraversal() {
     forwardstack.value = []
   }
 
-  return { current, backstack, forwardstack, canGoBack, canGoForward, navigateTo, goBack, goForward, reset }
+  /**
+   * Hydrates traversal state directly (e.g. from a restored snapshot),
+   * bypassing navigateTo's push/branch semantics.
+   * @param {{ current?: string|null, backstack?: string[], forwardstack?: string[] }} state
+   */
+  function restore({ current: restoredCurrent = null, backstack: restoredBackstack = [], forwardstack: restoredForwardstack = [] } = {}) {
+    current.value = restoredCurrent
+    backstack.value = [...restoredBackstack]
+    forwardstack.value = [...restoredForwardstack]
+  }
+
+  return {
+    current,
+    backstack,
+    forwardstack,
+    canGoBack,
+    canGoForward,
+    navigateTo,
+    goBack,
+    goForward,
+    reset,
+    restore,
+  }
 }
