@@ -4,6 +4,7 @@ import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import { useArticle } from './ui/composables/useArticle.js'
 import { useWorld } from './ui/composables/useWorld.js'
+import { useTraversal } from './ui/composables/useTraversal.js'
 
 const { article, status, errorMessage, loadArticle } = useArticle()
 const {
@@ -13,10 +14,19 @@ const {
   buildWorld,
   clear: clearWorld,
 } = useWorld()
+const { current, canGoBack, canGoForward, navigateTo, goBack, goForward } = useTraversal()
 
 function onSelect(result) {
-  loadArticle(result.title)
+  navigateTo(result.title)
 }
+
+function onPortalClick(portal) {
+  navigateTo(portal.targetArticleId)
+}
+
+watch(current, (title) => {
+  if (title) loadArticle(title)
+})
 
 watch(article, (newArticle) => {
   if (newArticle) {
@@ -36,6 +46,11 @@ watch(article, (newArticle) => {
 
     <SearchBar @select="onSelect" />
 
+    <div v-if="current" class="app__nav-controls">
+      <button type="button" :disabled="!canGoBack" @click="goBack">← Back</button>
+      <button type="button" :disabled="!canGoForward" @click="goForward">Forward →</button>
+    </div>
+
     <p v-if="status === 'loading'" class="app__status">Loading article…</p>
     <p v-else-if="status === 'error'" class="app__status app__status--error">{{ errorMessage }}</p>
 
@@ -49,7 +64,7 @@ watch(article, (newArticle) => {
       </ul>
 
       <p v-if="worldStatus === 'error'" class="app__status app__status--error">{{ worldErrorMessage }}</p>
-      <WorldView v-else-if="worldStatus === 'success' && world" :world="world" />
+      <WorldView v-else-if="worldStatus === 'success' && world" :world="world" @portal-click="onPortalClick" />
     </section>
   </main>
 </template>
