@@ -68,6 +68,12 @@ Wikipedia is one of the largest knowledge graphs in existence, but it is typical
 - Support export/import of session state as JSON
 - Avoid a database in the first version
 
+#### Testing discipline
+- Any engine-related action must have useful tests
+- Frontend elements should have tests, especially generalized composables
+- Tests must verify behavior and deterministic outcomes, not just repeat interfaces
+- Relevant implementation work is not complete until the useful tests pass
+
 ### Nice-to-have
 
 - Article summary
@@ -130,9 +136,15 @@ Wikipedia is one of the largest knowledge graphs in existence, but it is typical
 - Traversal history must preserve visited order and allow back/forward behavior
 
 ### Session and export
-- Session state must live in memory for the active experience
+- Session state must live in memory for the active session
 - The app must be able to serialize and restore a session snapshot
 - Exported snapshots should be portable JSON
+
+### Testing
+- Engine/domain logic must have useful tests for deterministic behavior and state transitions
+- Shared frontend logic and generalized composables must have tests
+- Tests should verify behavior, not merely duplicate implementation interfaces
+- Changes affecting generation, traversal, or session behavior should be covered by relevant tests
 
 ## Technical constraints
 

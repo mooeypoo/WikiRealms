@@ -27,6 +27,9 @@ The MVP is an English-only Wikipedia explorer where users can:
 - Make the world deterministic and reproducible
 - Prefer simple structures that can evolve naturally
 - Avoid building features that are not needed for the MVP
+- Any engine-related action or generalized frontend behavior must have useful tests
+- Tests should verify behavior and determinism, not merely mirror interfaces
+- Relevant changes are not complete until the useful tests pass
 
 ## Milestone 1: Project setup
 
@@ -67,6 +70,7 @@ Allow users to search for English Wikipedia articles by title.
 - Add autocomplete/search suggestions as the user types
 - Support selection from the results list
 - Handle loading, empty, and error states
+- Add useful tests for search behavior and shared search logic
 
 ### Deliverables
 
@@ -78,6 +82,7 @@ Allow users to search for English Wikipedia articles by title.
 - Typing partial text such as `Ein` returns relevant suggestions like `Albert Einstein`
 - Selecting a result advances the app to article loading/generation
 - Search works for English Wikipedia only in MVP
+- Search logic is covered by useful tests
 
 ## Milestone 3: Article fetch and normalization
 
@@ -91,6 +96,7 @@ Fetch the selected article and normalize the data required by the app.
 - Resolve article identity and latest revision information
 - Normalize article data into the app’s `Article` model
 - Store the minimum article fields needed for MVP
+- Add useful tests for article normalization and revision handling
 
 ### Deliverables
 
@@ -103,6 +109,7 @@ Fetch the selected article and normalize the data required by the app.
 - The app can retrieve the selected article reliably
 - The UI can display the article title and basic context
 - The article record retains latest revision information
+- Article normalization and revision logic are covered by useful tests
 
 ## Milestone 4: World generation v1
 
@@ -117,6 +124,7 @@ Generate a deterministic world from the article and its revision.
 - Implement a first-pass terrain generator
 - Generate portals from outbound links
 - Version the generator so it can evolve later
+- Add useful tests for determinism, seed derivation, and portal generation behavior
 
 ### Deliverables
 
@@ -128,6 +136,7 @@ Generate a deterministic world from the article and its revision.
 - The same article/revision/engine version produces the same world
 - Generated worlds can be cached and reloaded in-session
 - Portal generation is decoupled from rendering logic
+- World generation logic is covered by useful tests
 
 ## Milestone 5: World rendering and exploration
 
@@ -142,6 +151,7 @@ Render the world in a browser and allow the user to examine it.
 - Render terrain at a high level first
 - Show portals visually in the world
 - Show article title and basic article details in the UI
+- Add useful tests for generalized composables and shared presentation logic
 
 ### Deliverables
 
@@ -155,6 +165,7 @@ Render the world in a browser and allow the user to examine it.
 - The user can scroll or pan to inspect the terrain
 - The article title is visible in the UI
 - Some basic article detail is visible in the UI beyond just the title
+- Generalized frontend logic is covered by useful tests
 
 ## Milestone 6: Traversal and history
 
@@ -169,6 +180,7 @@ Allow navigation between worlds and preserve traversal history.
 - Track backstack and forwardstack
 - Preserve the current traversal state in memory
 - Support return navigation even when the article does not explicitly link back, via history
+- Add useful tests for traversal behavior and state transitions
 
 ### Deliverables
 
@@ -181,6 +193,7 @@ Allow navigation between worlds and preserve traversal history.
 - Clicking a portal navigates to the target world
 - The user can go back and forward within the session
 - Traversal history persists while the session is active
+- Traversal logic is covered by useful tests
 
 ## Milestone 7: Snapshot export/import
 
@@ -195,6 +208,7 @@ Make session state portable.
 - Import session state from JSON
 - Store session snapshots in `localStorage` if appropriate
 - Validate basic compatibility/versioning
+- Add useful tests for snapshot serialization and restoration behavior
 
 ### Deliverables
 
@@ -206,6 +220,7 @@ Make session state portable.
 - The current session can be exported as JSON
 - A saved snapshot can be restored
 - The restored session matches the prior navigation state closely enough for continuity
+- Snapshot logic is covered by useful tests
 
 ## Milestone 8: MVP polish
 
