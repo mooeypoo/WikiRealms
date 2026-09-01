@@ -61,26 +61,23 @@ function computeWaterLevelShift(totalArticleSize) {
 }
 
 /**
- * Generates a deterministic terrain grid shaped by an article's section
- * structure: each top-level section becomes a mountain, subsections
- * become sub-peaks, sized by their share of their parent's total text.
- * Fractal noise is layered on top as a small perturbation for natural
- * detail, and biome stays a pure function of (water-level-adjusted)
- * height + independent ambient moisture — see docs/generation.md.
+ * Generates a deterministic terrain grid shaped by a pre-computed peak
+ * list (see flattenPeaks). Each top-level section is a mountain,
+ * subsections are sub-peaks, sized by their share of their parent's
+ * total text. Fractal noise is layered on top as detail, and biome
+ * stays a pure function of (water-level-adjusted) height + independent
+ * ambient moisture — see docs/generation.md.
  *
  * Output shape matches the original feature-vector-driven generateTerrain
- * exactly, so rendering (WorldView, biomeColor) needs no changes.
+ * exactly (plus `peaks`, passed through for renderers that want to label
+ * summits — see WorldView3D.vue), so 2D rendering needs no changes.
  *
- * @param {{ width: number, height: number, rng: () => number, sections: object[], totalArticleSize: number }} options
+ * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number }} options
  * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array }}
  */
-export function generateSectionTerrain({ width, height, rng, sections, totalArticleSize }) {
-  const centerX = width / 2
-  const centerY = height / 2
-  const maxRadius = Math.min(width, height) * PEAK_LAYOUT.topLevelMaxRadiusRatio
-
-  const peaks = flattenPeaks(sections, { centerX, centerY, maxRadius })
+export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
   const sigmas = peaks.map((peak) => Math.max(peak.radius * PEAK_LAYOUT.peakSigmaRatio, 1))
+
 
   const heightNoise = createNoise2D(rng)
   const moistureNoise = createNoise2D(rng)
@@ -122,5 +119,5 @@ export function generateSectionTerrain({ width, height, rng, sections, totalArti
     }
   }
 
-  return { width, height, heightMap, moistureMap, biomeMap }
+  return { width, height, heightMap, moistureMap, biomeMap, peaks }
 }

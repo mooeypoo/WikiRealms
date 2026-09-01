@@ -58,8 +58,12 @@ describe('flattenPeaks', () => {
 describe('generateSectionTerrain', () => {
   const sections = [makeNode('Purpose', 500), makeNode('Features', 1500, [makeNode('Sub', 400)])]
 
+  function peaksFor(width, height) {
+    return flattenPeaks(sections, { centerX: width / 2, centerY: height / 2, maxRadius: Math.min(width, height) * 0.42 })
+  }
+
   it('produces grids sized to width * height', () => {
-    const terrain = generateSectionTerrain({ width: 16, height: 12, rng: createRng(1), sections, totalArticleSize: 2000 })
+    const terrain = generateSectionTerrain({ width: 16, height: 12, rng: createRng(1), peaks: peaksFor(16, 12), totalArticleSize: 2000 })
 
     expect(terrain.heightMap).toHaveLength(192)
     expect(terrain.moistureMap).toHaveLength(192)
@@ -67,20 +71,20 @@ describe('generateSectionTerrain', () => {
   })
 
   it('is deterministic for the same seed and section tree', () => {
-    const a = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), sections, totalArticleSize: 2000 })
-    const b = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), sections, totalArticleSize: 2000 })
+    const a = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), peaks: peaksFor(32, 32), totalArticleSize: 2000 })
+    const b = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), peaks: peaksFor(32, 32), totalArticleSize: 2000 })
 
     expect(Array.from(a.heightMap)).toEqual(Array.from(b.heightMap))
   })
 
   it('produces different terrain for a different section tree', () => {
-    const a = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), sections, totalArticleSize: 2000 })
+    const a = generateSectionTerrain({ width: 32, height: 32, rng: createRng(7), peaks: peaksFor(32, 32), totalArticleSize: 2000 })
     const differentSections = [makeNode('OnlySection', 2000)]
     const b = generateSectionTerrain({
       width: 32,
       height: 32,
       rng: createRng(7),
-      sections: differentSections,
+      peaks: flattenPeaks(differentSections, { centerX: 16, centerY: 16, maxRadius: 32 * 0.42 }),
       totalArticleSize: 2000,
     })
 
@@ -88,7 +92,7 @@ describe('generateSectionTerrain', () => {
   })
 
   it('keeps height and moisture within [0, 1]', () => {
-    const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), sections, totalArticleSize: 2000 })
+    const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), peaks: peaksFor(24, 24), totalArticleSize: 2000 })
 
     for (const value of terrain.heightMap) {
       expect(value).toBeGreaterThanOrEqual(0)
@@ -101,7 +105,7 @@ describe('generateSectionTerrain', () => {
   })
 
   it('assigns every cell a valid known biome', () => {
-    const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), sections, totalArticleSize: 2000 })
+    const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), peaks: peaksFor(24, 24), totalArticleSize: 2000 })
     const validBiomes = new Set(Object.values(BIOME))
 
     for (const biome of terrain.biomeMap) {
@@ -110,12 +114,12 @@ describe('generateSectionTerrain', () => {
   })
 
   it('produces more exposed land on average for a larger totalArticleSize', () => {
-    const small = generateSectionTerrain({ width: 48, height: 48, rng: createRng(5), sections, totalArticleSize: 0 })
+    const small = generateSectionTerrain({ width: 48, height: 48, rng: createRng(5), peaks: peaksFor(48, 48), totalArticleSize: 0 })
     const large = generateSectionTerrain({
       width: 48,
       height: 48,
       rng: createRng(5),
-      sections,
+      peaks: peaksFor(48, 48),
       totalArticleSize: 40000,
     })
 
@@ -125,7 +129,7 @@ describe('generateSectionTerrain', () => {
   })
 
   it('handles an empty section tree gracefully (no peaks, still valid output)', () => {
-    const terrain = generateSectionTerrain({ width: 16, height: 16, rng: createRng(1), sections: [], totalArticleSize: 0 })
+    const terrain = generateSectionTerrain({ width: 16, height: 16, rng: createRng(1), peaks: [], totalArticleSize: 0 })
 
     expect(terrain.heightMap).toHaveLength(256)
     expect(Array.from(terrain.heightMap).every((v) => v >= 0 && v <= 1)).toBe(true)

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
@@ -9,6 +9,9 @@ import { useTraversal } from './ui/composables/useTraversal.js'
 import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
+
+// three.js is heavy; only load it once a 3D view is actually rendered.
+const WorldView3D = defineAsyncComponent(() => import('./ui/components/WorldView3D.vue'))
 
 const { article, status, errorMessage, loadArticle } = useArticle()
 const {
@@ -25,13 +28,46 @@ const { errorMessage: snapshotErrorMessage, exportSnapshot, importSnapshot, pers
 const articleCache = ref({})
 const isStale = ref(false)
 const isSummaryExpanded = ref(false)
+const portalConfirmation = ref(null)  // { targetArticleId, targetTitle }
+const viewMode = ref('3d')
+
+function toggleViewMode() {
+  viewMode.value = viewMode.value === '3d' ? '2d' : '3d'
+}
+
+function countSections(sectionTree) {
+  if (!sectionTree || !sectionTree.sections) return 0
+  let count = 0
+  const traverse = (sections) => {
+    for (const section of sections) {
+      count++
+      if (section.sections && section.sections.length > 0) {
+        traverse(section.sections)
+      }
+    }
+  }
+  traverse(sectionTree.sections)
+  return count
+}
 
 function onSelect(result) {
   navigateTo(result.title)
 }
 
 function onPortalClick(portal) {
-  navigateTo(portal.targetArticleId)
+  // First click shows confirmation, second click navigates
+  portalConfirmation.value = { targetArticleId: portal.targetArticleId, targetTitle: portal.targetTitle }
+}
+
+function confirmPortal() {
+  if (portalConfirmation.value) {
+    navigateTo(portalConfirmation.value.targetArticleId)
+    portalConfirmation.value = null
+  }
+}
+
+function cancelPortal() {
+  portalConfirmation.value = null
 }
 
 function onExportClick() {
@@ -119,8 +155,14 @@ watch([current, backstack, forwardstack, articleCache], () => {
       <p v-else-if="worldStatus === 'loading' && article" class="app__status hud hud--status">
         <Spinner /> Generating world…
       </p>
+      <WorldView3D
+        v-if="worldStatus === 'success' && world && viewMode === '3d'"
+        :world="world"
+        class="cosmos__world"
+        @portal-click="onPortalClick"
+      />
       <WorldView
-        v-if="worldStatus === 'success' && world"
+        v-else-if="worldStatus === 'success' && world"
         :world="world"
         class="cosmos__world"
         @portal-click="onPortalClick"
@@ -135,6 +177,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
     <div v-if="current" class="app__nav-controls hud hud--nav">
       <button type="button" :disabled="!canGoBack" @click="goBack">← Back</button>
       <button type="button" :disabled="!canGoForward" @click="goForward">Forward →</button>
+      <button v-if="world" type="button" @click="toggleViewMode">{{ viewMode === '3d' ? '2D view' : '3D view' }}</button>
       <button type="button" @click="onExportClick">Export snapshot</button>
       <label class="app__import-label">
         Import snapshot
@@ -177,6 +220,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
         <dl class="app__article-meta">
           <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
           <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
+          <div><dt>Sections</dt><dd>{{ countSections(article.sections) }}</dd></div>
           <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
         </dl>
         <a
@@ -189,6 +233,18 @@ watch([current, backstack, forwardstack, articleCache], () => {
           View on Wikipedia ↗
         </a>
       </section>
+    </Transition>
+    <Transition name="fade">
+      <div v-if="portalConfirmation" class="app__portal-modal" @click="cancelPortal">
+        <div class="app__portal-modal-content" @click.stop>
+          <p class="app__portal-modal-label">Portal to</p>
+          <h3 class="app__portal-modal-title">{{ portalConfirmation.targetTitle }}</h3>
+          <div class="app__portal-modal-actions">
+            <button class="app__portal-modal-cancel" @click="cancelPortal">Cancel</button>
+            <button class="app__portal-modal-confirm" @click="confirmPortal">Go →</button>
+          </div>
+        </div>
+      </div>
     </Transition>
   </div>
 </template>
@@ -437,5 +493,97 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .panel-leave-to {
   opacity: 0;
   transform: translateY(12px);
+}
+
+.app__portal-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+
+.app__portal-modal-content {
+  background: var(--panel-bg, rgba(18, 22, 40, 0.95));
+  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
+  border-radius: 8px;
+  padding: 2rem;
+  max-width: 400px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app__portal-modal-label {
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.5rem 0;
+}
+
+.app__portal-modal-title {
+  color: var(--text-primary, #eef0ff);
+  font-size: 1.5rem;
+  margin: 0 0 1.5rem 0;
+}
+
+.app__portal-modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.app__portal-modal-cancel,
+.app__portal-modal-confirm {
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.app__portal-modal-cancel {
+  background: transparent;
+  color: var(--text-muted, #888);
+}
+
+.app__portal-modal-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #eef0ff);
+}
+
+.app__portal-modal-confirm {
+  background: rgba(120, 140, 255, 0.2);
+  color: var(--text-primary, #eef0ff);
+}
+
+.app__portal-modal-confirm:hover {
+  background: rgba(120, 140, 255, 0.35);
+  border-color: rgba(120, 140, 255, 0.5);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -44,7 +44,7 @@ export function generateWorld(
     width,
     height,
     rng,
-    sections: cappedSections,
+    peaks,
     totalArticleSize: sectionTree.totalSize,
   })
   const portals = generateSectionPortals(sectionTree, peaks, rng, { width, height })

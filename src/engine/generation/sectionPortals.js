@@ -74,6 +74,7 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
     return {
       portalId: `portal-${index}`,
       targetArticleId: pair.targetArticleId,
+      targetTitle: pair.targetArticleId,
       gridX: clampInt(peak.x + Math.cos(angle) * distance, 0, width - 1),
       gridY: clampInt(peak.y + Math.sin(angle) * distance, 0, height - 1),
       origin: 'article-link',

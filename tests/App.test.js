@@ -30,6 +30,11 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+async function switchTo2D(wrapper) {
+  const toggleButton = wrapper.findAll('.app__nav-controls button').find((button) => button.text() === '2D view')
+  await toggleButton.trigger('click')
+}
+
 describe('App', () => {
   it('loads and displays the selected article after choosing a search result', async () => {
     searchWikipediaTitles.mockResolvedValue([
@@ -59,6 +64,8 @@ describe('App', () => {
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
     expect(wrapper.text()).toContain('German-born theoretical physicist.')
     expect(wrapper.text()).toContain('1234')
+
+    await switchTo2D(wrapper)
     expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
     expect(wrapper.findAll('.world-view__portal')).toHaveLength(2)
   })
@@ -116,6 +123,7 @@ describe('App', () => {
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
     expect(wrapper.find('.app__nav-controls button[disabled]').exists()).toBe(true) // both disabled initially
 
+    await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click')
     await flushPromises()
 
@@ -239,6 +247,7 @@ describe('App', () => {
 
     expect(wrapper.find('.app__badge--stale').exists()).toBe(false) // first visit, nothing to compare against
 
+    await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
     await flushPromises()
 

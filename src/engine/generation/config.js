@@ -102,7 +102,7 @@ export const PEAK_LAYOUT = Object.freeze({
   minPeakRadius: 6, // grid cells; below this a peak isn't visually distinct from noise roughness
   childRadiusRatio: 0.55, // a parent's children are placed within this fraction of its own radius
   childAmplitudeDecay: 0.75, // each depth level's peak height shrinks by this factor from its parent
-  peakSigmaRatio: 0.5, // Gaussian falloff sigma, as a fraction of the peak's radius
+  peakSigmaRatio: 0.32, // Gaussian falloff sigma, as a fraction of the peak's radius - lower = sharper, more distinct summits
 })
 
 /**
@@ -112,10 +112,10 @@ export const PEAK_LAYOUT = Object.freeze({
  * notes on why moisture stays ambient/independent of article content.
  */
 export const TERRAIN_DETAIL = Object.freeze({
-  noiseWeight: 0.15, // how much the detail noise can perturb the structural height, at most
-  noiseScale: 24,
-  noiseOctaves: 3,
-  noisePersistence: 0.5,
+  noiseWeight: 0.3, // how much the detail noise can perturb the structural height, at most
+  noiseScale: 14,
+  noiseOctaves: 4,
+  noisePersistence: 0.55,
 })
 
 /**
