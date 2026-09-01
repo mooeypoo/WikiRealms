@@ -43,6 +43,7 @@ describe('App', () => {
       categories: ['Physicists'],
       links: ['Physics', 'Nobel Prize in Physics'],
       images: [],
+      sections: { lead: { ownSize: 100, links: ['Physics', 'Nobel Prize in Physics'] }, totalSize: 100, sections: [] },
     })
 
     const wrapper = mount(App)
@@ -88,6 +89,7 @@ describe('App', () => {
         categories: ['Physicists'],
         links: ['Physics'],
         images: [],
+        sections: { lead: { ownSize: 100, links: ['Physics'] }, totalSize: 100, sections: [] },
       },
       Physics: {
         articleId: 'en:22939',
@@ -97,6 +99,7 @@ describe('App', () => {
         categories: ['Physical sciences'],
         links: [],
         images: [],
+        sections: { lead: { ownSize: 100, links: [] }, totalSize: 100, sections: [] },
       },
     }
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
@@ -203,6 +206,7 @@ describe('App', () => {
         categories: [],
         links: ['Physics'],
         images: [],
+        sections: { lead: { ownSize: 100, links: ['Physics'] }, totalSize: 100, sections: [] },
       })
       .mockResolvedValueOnce({
         articleId: 'en:22939',
@@ -212,6 +216,7 @@ describe('App', () => {
         categories: [],
         links: [],
         images: [],
+        sections: { lead: { ownSize: 100, links: [] }, totalSize: 100, sections: [] },
       })
       .mockResolvedValueOnce({
         articleId: 'en:736',
@@ -221,6 +226,7 @@ describe('App', () => {
         categories: [],
         links: ['Physics'],
         images: [],
+        sections: { lead: { ownSize: 100, links: ['Physics'] }, totalSize: 100, sections: [] },
       })
 
     const wrapper = mount(App)

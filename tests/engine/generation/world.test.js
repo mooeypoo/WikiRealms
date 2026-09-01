@@ -11,6 +11,30 @@ function makeArticle(overrides = {}) {
     categories: ['Physicists', '1879 births'],
     links: ['Physics', 'Nobel Prize in Physics', 'General relativity'],
     images: ['Einstein.jpg'],
+    sections: {
+      lead: { ownSize: 200, links: ['Physics'] },
+      totalSize: 500,
+      sections: [
+        { title: 'Early life', anchor: 'Early_life', ownSize: 150, subtreeSize: 150, links: ['Germany'], children: [] },
+        {
+          title: 'Career',
+          anchor: 'Career',
+          ownSize: 100,
+          subtreeSize: 150,
+          links: ['Nobel Prize in Physics'],
+          children: [
+            {
+              title: 'Relativity',
+              anchor: 'Relativity',
+              ownSize: 50,
+              subtreeSize: 50,
+              links: ['General relativity'],
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
     ...overrides,
   }
 }
@@ -56,10 +80,21 @@ describe('generateWorld', () => {
     expect(world.generatedAt).toBe('2026-08-31T00:00:00Z')
   })
 
-  it('generates one portal per outbound link', () => {
+  it('generates one portal per (section, distinct link) pair, including the lead', () => {
     const world = generateWorld(makeArticle(), { width: 16, height: 16 })
 
-    expect(world.portals).toHaveLength(3)
+    // lead(Physics) + Early life(Germany) + Career(Nobel Prize in Physics) + Relativity(General relativity)
+    expect(world.portals).toHaveLength(4)
     expect(world.portals.every((p) => p.origin === 'article-link')).toBe(true)
+  })
+
+  it('degrades gracefully to an empty section tree when article.sections is missing', () => {
+    const article = makeArticle()
+    delete article.sections
+
+    const world = generateWorld(article, { width: 8, height: 8 })
+
+    expect(world.portals).toEqual([])
+    expect(world.terrain.heightMap).toHaveLength(64)
   })
 })
