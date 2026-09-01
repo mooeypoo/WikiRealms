@@ -1,12 +1,27 @@
 :root {
-  color-scheme: light;
-  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+  font-family: 'Inter', system-ui, sans-serif;
+
+  --bg-void: #05060f;
+  --bg-deep: #0b0e1e;
+  --bg-nebula: #14183a;
+  --panel-bg: rgba(18, 22, 40, 0.72);
+  --panel-border: rgba(120, 140, 255, 0.28);
+  --text-primary: #eef0ff;
+  --text-muted: #9aa3c7;
+  --accent: #7fdfff;
+  --accent-warm: #ffd27f;
+  --danger-bg: rgba(255, 90, 90, 0.15);
+  --danger-border: rgba(255, 120, 120, 0.4);
+  --danger-text: #ffb3b3;
+  --font-display: 'Cinzel', serif;
 }
 
 body {
   margin: 0;
-  background: #fafafa;
-  color: #1a1a1a;
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 20% 15%, var(--bg-nebula) 0%, var(--bg-deep) 45%, var(--bg-void) 100%);
+  color: var(--text-primary);
 }
 
 #app {

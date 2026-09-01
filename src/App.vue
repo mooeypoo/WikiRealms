@@ -108,15 +108,31 @@ watch([current, backstack, forwardstack, articleCache], () => {
 </script>
 
 <template>
-  <main class="app">
-    <header class="app__header">
-      <h1>WikiRealms</h1>
-      <p>Search an English Wikipedia article to begin exploring its world.</p>
+  <div class="cosmos">
+    <div class="cosmos__field" aria-hidden="true"></div>
+
+    <div class="cosmos__stage">
+      <p v-if="!current && status === 'idle'" class="app__empty-state cosmos__empty">
+        No world yet — search for an article above to generate one.
+      </p>
+      <p v-if="status === 'loading'" class="app__status hud hud--status"><Spinner /> Loading article…</p>
+      <p v-else-if="worldStatus === 'loading' && article" class="app__status hud hud--status">
+        <Spinner /> Generating world…
+      </p>
+      <WorldView
+        v-if="worldStatus === 'success' && world"
+        :world="world"
+        class="cosmos__world"
+        @portal-click="onPortalClick"
+      />
+    </div>
+
+    <header class="hud hud--top">
+      <h1 class="hud__title">WikiRealms</h1>
+      <SearchBar @select="onSelect" />
     </header>
 
-    <SearchBar @select="onSelect" />
-
-    <div v-if="current" class="app__nav-controls">
+    <div v-if="current" class="app__nav-controls hud hud--nav">
       <button type="button" :disabled="!canGoBack" @click="goBack">← Back</button>
       <button type="button" :disabled="!canGoForward" @click="goForward">Forward →</button>
       <button type="button" @click="onExportClick">Export snapshot</button>
@@ -126,79 +142,174 @@ watch([current, backstack, forwardstack, articleCache], () => {
       </label>
     </div>
 
-    <p v-if="snapshotErrorMessage" class="app__alert app__alert--error">⚠️ {{ snapshotErrorMessage }}</p>
-
-    <p v-if="!current && status === 'idle'" class="app__empty-state">
-      No world yet — search for an article above to generate one.
+    <p v-if="snapshotErrorMessage" class="app__alert app__alert--error hud hud--alert">
+      ⚠️ {{ snapshotErrorMessage }}
+    </p>
+    <p v-else-if="status === 'error'" class="app__alert app__alert--error hud hud--alert">⚠️ {{ errorMessage }}</p>
+    <p v-else-if="worldStatus === 'error'" class="app__alert app__alert--error hud hud--alert">
+      ⚠️ {{ worldErrorMessage }}
     </p>
 
-    <p v-if="status === 'loading'" class="app__status"><Spinner /> Loading article…</p>
-    <p v-else-if="status === 'error'" class="app__alert app__alert--error">⚠️ {{ errorMessage }}</p>
-
-    <section v-if="status === 'success' && article" class="app__selected-article">
-      <div class="app__article-heading">
-        <h2>{{ article.title }}</h2>
-        <span v-if="isStale" class="app__badge app__badge--stale" title="This article has a newer revision than when its world was first generated">
-          Updated since last visit
-        </span>
-      </div>
-      <div v-if="article.summary" class="app__summary" :class="{ 'app__summary--collapsed': !isSummaryExpanded }">
-        <p>{{ article.summary }}</p>
-      </div>
-      <button v-if="article.summary" type="button" class="app__summary-toggle" @click="isSummaryExpanded = !isSummaryExpanded">
-        {{ isSummaryExpanded ? 'Show less ▲' : 'Show more ▼' }}
-      </button>
-      <p v-else class="app__empty-state">No summary available for this article.</p>
-      <dl class="app__article-meta">
-        <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
-        <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
-        <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
-      </dl>
-      <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="app__external-link">
-        View on Wikipedia ↗
-      </a>
-
-      <p v-if="worldStatus === 'loading'" class="app__status"><Spinner /> Generating world…</p>
-      <p v-else-if="worldStatus === 'error'" class="app__alert app__alert--error">⚠️ {{ worldErrorMessage }}</p>
-      <WorldView v-else-if="worldStatus === 'success' && world" :world="world" @portal-click="onPortalClick" />
-    </section>
-  </main>
+    <Transition name="panel">
+      <section v-if="status === 'success' && article" class="app__selected-article hud hud--article">
+        <div class="app__article-heading">
+          <h2>{{ article.title }}</h2>
+          <span
+            v-if="isStale"
+            class="app__badge app__badge--stale"
+            title="This article has a newer revision than when its world was first generated"
+          >
+            Updated since last visit
+          </span>
+        </div>
+        <div v-if="article.summary" class="app__summary" :class="{ 'app__summary--collapsed': !isSummaryExpanded }">
+          <p>{{ article.summary }}</p>
+        </div>
+        <button
+          v-if="article.summary"
+          type="button"
+          class="app__summary-toggle"
+          @click="isSummaryExpanded = !isSummaryExpanded"
+        >
+          {{ isSummaryExpanded ? 'Show less ▲' : 'Show more ▼' }}
+        </button>
+        <p v-else class="app__empty-state">No summary available for this article.</p>
+        <dl class="app__article-meta">
+          <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
+          <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
+          <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
+        </dl>
+        <a
+          v-if="article.url"
+          :href="article.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="app__external-link"
+        >
+          View on Wikipedia ↗
+        </a>
+      </section>
+    </Transition>
+  </div>
 </template>
 
 <style scoped>
-.app {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1.5rem;
-  font-family: system-ui, sans-serif;
+.cosmos {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
 }
 
-.app__header p {
-  color: #555;
-  margin-top: 0.25rem;
+.cosmos__field {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.8) 50%, transparent 50%),
+    radial-gradient(1px 1px at 80% 10%, rgba(255, 255, 255, 0.6) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 40% 70%, rgba(255, 255, 255, 0.7) 50%, transparent 50%),
+    radial-gradient(1px 1px at 65% 85%, rgba(255, 255, 255, 0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 90% 60%, rgba(255, 255, 255, 0.6) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 25% 45%, rgba(255, 255, 255, 0.5) 50%, transparent 50%);
+  background-repeat: repeat;
+  background-size: 400px 400px;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
-.app__nav-controls {
+.cosmos__stage {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.cosmos__world {
+  width: 100%;
+  height: 100%;
+}
+
+.cosmos__empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.hud {
+  position: absolute;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 1rem 1.25rem;
+  z-index: 1;
+}
+
+.hud--top {
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 90vw);
+  text-align: center;
+}
+
+.hud__title {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-size: 1.5rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hud--nav {
+  top: 1.25rem;
+  right: 1.25rem;
+  display: flex;
   gap: 0.5rem;
-  margin: 1rem 0;
   flex-wrap: wrap;
+  max-width: 220px;
+}
+
+.hud--article {
+  left: 1.25rem;
+  bottom: 1.25rem;
+  width: min(420px, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.hud--alert {
+  top: 6.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(480px, 90vw);
+}
+
+.hud--status {
+  top: 6.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--text-muted);
 }
 
 .app__nav-controls button,
 .app__import-label {
   padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--panel-border);
   border-radius: 6px;
-  background: #f7f7f7;
+  background: rgba(120, 140, 255, 0.12);
+  color: var(--text-primary);
   cursor: pointer;
   font-size: 0.9rem;
 }
 
 .app__nav-controls button:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .app__import-label {
@@ -213,33 +324,18 @@ watch([current, backstack, forwardstack, articleCache], () => {
   cursor: pointer;
 }
 
-.app__empty-state {
-  color: #777;
-  font-style: italic;
-  padding: 1rem 0;
-}
-
 .app__status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #555;
 }
 
 .app__alert {
   padding: 0.6rem 0.9rem;
   border-radius: 6px;
-  background: #fdecea;
-  color: #7a1f16;
-  border: 1px solid #f3c1bb;
-}
-
-.app__selected-article {
-  margin-top: 1rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fff;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
 }
 
 .app__article-heading {
@@ -251,6 +347,8 @@ watch([current, backstack, forwardstack, articleCache], () => {
 
 .app__article-heading h2 {
   margin: 0;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
 }
 
 .app__badge {
@@ -260,9 +358,9 @@ watch([current, backstack, forwardstack, articleCache], () => {
 }
 
 .app__badge--stale {
-  background: #fff4ce;
-  color: #7a5c00;
-  border: 1px solid #eddb90;
+  background: rgba(255, 210, 127, 0.15);
+  color: var(--accent-warm);
+  border: 1px solid rgba(255, 210, 127, 0.4);
 }
 
 .app__article-meta {
@@ -281,7 +379,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .app__article-meta dd {
@@ -293,6 +391,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
   display: inline-block;
   margin-bottom: 0.75rem;
   font-size: 0.9rem;
+  color: var(--accent);
 }
 
 .app__summary {
@@ -313,7 +412,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
   position: absolute;
   inset: auto 0 0 0;
   height: 2.5em;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+  background: linear-gradient(to bottom, rgba(18, 22, 40, 0), var(--panel-bg));
 }
 
 .app__summary-toggle {
@@ -322,8 +421,21 @@ watch([current, backstack, forwardstack, articleCache], () => {
   padding: 0;
   border: none;
   background: none;
-  color: #2657a3;
+  color: var(--accent);
   cursor: pointer;
   font-size: 0.85rem;
+}
+
+.panel-enter-active,
+.panel-leave-active {
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+}
+
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }
 </style>

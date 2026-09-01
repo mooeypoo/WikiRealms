@@ -50,35 +50,43 @@ function selectResult(result) {
   width: 100%;
   padding: 0.6rem 0.8rem;
   font-size: 1rem;
-  border: 1px solid #ccc;
+  border: 1px solid var(--panel-border, #ccc);
   border-radius: 6px;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary, inherit);
+}
+
+.search-bar input::placeholder {
+  color: var(--text-muted, #999);
 }
 
 .search-bar__status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #555;
+  color: var(--text-muted, #555);
   margin: 0.5rem 0;
 }
 
 .search-bar__status--error {
-  color: #7a1f16;
+  color: var(--danger-text, #7a1f16);
 }
 
 .search-bar__results {
   list-style: none;
   margin: 0.25rem 0 0;
   padding: 0;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--panel-border, #e0e0e0);
   border-radius: 6px;
   max-height: 260px;
   overflow-y: auto;
+  background: rgba(10, 12, 26, 0.85);
+  text-align: left;
 }
 
 .search-bar__results li + li {
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--panel-border, #eee);
 }
 
 .search-bar__results button {
@@ -89,16 +97,17 @@ function selectResult(result) {
   padding: 0.5rem 0.8rem;
   border: none;
   background: none;
+  color: var(--text-primary, inherit);
   cursor: pointer;
   font: inherit;
 }
 
 .search-bar__results button:hover {
-  background: #f5f5f5;
+  background: rgba(127, 223, 255, 0.12);
 }
 
 .search-bar__results button span {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-muted, #666);
 }
 </style>

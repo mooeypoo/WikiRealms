@@ -65,10 +65,10 @@ watch(() => props.world, draw, { flush: 'post' })
 
 <style scoped>
 .world-view__scroll {
+  width: 100%;
+  height: 100%;
   overflow: auto;
-  max-height: 70vh;
-  max-width: 100%;
-  border: 1px solid #ccc;
+  box-shadow: inset 0 0 12vw 4vw var(--bg-void, #05060f);
 }
 
 .world-view__stage {
@@ -90,8 +90,22 @@ watch(() => props.world, draw, { flush: 'post' })
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1;
   padding: 0;
+  filter: drop-shadow(0 0 4px var(--accent, #7fdfff));
+  animation: portal-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes portal-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    filter: drop-shadow(0 0 4px var(--accent, #7fdfff));
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.18);
+    filter: drop-shadow(0 0 10px var(--accent, #7fdfff));
+  }
 }
 </style>
