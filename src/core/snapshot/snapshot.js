@@ -3,9 +3,10 @@
  * Pure and isolated from storage/UI: this module only builds and
  * validates plain JSON-serializable snapshot objects.
  */
+import { APP_VERSION } from '../../appInfo.js'
 
 export const SCHEMA_VERSION = '1.0'
-export const APP_VERSION = '0.1.0'
+export { APP_VERSION }
 
 export class SnapshotInvalidError extends Error {
   constructor(message) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildSectionsUrl, fetchWikipediaSectionsHtml, WikipediaSectionsError } from '../../src/adapters/wikipediaSectionsAdapter.js'
+import { WIKIMEDIA_USER_AGENT } from '../../src/appInfo.js'
 
 function makeFetchResponse(raw, { ok = true, status = 200 } = {}) {
   return {
@@ -35,8 +36,9 @@ describe('fetchWikipediaSectionsHtml', () => {
     const html = await fetchWikipediaSectionsHtml('Albert Einstein', { fetchImpl })
 
     expect(html).toBe('<html>hi</html>')
-    const [calledUrl] = fetchImpl.mock.calls[0]
+    const [calledUrl, calledOptions] = fetchImpl.mock.calls[0]
     expect(calledUrl).toContain('/page/Albert_Einstein/with_html')
+    expect(calledOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
   })
 
   it('throws a WikipediaSectionsError when the response is not ok', async () => {

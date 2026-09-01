@@ -5,6 +5,7 @@ import {
 } from '../core/article/normalizeArticle.js'
 import { fetchWikipediaSectionsHtml } from './wikipediaSectionsAdapter.js'
 import { parseSectionTree } from '../core/article/parseSectionTree.js'
+import { WIKIMEDIA_USER_AGENT } from '../appInfo.js'
 
 export class WikipediaArticleError extends Error {
   constructor(message, { cause } = {}) {
@@ -38,7 +39,9 @@ export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal }
 
   let response
   try {
-    response = await fetchImpl(url, { signal })
+    // Browsers block scripts from setting the real User-Agent header, so
+    // MediaWiki's documented workaround (Api-User-Agent) is used instead.
+    response = await fetchImpl(url, { signal, headers: { 'Api-User-Agent': WIKIMEDIA_USER_AGENT } })
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw error

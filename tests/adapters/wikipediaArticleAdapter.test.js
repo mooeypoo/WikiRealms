@@ -4,6 +4,7 @@ import {
   WikipediaArticleError,
   fetchWikipediaArticle,
 } from '../../src/adapters/wikipediaArticleAdapter.js'
+import { WIKIMEDIA_USER_AGENT } from '../../src/appInfo.js'
 
 function makeFetchResponse(raw, { ok = true, status = 200 } = {}) {
   return {
@@ -62,10 +63,12 @@ describe('fetchWikipediaArticle', () => {
     expect(article.sections).toBeDefined()
     expect(article.sections.lead.ownSize).toBeGreaterThan(0)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
-    const [firstUrl] = fetchImpl.mock.calls[0]
-    const [secondUrl] = fetchImpl.mock.calls[1]
+    const [firstUrl, firstOptions] = fetchImpl.mock.calls[0]
+    const [secondUrl, secondOptions] = fetchImpl.mock.calls[1]
     expect(firstUrl).toContain('titles=Albert+Einstein')
     expect(secondUrl).toContain('with_html')
+    expect(firstOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
+    expect(secondOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
   })
 
   it('throws ArticleNotFoundError when the page is missing', async () => {

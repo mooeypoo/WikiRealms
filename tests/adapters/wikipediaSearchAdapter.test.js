@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { WikipediaSearchError, searchWikipediaTitles } from '../../src/adapters/wikipediaSearchAdapter.js'
+import { WIKIMEDIA_USER_AGENT } from '../../src/appInfo.js'
 
 function makeFetchResponse(raw, { ok = true, status = 200 } = {}) {
   return {
@@ -29,8 +30,9 @@ describe('searchWikipediaTitles', () => {
       { title: 'Einstein', description: 'German physicist', url: 'https://en.wikipedia.org/wiki/Einstein' },
     ])
     expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [calledUrl] = fetchImpl.mock.calls[0]
+    const [calledUrl, calledOptions] = fetchImpl.mock.calls[0]
     expect(calledUrl).toContain('search=Ein')
+    expect(calledOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
   })
 
   it('throws a WikipediaSearchError when the response is not ok', async () => {
