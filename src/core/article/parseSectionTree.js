@@ -42,7 +42,20 @@ function measureOwnSize(sectionEl) {
   for (const el of clone.querySelectorAll(NON_PROSE_SELECTOR)) {
     el.remove()
   }
+  for (const nestedSection of clone.querySelectorAll('section')) {
+    nestedSection.remove()
+  }
   return clone.textContent.trim().length
+}
+
+function isInsideExcludedSection(sectionEl) {
+  let parent = sectionEl.parentElement?.closest('section')
+  while (parent) {
+    const heading = parent.querySelector(HEADING_SELECTOR)
+    if (heading && EXCLUDED_SECTION_TITLES.includes(heading.textContent.trim().toLowerCase())) return true
+    parent = parent.parentElement?.closest('section')
+  }
+  return false
 }
 
 /**
@@ -97,12 +110,12 @@ function computeSubtreeSizes(nodes) {
  */
 export function parseSectionTree(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  const topLevelSections = doc.body.querySelectorAll(':scope > section')
+  const articleSections = doc.body.querySelectorAll('section')
 
   let lead = { ownSize: 0, links: [] }
   const flatSections = []
 
-  for (const sectionEl of topLevelSections) {
+  for (const sectionEl of articleSections) {
     const heading = sectionEl.querySelector(HEADING_SELECTOR)
 
     if (!heading) {
@@ -112,7 +125,7 @@ export function parseSectionTree(html) {
     }
 
     const title = heading.textContent.trim()
-    if (EXCLUDED_SECTION_TITLES.includes(title.toLowerCase())) continue
+  if (EXCLUDED_SECTION_TITLES.includes(title.toLowerCase()) || isInsideExcludedSection(sectionEl)) continue
 
     flatSections.push({
       title,

@@ -64,8 +64,8 @@ function makeEmojiSprite(emoji, size = 96) {
   return new THREE.Sprite(material)
 }
 
-/** Creates an SVG-based main section flag sprite (more elaborate design). */
-function makeFlagSpriteMain() {
+/** Creates an animated beacon for a top-level article section. */
+function makeSectionBeaconMain() {
   const canvas = document.createElement('canvas')
   const size = 128
   canvas.width = size
@@ -73,35 +73,25 @@ function makeFlagSpriteMain() {
   const ctx = canvas.getContext('2d')
   ctx.imageSmoothingEnabled = true
 
-  // Draw a stylized flag on transparent background
-  // White/light pole (vertical line)
-  ctx.strokeStyle = 'rgba(230, 230, 230, 0.95)'
-  ctx.lineWidth = 2.5
-  ctx.lineCap = 'round'
+  const center = size / 2
+  const glow = ctx.createRadialGradient(center, center, 4, center, center, 46)
+  glow.addColorStop(0, 'rgba(255, 224, 130, 1)')
+  glow.addColorStop(0.38, 'rgba(255, 174, 56, 0.8)')
+  glow.addColorStop(1, 'rgba(255, 174, 56, 0)')
+  ctx.fillStyle = glow
   ctx.beginPath()
-  ctx.moveTo(size / 2, size * 0.1)
-  ctx.lineTo(size / 2, size * 0.75)
-  ctx.stroke()
-
-  // Gold/amber pennant (triangular flag)
-  ctx.fillStyle = 'rgba(255, 200, 100, 0.92)'
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(size / 2, size * 0.15)
-  ctx.lineTo(size * 0.75, size * 0.35)
-  ctx.lineTo(size / 2, size * 0.3)
-  ctx.closePath()
+  ctx.arc(center, center, 46, 0, Math.PI * 2)
   ctx.fill()
+
+  ctx.strokeStyle = 'rgba(255, 240, 190, 0.95)'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.arc(center, center, 23, 0, Math.PI * 2)
   ctx.stroke()
 
-  // Small star or accent on the flag
-  ctx.fillStyle = 'rgba(255, 255, 100, 0.8)'
-  const starX = size * 0.65
-  const starY = size * 0.24
-  const starSize = 3
+  ctx.fillStyle = 'rgba(255, 250, 225, 1)'
   ctx.beginPath()
-  ctx.arc(starX, starY, starSize, 0, Math.PI * 2)
+  ctx.arc(center, center, 8, 0, Math.PI * 2)
   ctx.fill()
 
   const material = new THREE.SpriteMaterial({
@@ -112,14 +102,12 @@ function makeFlagSpriteMain() {
     sizeAttenuation: true,
   })
   const sprite = new THREE.Sprite(material)
-  sprite.center.set(0.5, 0)
-  sprite.userData.isMainFlag = true
-  sprite.userData.isSubsectionFlag = false
+  sprite.userData.isSubsectionBeacon = false
   return sprite
 }
 
-/** Creates an SVG-based subsection flag sprite (simpler, smaller design). */
-function makeFlagSpriteSubsection() {
+/** Creates an animated beacon for a nested article section. */
+function makeSectionBeaconSubsection() {
   const canvas = document.createElement('canvas')
   const size = 96
   canvas.width = size
@@ -127,36 +115,25 @@ function makeFlagSpriteSubsection() {
   const ctx = canvas.getContext('2d')
   ctx.imageSmoothingEnabled = true
 
-  // Draw a minimal banner/marker on transparent background
-  // Thin pole (vertical line)
-  ctx.strokeStyle = 'rgba(200, 200, 200, 0.8)'
-  ctx.lineWidth = 1.5
-  ctx.lineCap = 'round'
+  const center = size / 2
+  const glow = ctx.createRadialGradient(center, center, 3, center, center, 34)
+  glow.addColorStop(0, 'rgba(255, 250, 213, 0.95)')
+  glow.addColorStop(0.4, 'rgba(255, 213, 117, 0.7)')
+  glow.addColorStop(1, 'rgba(255, 213, 117, 0)')
+  ctx.fillStyle = glow
   ctx.beginPath()
-  ctx.moveTo(size / 2, size * 0.1)
-  ctx.lineTo(size / 2, size * 0.7)
+  ctx.arc(center, center, 34, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.strokeStyle = 'rgba(255, 248, 207, 0.9)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.arc(center, center, 16, 0, Math.PI * 2)
   ctx.stroke()
 
-  // Compact banner (small horizontal rectangle)
-  ctx.fillStyle = 'rgba(200, 220, 255, 0.8)'
-  ctx.strokeStyle = 'rgba(150, 180, 255, 0.9)'
-  ctx.lineWidth = 1
-  const bannerW = size * 0.45
-  const bannerH = size * 0.2
-  const bannerX = size / 2 - bannerW / 2
-  const bannerY = size * 0.15
-  ctx.fillRect(bannerX, bannerY, bannerW, bannerH)
-  ctx.strokeRect(bannerX, bannerY, bannerW, bannerH)
-
-  // Small diamond accent
-  ctx.fillStyle = 'rgba(100, 180, 255, 0.9)'
-  const diamondSize = 2.5
+  ctx.fillStyle = 'rgba(255, 255, 242, 1)'
   ctx.beginPath()
-  ctx.moveTo(size / 2, bannerY - 3)
-  ctx.lineTo(size / 2 + diamondSize, bannerY)
-  ctx.lineTo(size / 2, bannerY + 3)
-  ctx.lineTo(size / 2 - diamondSize, bannerY)
-  ctx.closePath()
+  ctx.arc(center, center, 5, 0, Math.PI * 2)
   ctx.fill()
 
   const material = new THREE.SpriteMaterial({
@@ -167,9 +144,7 @@ function makeFlagSpriteSubsection() {
     sizeAttenuation: true,
   })
   const sprite = new THREE.Sprite(material)
-  sprite.center.set(0.5, 0)
-  sprite.userData.isSubsectionFlag = true
-  sprite.userData.isMainFlag = false
+  sprite.userData.isSubsectionBeacon = true
   return sprite
 }
 
@@ -216,18 +191,16 @@ function buildTerrainMesh(world) {
   const flags = new THREE.Group()
   for (const peak of world.terrain.peaks ?? []) {
     const local = computePeakFlagPosition(peak, world.terrain, heightScale)
-    // Create sprite for this peak
     const isSubsection = peak.depth > 1
-    const sprite = isSubsection ? makeFlagSpriteSubsection() : makeFlagSpriteMain()
+    const sprite = isSubsection ? makeSectionBeaconSubsection() : makeSectionBeaconMain()
     
-    // The artwork occupies only part of each transparent sprite canvas, so
-    // give it enough world-space area to remain readable above the terrain.
-    const spriteScale = isSubsection ? 3.5 : 5
+    const spriteScale = isSubsection ? 10 : 14
     sprite.scale.set(spriteScale, spriteScale, 1)
     
     sprite.position.set(local.x, local.y, local.z)
     sprite.userData.peakTitle = local.title
     sprite.userData.peakDepth = peak.depth
+    sprite.userData.baseScale = spriteScale
     flags.add(sprite)
   }
 
@@ -330,16 +303,12 @@ function animate() {
     })
   }
 
-  // Show/hide subsection flags based on zoom level (camera distance)
-  if (flagGroup && camera) {
-    // Estimate zoom: closer camera = higher zoom, further = lower zoom
-    const cameraDistance = camera.position.length()
-    const shouldShowSubsections = cameraDistance < 120  // Threshold for showing subsection flags
-    
+  if (flagGroup) {
+    const t = performance.now() * 0.002
     flagGroup.children.forEach((sprite) => {
-      if (sprite.userData.isSubsectionFlag) {
-        sprite.visible = shouldShowSubsections
-      }
+      const pulse = 1 + Math.sin(t + sprite.userData.peakDepth) * 0.12
+      const base = sprite.userData.baseScale
+      sprite.scale.set(base * pulse, base * pulse, 1)
     })
   }
 

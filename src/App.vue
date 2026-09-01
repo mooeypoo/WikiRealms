@@ -41,8 +41,8 @@ function countSections(sectionTree) {
   const traverse = (sections) => {
     for (const section of sections) {
       count++
-      if (section.sections && section.sections.length > 0) {
-        traverse(section.sections)
+      if (section.children && section.children.length > 0) {
+        traverse(section.children)
       }
     }
   }

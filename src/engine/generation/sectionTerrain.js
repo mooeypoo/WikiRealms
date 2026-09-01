@@ -9,30 +9,39 @@ function clamp01(value) {
 
 /**
  * Recursively turns a (peak-limited) section tree into a flat list of
- * radial height bumps ("peaks"), one per node at any depth. Each node's
- * children are placed via the spiral layout within their parent's own
- * footprint, sized relative to their parent's total — so a subsection's
- * bump reflects how much of *its section* it represents, not the whole
- * article.
+ * radial height bumps ("peaks") for a section and its direct subsections.
+ * A section's subtree size controls the breadth of its mountain range;
+ * its own prose controls the height of the base. Direct children form the
+ * sharper summits that reveal the range's internal article structure.
  *
  * @param {object[]} nodes section tree nodes (title, subtreeSize, children, ...)
- * @param {{ centerX: number, centerY: number, maxRadius: number, amplitude?: number }} bounds
+ * @param {{ centerX: number, centerY: number, maxRadius: number, minRadius?: number }} bounds
  * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, depth: number }[]}
  */
-export function flattenPeaks(nodes, { centerX, centerY, maxRadius, amplitude = 1 }) {
+export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0 }) {
   if (!nodes || nodes.length === 0) return []
 
-  const totalSize = nodes.reduce((sum, node) => sum + node.subtreeSize, 0) || 1
-  const positions = computeSpiralLayout(nodes.length, { centerX, centerY, maxRadius })
+  const totalSubtreeSize = nodes.reduce((sum, node) => sum + node.subtreeSize, 0) || 1
+  const totalOwnSize = nodes.reduce((sum, node) => sum + node.ownSize, 0) || 1
+  const positions = computeSpiralLayout(nodes.length, { centerX, centerY, maxRadius, minRadius })
 
   const peaks = []
   nodes.forEach((node, index) => {
-    const share = node.subtreeSize / totalSize
-    const radius = Math.max(maxRadius * Math.sqrt(share), PEAK_LAYOUT.minPeakRadius)
-    const nodeAmplitude = amplitude * Math.sqrt(share)
+    const breadthShare = node.subtreeSize / totalSubtreeSize
+    const heightShare = node.ownSize / totalOwnSize
+    const radius = Math.max(maxRadius * Math.sqrt(breadthShare), PEAK_LAYOUT.minPeakRadius)
+    const minimumAmplitude = node.depth <= 1 ? PEAK_LAYOUT.minTopLevelAmplitude : PEAK_LAYOUT.minSubsectionAmplitude
+    const nodeAmplitude = Math.max(Math.sqrt(heightShare), minimumAmplitude)
     const position = positions[index]
 
-    peaks.push({ x: position.x, y: position.y, radius, amplitude: nodeAmplitude, title: node.title, depth: node.depth })
+    peaks.push({
+      x: position.x,
+      y: position.y,
+      radius,
+      amplitude: nodeAmplitude,
+      title: node.title,
+      depth: node.depth,
+    })
 
     if (node.children.length > 0) {
       peaks.push(
@@ -40,7 +49,7 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, amplitude = 1
           centerX: position.x,
           centerY: position.y,
           maxRadius: radius * PEAK_LAYOUT.childRadiusRatio,
-          amplitude: nodeAmplitude * PEAK_LAYOUT.childAmplitudeDecay,
+          minRadius: radius * PEAK_LAYOUT.childInnerRadiusRatio,
         }),
       )
     }
@@ -76,7 +85,10 @@ function computeWaterLevelShift(totalArticleSize) {
  * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array }}
  */
 export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
-  const sigmas = peaks.map((peak) => Math.max(peak.radius * PEAK_LAYOUT.peakSigmaRatio, 1))
+  const sigmas = peaks.map((peak) => {
+    const sigmaRatio = peak.depth <= 1 ? PEAK_LAYOUT.topLevelSigmaRatio : PEAK_LAYOUT.subsectionSigmaRatio
+    return Math.max(peak.radius * sigmaRatio, 1)
+  })
 
 
   const heightNoise = createNoise2D(rng)
@@ -99,17 +111,27 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
     for (let x = 0; x < width; x++) {
       const index = y * width + x
 
-      let structural = 0
+      let topLevelHeight = 0
+      let subsectionHeight = 0
       for (let i = 0; i < peaks.length; i++) {
         const peak = peaks[i]
         const dx = x - peak.x
         const dy = y - peak.y
         const sigma = sigmas[i]
-        structural += peak.amplitude * Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma))
+        const contribution = peak.amplitude * Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma))
+
+        // Adjacent primary sections form distinct mountain systems instead
+        // of combining into one broad continent. Nested sections still layer
+        // on top to make each system's internal hierarchy visible.
+        if (peak.depth <= 1) {
+          topLevelHeight = Math.max(topLevelHeight, contribution)
+        } else {
+          subsectionHeight += contribution
+        }
       }
 
       const detail = sampleFractalNoise(heightNoise, x, y, detailParams)
-      const rawHeight = clamp01(structural + (detail - 0.5) * TERRAIN_DETAIL.noiseWeight)
+      const rawHeight = clamp01(topLevelHeight + subsectionHeight + (detail - 0.5) * TERRAIN_DETAIL.noiseWeight)
       const finalHeight = clamp01(rawHeight + waterLevelShift)
       const moisture = sampleFractalNoise(moistureNoise, x, y, moistureParams)
 

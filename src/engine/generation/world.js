@@ -37,6 +37,7 @@ export function generateWorld(
     centerX: width / 2,
     centerY: height / 2,
     maxRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelMaxRadiusRatio,
+    minRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelInnerRadiusRatio,
   }
   const peaks = flattenPeaks(cappedSections, layoutBounds)
 

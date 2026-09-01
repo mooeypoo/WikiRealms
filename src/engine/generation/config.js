@@ -17,8 +17,8 @@
  * substantially.
  */
 export const GRID = Object.freeze({
-  width: 128,
-  height: 128,
+  width: 256,
+  height: 256,
 })
 
 /**
@@ -68,9 +68,9 @@ export const PORTAL_LIMITS = Object.freeze({
  * portal is a cheap point-marker, not a full peak.
  */
 export const SECTION_LIMITS = Object.freeze({
-  maxTopLevelSections: 12,
-  maxSubsectionsPerParent: 6,
-  maxPeakDepth: 3,
+  maxTopLevelSections: 16,
+  maxSubsectionsPerParent: 16,
+  maxPeakDepth: 2,
 })
 
 /**
@@ -98,11 +98,15 @@ export const EXCLUDED_SECTION_TITLES = Object.freeze([
  * layout.js's spiral placement and sectionTerrain.js). Assumes GRID above.
  */
 export const PEAK_LAYOUT = Object.freeze({
-  topLevelMaxRadiusRatio: 0.42, // fraction of min(width,height) spanned by the top-level spiral
-  minPeakRadius: 6, // grid cells; below this a peak isn't visually distinct from noise roughness
-  childRadiusRatio: 0.55, // a parent's children are placed within this fraction of its own radius
-  childAmplitudeDecay: 0.75, // each depth level's peak height shrinks by this factor from its parent
-  peakSigmaRatio: 0.32, // Gaussian falloff sigma, as a fraction of the peak's radius - lower = sharper, more distinct summits
+  topLevelMaxRadiusRatio: 0.38, // fraction of min(width,height) spanned by the top-level spiral
+  topLevelInnerRadiusRatio: 0.18, // multi-section articles reserve a central basin instead of forcing one section to the center
+  minPeakRadius: 10, // grid cells; below this a peak isn't visually distinct from noise roughness
+  childRadiusRatio: 0.68, // a parent's children are placed within this fraction of its own radius
+  childInnerRadiusRatio: 0.28, // child peaks begin away from the parent summit so the range has a readable shape
+  minTopLevelAmplitude: 0.58, // every retained primary section must rise above sea level
+  minSubsectionAmplitude: 0.46, // nested sections remain visible as secondary peaks
+  topLevelSigmaRatio: 0.44, // broad base of a section's mountain range
+  subsectionSigmaRatio: 0.2, // sharper summits that give the range its subsection shape
 })
 
 /**
@@ -112,10 +116,10 @@ export const PEAK_LAYOUT = Object.freeze({
  * notes on why moisture stays ambient/independent of article content.
  */
 export const TERRAIN_DETAIL = Object.freeze({
-  noiseWeight: 0.3, // how much the detail noise can perturb the structural height, at most
-  noiseScale: 14,
-  noiseOctaves: 4,
-  noisePersistence: 0.55,
+  noiseWeight: 0.05, // subtle surface texture; section peaks should define the terrain silhouette
+  noiseScale: 18,
+  noiseOctaves: 2,
+  noisePersistence: 0.45,
 })
 
 /**

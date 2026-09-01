@@ -66,8 +66,8 @@ describe('computeVertexColors', () => {
 
 describe('computeHeightScale', () => {
   it('scales proportionally to the smaller grid dimension', () => {
-    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * 0.18)
-    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * 0.18)
+    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * 0.25)
+    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * 0.25)
   })
 })
 
@@ -95,7 +95,16 @@ describe('computePortalLocalPosition', () => {
 
     const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10)
 
-    expect(position.z).toBeGreaterThan(0)
+    expect(position.z).toBeCloseTo(0.32 * 10 + 6)
+  })
+
+  it('keeps a portal above the water surface when its cell is submerged', () => {
+    const terrain = makeTerrain()
+    terrain.heightMap[0] = 0.1
+
+    const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10, 3)
+
+    expect(position.z).toBeCloseTo(0.32 * 10 + 3)
   })
 })
 

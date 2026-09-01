@@ -43,7 +43,7 @@ export function parseRgbColor(rgbString) {
  * @param {number} height
  */
 export function computeHeightScale(width, height) {
-  return Math.min(width, height) * 0.18
+  return Math.min(width, height) * 0.25
 }
 
 /**
@@ -57,8 +57,9 @@ export function computeHeightScale(width, height) {
  * @param {number} [hoverOffset] how far above the surface the marker floats
  * @returns {{ x: number, y: number, z: number }}
  */
-export function computePortalLocalPosition(portal, terrain, heightScale, hoverOffset = 1.5) {
-  return computeLocalPosition(portal.gridX, portal.gridY, terrain, heightScale, hoverOffset)
+export function computePortalLocalPosition(portal, terrain, heightScale, hoverOffset = 6) {
+  const position = computeLocalPosition(portal.gridX, portal.gridY, terrain, heightScale, 0)
+  return { ...position, z: Math.max(position.z, computeWaterSurfaceHeight(heightScale)) + hoverOffset }
 }
 
 /**

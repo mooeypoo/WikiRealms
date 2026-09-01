@@ -50,6 +50,20 @@ describe('parseSectionTree', () => {
     expect(sections[1].children).toHaveLength(0)
   })
 
+  it('reads subsections nested inside REST section elements', () => {
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Life">Life</h2><p>Life text.</p>
+          <section data-mw-section-id="2"><h3 id="Youth">Youth</h3><p>Youth text.</p></section>
+          <section data-mw-section-id="3"><h3 id="Career">Career</h3><p>Career text.</p></section>
+        </section>
+      `),
+    )
+
+    expect(sections).toHaveLength(1)
+    expect(sections[0].children.map((section) => section.title)).toEqual(['Youth', 'Career'])
+  })
+
   it('computes subtreeSize as own size plus all descendant sizes', () => {
     const { sections } = parseSectionTree(
       html(`
@@ -63,6 +77,20 @@ describe('parseSectionTree', () => {
 
     expect(sub.subtreeSize).toBe(sub.ownSize)
     expect(features.subtreeSize).toBe(features.ownSize + sub.subtreeSize)
+  })
+
+  it('measures nested REST section prose only in the nested subsection', () => {
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Parent">Parent</h2><p>parent prose</p>
+          <section data-mw-section-id="2"><h3 id="Child">Child</h3><p>child prose is much longer</p></section>
+        </section>
+      `),
+    )
+
+    const [parent] = sections
+    expect(parent.ownSize).toBe('Parentparent prose'.length)
+    expect(parent.children[0].ownSize).toBe('Childchild prose is much longer'.length)
   })
 
   it('excludes non-prose content (citation lists) from ownSize', () => {

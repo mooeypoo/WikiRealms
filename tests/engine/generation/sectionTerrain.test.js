@@ -34,17 +34,37 @@ describe('flattenPeaks', () => {
     expect(big.radius).toBeGreaterThan(small.radius)
   })
 
-  it('recursively places children within the parent footprint, with reduced amplitude', () => {
+  it('gives every retained section a visible minimum amplitude', () => {
+    const [tiny] = flattenPeaks([makeNode('Tiny', 1), makeNode('Large', 99999)], bounds)
+
+    expect(tiny.amplitude).toBeGreaterThanOrEqual(0.58)
+  })
+
+  it('places direct children around the parent footprint using their own-content height', () => {
     const child = makeNode('Child', 10)
+    child.depth = 2
     const parent = makeNode('Parent', 20, [child])
     const peaks = flattenPeaks([parent], bounds)
 
     expect(peaks).toHaveLength(2) // parent + child
     const [parentPeak, childPeak] = peaks
-    expect(childPeak.amplitude).toBeLessThan(parentPeak.amplitude)
+    expect(childPeak.amplitude).toBeGreaterThanOrEqual(0.46)
 
     const distance = Math.hypot(childPeak.x - parentPeak.x, childPeak.y - parentPeak.y)
-    expect(distance).toBeLessThanOrEqual(parentPeak.radius)
+    expect(distance).toBeGreaterThan(0)
+    expect(distance).toBeLessThanOrEqual(parentPeak.radius * 0.68)
+  })
+
+  it('uses subtree size for a section footprint and own size for its height', () => {
+    const broad = makeNode('Broad', 100, [makeNode('Detail', 90)])
+    broad.ownSize = 10
+    const tall = makeNode('Tall', 20)
+    tall.ownSize = 20
+
+    const [broadPeak, , tallPeak] = flattenPeaks([broad, tall], bounds)
+
+    expect(broadPeak.radius).toBeGreaterThan(tallPeak.radius)
+    expect(broadPeak.amplitude).toBeLessThan(tallPeak.amplitude)
   })
 
   it('enforces a minimum peak radius even for a tiny share', () => {
@@ -89,6 +109,24 @@ describe('generateSectionTerrain', () => {
     })
 
     expect(Array.from(a.heightMap)).not.toEqual(Array.from(b.heightMap))
+  })
+
+  it('keeps a saddle between nearby top-level section peaks', () => {
+    const terrain = generateSectionTerrain({
+      width: 32,
+      height: 32,
+      rng: createRng(7),
+      peaks: [
+        { x: 11, y: 16, radius: 20, amplitude: 0.8, depth: 1, title: 'First' },
+        { x: 21, y: 16, radius: 20, amplitude: 0.8, depth: 1, title: 'Second' },
+      ],
+      totalArticleSize: 2000,
+    })
+
+    const heightAt = (x, y) => terrain.heightMap[y * terrain.width + x]
+
+    expect(heightAt(16, 16)).toBeLessThan(heightAt(11, 16))
+    expect(heightAt(16, 16)).toBeLessThan(heightAt(21, 16))
   })
 
   it('keeps height and moisture within [0, 1]', () => {
