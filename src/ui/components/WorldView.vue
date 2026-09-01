@@ -6,6 +6,7 @@ const CELL_SIZE = 8
 
 const props = defineProps({
   world: { type: Object, required: true },
+  showPortals: { type: Boolean, default: true },
 })
 
 defineEmits(['portal-click'])
@@ -48,6 +49,7 @@ watch(() => props.world, draw, { flush: 'post' })
       <div class="world-view__stage" :style="{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }">
         <canvas ref="canvasRef" :width="canvasWidth" :height="canvasHeight" class="world-view__canvas" />
         <button
+          v-if="showPortals"
           v-for="portal in world.portals"
           :key="portal.portalId"
           type="button"

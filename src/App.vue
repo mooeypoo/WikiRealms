@@ -1,12 +1,17 @@
 <script setup>
-import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
+import Taskbar from './ui/components/Taskbar.vue'
+import InfoHub from './ui/components/InfoHub.vue'
+import SettingsModal from './ui/components/SettingsModal.vue'
 import { useArticle } from './ui/composables/useArticle.js'
 import { useWorld } from './ui/composables/useWorld.js'
 import { useTraversal } from './ui/composables/useTraversal.js'
 import { useSnapshot } from './ui/composables/useSnapshot.js'
+import { useShare } from './ui/composables/useShare.js'
+import { useUIState } from './ui/composables/useUIState.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 
@@ -24,12 +29,18 @@ const {
 const { current, backstack, forwardstack, canGoBack, canGoForward, navigateTo, goBack, goForward, restore } =
   useTraversal()
 const { errorMessage: snapshotErrorMessage, exportSnapshot, importSnapshot, persist, loadPersisted } = useSnapshot()
+const { showInfoHub, showSettings, currentInfoTab, setInfoTab, preferences, updatePreferences } = useUIState()
+const { shareArticle, toastMessage, toastVisible } = useShare()
 
 const articleCache = ref({})
 const isStale = ref(false)
 const isSummaryExpanded = ref(false)
 const portalConfirmation = ref(null)  // { targetArticleId, targetTitle }
 const viewMode = ref('3d')
+const showHudHidden = ref(false)
+const isSearchOpen = ref(false)
+const showNavigationTools = ref(false)
+const isArticlePanelCollapsed = ref(false)
 
 function toggleViewMode() {
   viewMode.value = viewMode.value === '3d' ? '2d' : '3d'
@@ -51,6 +62,8 @@ function countSections(sectionTree) {
 }
 
 function onSelect(result) {
+  isSearchOpen.value = false
+  showNavigationTools.value = false
   navigateTo(result.title)
 }
 
@@ -106,13 +119,51 @@ function onImportFile(event) {
   reader.readAsText(file)
 }
 
+function toggleHideHud() {
+  showHudHidden.value = !showHudHidden.value
+}
+
+function toggleNavigationTools() {
+  showNavigationTools.value = !showNavigationTools.value
+}
+
+function onShareClick() {
+  if (article.value?.title) {
+    shareArticle(article.value.title)
+  }
+}
+
+function handleAppKeyboard(event) {
+  if (event.target.matches('input, textarea, select')) return
+
+  if (event.key === 'h' || event.key === 'H') {
+    event.preventDefault()
+    toggleHideHud()
+  } else if (event.key === 'ArrowLeft' && canGoBack.value) {
+    event.preventDefault()
+    goBack()
+  } else if (event.key === 'ArrowRight' && canGoForward.value) {
+    event.preventDefault()
+    goForward()
+  } else if (event.key === '1') {
+    event.preventDefault()
+    viewMode.value = '2d'
+  } else if (event.key === '3') {
+    event.preventDefault()
+    viewMode.value = '3d'
+  }
+}
+
 onMounted(() => {
   const restored = loadPersisted()
   if (restored) {
     restore(restored)
     articleCache.value = { ...restored.articleCache }
   }
+  window.addEventListener('keydown', handleAppKeyboard)
 })
+
+onUnmounted(() => window.removeEventListener('keydown', handleAppKeyboard))
 
 watch(current, (title) => {
   if (title) loadArticle(title)
@@ -144,7 +195,26 @@ watch([current, backstack, forwardstack, articleCache], () => {
 </script>
 
 <template>
-  <div class="cosmos">
+  <div class="cosmos" :class="{ 'cosmos--hud-hidden': showHudHidden }" :style="{ '--hud-opacity': preferences.panelOpacity }">
+    <Taskbar
+      :current-article-title="article?.title"
+      :can-go-back="canGoBack"
+      :can-go-forward="canGoForward"
+      :has-world="Boolean(world)"
+      :view-mode="viewMode"
+      :search-open="isSearchOpen || !article"
+      @toggle-info-hub="showInfoHub = !showInfoHub"
+      @toggle-settings="showSettings = !showSettings"
+      @toggle-search="isSearchOpen = !isSearchOpen"
+      @go-back="goBack"
+      @go-forward="goForward"
+      @toggle-view-mode="toggleViewMode"
+      @toggle-navigation-tools="toggleNavigationTools"
+    >
+      <template #search>
+        <SearchBar @select="onSelect" />
+      </template>
+    </Taskbar>
     <div class="cosmos__field" aria-hidden="true"></div>
 
     <div class="cosmos__stage">
@@ -158,23 +228,21 @@ watch([current, backstack, forwardstack, articleCache], () => {
       <WorldView3D
         v-if="worldStatus === 'success' && world && viewMode === '3d'"
         :world="world"
+        :show-portals="preferences.showPortals"
+        :show-peak-flags="preferences.showPeakFlags"
         class="cosmos__world"
         @portal-click="onPortalClick"
       />
       <WorldView
         v-else-if="worldStatus === 'success' && world"
         :world="world"
+        :show-portals="preferences.showPortals"
         class="cosmos__world"
         @portal-click="onPortalClick"
       />
     </div>
 
-    <header class="hud hud--top">
-      <h1 class="hud__title">WikiRealms</h1>
-      <SearchBar @select="onSelect" />
-    </header>
-
-    <div v-if="current" class="app__nav-controls hud hud--nav">
+    <div v-if="current" class="app__nav-controls hud hud--nav" :class="{ 'app__nav-controls--expanded': showNavigationTools }">
       <button type="button" :disabled="!canGoBack" @click="goBack">← Back</button>
       <button type="button" :disabled="!canGoForward" @click="goForward">Forward →</button>
       <button v-if="world" type="button" @click="toggleViewMode">{{ viewMode === '3d' ? '2D view' : '3D view' }}</button>
@@ -183,6 +251,10 @@ watch([current, backstack, forwardstack, articleCache], () => {
         Import snapshot
         <input type="file" accept="application/json" @change="onImportFile" />
       </label>
+      <button type="button" class="app__nav-extra" @click="showInfoHub = !showInfoHub">Info</button>
+      <button type="button" class="app__nav-extra" @click="showSettings = !showSettings">Settings</button>
+      <button type="button" class="app__nav-extra" @click="toggleHideHud">Hide HUD</button>
+      <button type="button" class="app__nav-extra" @click="onShareClick">Share</button>
     </div>
 
     <p v-if="snapshotErrorMessage" class="app__alert app__alert--error hud hud--alert">
@@ -194,7 +266,11 @@ watch([current, backstack, forwardstack, articleCache], () => {
     </p>
 
     <Transition name="panel">
-      <section v-if="status === 'success' && article" class="app__selected-article hud hud--article">
+      <section
+        v-if="status === 'success' && article"
+        class="app__selected-article hud hud--article"
+        :class="{ 'app__selected-article--collapsed': isArticlePanelCollapsed }"
+      >
         <div class="app__article-heading">
           <h2>{{ article.title }}</h2>
           <span
@@ -204,34 +280,46 @@ watch([current, backstack, forwardstack, articleCache], () => {
           >
             Updated since last visit
           </span>
+          <button
+            type="button"
+            class="app__article-toggle"
+            :aria-expanded="!isArticlePanelCollapsed"
+            :aria-label="isArticlePanelCollapsed ? 'Expand article details' : 'Minimize article details'"
+            @click="isArticlePanelCollapsed = !isArticlePanelCollapsed"
+          >
+            {{ isArticlePanelCollapsed ? '⌃' : '⌄' }}
+          </button>
         </div>
-        <div v-if="article.summary" class="app__summary" :class="{ 'app__summary--collapsed': !isSummaryExpanded }">
-          <p>{{ article.summary }}</p>
+        <div v-show="!isArticlePanelCollapsed" class="app__article-details">
+          <div v-if="article.summary" class="app__summary" :class="{ 'app__summary--collapsed': !isSummaryExpanded }">
+            <p>{{ article.summary }}</p>
+          </div>
+          <button
+            v-if="article.summary"
+            type="button"
+            class="app__summary-toggle"
+            @click="isSummaryExpanded = !isSummaryExpanded"
+          >
+            {{ isSummaryExpanded ? 'Show less ▲' : 'Show more ▼' }}
+          </button>
+          <p v-else class="app__empty-state">No summary available for this article.</p>
+          <dl class="app__article-meta">
+            <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
+            <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
+            <div><dt>Sections</dt><dd>{{ countSections(article.sections) }}</dd></div>
+            <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
+          </dl>
+          <a
+            v-if="article.url"
+            :href="article.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="app__external-link"
+          >
+            View on Wikipedia ↗
+          </a>
+          <button type="button" class="app__share-button" @click="onShareClick">Share article</button>
         </div>
-        <button
-          v-if="article.summary"
-          type="button"
-          class="app__summary-toggle"
-          @click="isSummaryExpanded = !isSummaryExpanded"
-        >
-          {{ isSummaryExpanded ? 'Show less ▲' : 'Show more ▼' }}
-        </button>
-        <p v-else class="app__empty-state">No summary available for this article.</p>
-        <dl class="app__article-meta">
-          <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
-          <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
-          <div><dt>Sections</dt><dd>{{ countSections(article.sections) }}</dd></div>
-          <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
-        </dl>
-        <a
-          v-if="article.url"
-          :href="article.url"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="app__external-link"
-        >
-          View on Wikipedia ↗
-        </a>
       </section>
     </Transition>
     <Transition name="fade">
@@ -245,6 +333,21 @@ watch([current, backstack, forwardstack, articleCache], () => {
           </div>
         </div>
       </div>
+    </Transition>
+    <InfoHub
+      :show="showInfoHub"
+      :current-tab="currentInfoTab"
+      @update:current-tab="setInfoTab"
+      @close="showInfoHub = false"
+    />
+    <SettingsModal
+      :show="showSettings"
+      :preferences="preferences"
+      @update:preferences="updatePreferences"
+      @close="showSettings = false"
+    />
+    <Transition name="toast">
+      <p v-if="toastVisible" class="app__toast">{{ toastMessage }}</p>
     </Transition>
   </div>
 </template>
@@ -292,7 +395,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
 
 .hud {
   position: absolute;
-  background: var(--panel-bg);
+  background: rgba(var(--panel-bg-rgb), var(--hud-opacity, 0.72));
   border: 1px solid var(--panel-border);
   border-radius: 12px;
   backdrop-filter: blur(10px);
@@ -302,7 +405,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
 }
 
 .hud--top {
-  top: 1.25rem;
+  top: 4.75rem;
   left: 50%;
   transform: translateX(-50%);
   width: min(480px, 90vw);
@@ -322,7 +425,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
 }
 
 .hud--nav {
-  top: 1.25rem;
+  top: 4.75rem;
   right: 1.25rem;
   display: flex;
   gap: 0.5rem;
@@ -353,7 +456,8 @@ watch([current, backstack, forwardstack, articleCache], () => {
 }
 
 .app__nav-controls button,
-.app__import-label {
+.app__import-label,
+.app__nav-extra {
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--panel-border);
   border-radius: 6px;
@@ -366,6 +470,10 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .app__nav-controls button:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.app__nav-extra {
+  display: none;
 }
 
 .app__import-label {
@@ -450,6 +558,20 @@ watch([current, backstack, forwardstack, articleCache], () => {
   color: var(--accent);
 }
 
+.app__share-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.app__share-button:hover {
+  text-decoration: underline;
+}
+
 .app__summary {
   position: relative;
   overflow: hidden;
@@ -527,6 +649,26 @@ watch([current, backstack, forwardstack, articleCache], () => {
   }
 }
 
+.app__article-toggle {
+  display: grid;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  place-items: center;
+  border: 1px solid rgba(127, 223, 255, 0.35);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 1.15rem;
+}
+
+.app__article-toggle:hover {
+  border-color: var(--accent);
+  background: rgba(127, 223, 255, 0.1);
+}
+
 .app__portal-modal-label {
   color: var(--text-muted, #888);
   font-size: 0.85rem;
@@ -585,5 +727,97 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.cosmos--hud-hidden .hud {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.app__toast {
+  position: fixed;
+  z-index: 2100;
+  left: 50%;
+  bottom: 1.5rem;
+  margin: 0;
+  padding: 0.7rem 1rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(127, 223, 255, 0.5);
+  border-radius: 6px;
+  background: rgba(18, 22, 40, 0.95);
+  box-shadow: 0 0 14px rgba(127, 223, 255, 0.25);
+  color: var(--text-primary);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 12px);
+}
+
+@media (max-width: 1023px) {
+  .hud--nav {
+    top: 4.75rem;
+    display: none;
+  }
+
+  .hud--nav.app__nav-controls--expanded {
+    display: flex;
+  }
+
+  .app__nav-extra {
+    display: inline-block;
+  }
+}
+
+@media (max-width: 767px) {
+  .hud--nav {
+    top: 4.75rem;
+    right: 1rem;
+    bottom: auto;
+    display: none;
+    max-width: min(220px, calc(100vw - 2rem));
+  }
+
+  .hud--nav.app__nav-controls--expanded {
+    display: flex;
+  }
+
+  .hud--article {
+    bottom: 1rem;
+  }
+
+  .hud--status,
+  .hud--alert {
+    top: 6.5rem;
+  }
+
+  .app__toast {
+    bottom: 1.5rem;
+  }
+
+  .app__selected-article--collapsed {
+    width: min(420px, calc(100vw - 2rem));
+    max-height: none;
+    padding: 0.65rem 0.8rem;
+    overflow: hidden;
+  }
+
+  .app__selected-article--collapsed .app__article-heading {
+    flex-wrap: nowrap;
+  }
+
+  .app__selected-article--collapsed h2 {
+    overflow: hidden;
+    font-size: 1rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 </style>

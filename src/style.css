@@ -15,6 +15,23 @@
   --danger-border: rgba(255, 120, 120, 0.4);
   --danger-text: #ffb3b3;
   --font-display: 'Cinzel', serif;
+
+  /* RGB values for rgba() usage */
+  --panel-bg-rgb: 18, 22, 40;
+  --panel-border-rgb: 120, 140, 255;
+  --text-primary-rgb: 238, 240, 255;
+  --text-muted-rgb: 154, 163, 199;
+  --accent-rgb: 127, 223, 255;
+  --accent-warm-rgb: 255, 210, 127;
+  --bg-deep-rgb: 11, 14, 30;
+  --bg-void-rgb: 5, 6, 15;
+
+  /* Spacing scale */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
 }
 
 body {

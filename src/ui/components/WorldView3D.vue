@@ -12,6 +12,8 @@ import {
 
 const props = defineProps({
   world: { type: Object, required: true },
+  showPortals: { type: Boolean, default: true },
+  showPeakFlags: { type: String, default: 'main' },
 })
 
 const emit = defineEmits(['portal-click'])
@@ -178,18 +180,21 @@ function buildTerrainMesh(world) {
   water.position.z = computeWaterSurfaceHeight(heightScale)
 
   const portals = new THREE.Group()
-  for (const portal of world.portals) {
-    const local = computePortalLocalPosition(portal, world.terrain, heightScale)
-    const sprite = makeEmojiSprite('🌀')
-    sprite.scale.set(5, 5, 1)
-    sprite.position.set(local.x, local.y, local.z)
-    sprite.userData.portal = portal
-    sprite.userData.baseScale = 5
-    portals.add(sprite)
+  if (props.showPortals) {
+    for (const portal of world.portals) {
+      const local = computePortalLocalPosition(portal, world.terrain, heightScale)
+      const sprite = makeEmojiSprite('🌀')
+      sprite.scale.set(5, 5, 1)
+      sprite.position.set(local.x, local.y, local.z)
+      sprite.userData.portal = portal
+      sprite.userData.baseScale = 5
+      portals.add(sprite)
+    }
   }
 
   const flags = new THREE.Group()
   for (const peak of world.terrain.peaks ?? []) {
+    if (props.showPeakFlags === 'none' || (props.showPeakFlags === 'main' && peak.depth > 1)) continue
     const local = computePeakFlagPosition(peak, world.terrain, heightScale)
     const isSubsection = peak.depth > 1
     const sprite = isSubsection ? makeSectionBeaconSubsection() : makeSectionBeaconMain()
@@ -363,7 +368,7 @@ onBeforeUnmount(() => {
   renderer?.dispose()
 })
 
-watch(() => props.world, rebuildScene)
+watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
 </script>
 
 <template>

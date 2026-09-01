@@ -1,0 +1,65 @@
+export const infoHubContent = {
+  whatIsThis: {
+    id: 'what-is-this',
+    title: 'What is this?',
+    icon: '🗺️',
+    content: `
+      <p>WikiRealms turns a Wikipedia article's structure into an explorable landscape.</p>
+      <div class="info-hub__features">
+        <div class="info-hub__feature"><strong>Section peaks:</strong> top-level sections form mountain ranges; their subsections form smaller peaks within them.</div>
+        <div class="info-hub__feature"><strong>Peak size:</strong> a section's own text makes its peak taller, while its full subtree makes the surrounding range broader.</div>
+        <div class="info-hub__feature"><strong>Water:</strong> short articles have a higher sea level and less exposed land. Longer, more detailed articles lower the sea level and reveal more terrain.</div>
+        <div class="info-hub__feature"><strong>Portals:</strong> each distinct outbound Wikipedia link becomes a route to another article's world.</div>
+      </div>
+      <p>Search for any English Wikipedia article to generate its world.</p>
+    `,
+  },
+  howItWorks: {
+    id: 'how-it-works',
+    title: 'How it works',
+    icon: '⚙️',
+    content: `
+      <h3>How a world is formed</h3>
+      <ol>
+        <li><strong>Read the outline:</strong> the article's section tree is turned into a nested set of peaks. Top-level sections are separate mountain systems; child sections layer smaller summits on their parent range.</li>
+        <li><strong>Scale the terrain:</strong> each section's own prose controls its peak height. The total text in that section and its descendants controls the peak's radius.</li>
+        <li><strong>Add natural detail:</strong> seeded fractal noise roughens the structural terrain, so the same article always produces the same world while still looking organic.</li>
+        <li><strong>Set sea level:</strong> total article length shifts the effective waterline. Stub-like articles sit lower beneath the water; detailed articles expose more land.</li>
+        <li><strong>Paint biomes:</strong> elevation determines ocean, beach, mountain, and snow. In the middle elevations, a separate procedural moisture value chooses between plains and forest.</li>
+      </ol>
+      <h3>Portals and navigation</h3>
+      <p>Every distinct outbound link in the article's lead or sections can become a portal. Portals from a section are placed within that section's top-level mountain range; repeated links within one section are combined, while the same destination can appear in different ranges.</p>
+      <p>Choose a portal to travel to its article, then use the back and forward controls or arrow keys to retrace your route.</p>
+    `,
+  },
+  about: {
+    id: 'about',
+    title: 'About',
+    icon: 'ℹ️',
+    content: `
+      <h3>Created by mooeypoo</h3>
+      <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
+      <ul>
+        <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
+        <li><a href="https://mooeypoo.com" target="_blank" rel="noopener noreferrer">Personal website</a></li>
+      </ul>
+    `,
+  },
+  shortcuts: {
+    id: 'shortcuts',
+    title: 'Keyboard',
+    icon: '⌨️',
+    content: `
+      <div class="info-hub__shortcuts">
+        <div class="info-hub__shortcut"><kbd>?</kbd> <kbd>I</kbd><span>Open help</span></div>
+        <div class="info-hub__shortcut"><kbd>S</kbd><span>Open settings</span></div>
+        <div class="info-hub__shortcut"><kbd>H</kbd><span>Hide or show HUD</span></div>
+        <div class="info-hub__shortcut"><kbd>1</kbd> <kbd>3</kbd><span>Switch 2D or 3D</span></div>
+        <div class="info-hub__shortcut"><kbd>Left</kbd> <kbd>Right</kbd><span>Navigate history</span></div>
+        <div class="info-hub__shortcut"><kbd>Esc</kbd><span>Close a modal</span></div>
+      </div>
+    `,
+  },
+}
+
+export const infoTabs = Object.values(infoHubContent)
