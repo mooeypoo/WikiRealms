@@ -242,6 +242,8 @@ function buildTerrainMesh(world) {
       sprite.scale.set(5, 5, 1)
       sprite.position.set(local.x, local.y, local.z)
       sprite.userData.portal = portal
+      sprite.userData.markerType = 'portal'
+      sprite.userData.destinationTitle = portal.targetTitle ?? portal.targetArticleId
       sprite.userData.baseScale = 5
       portals.add(sprite)
     }
@@ -385,22 +387,28 @@ function onPointerClick(event) {
 }
 
 function onPointerMove(event) {
-  if (!raycaster || (!flagGroup && !faerieGroup)) return
+  if (!raycaster || (!portalGroup && !flagGroup && !faerieGroup)) return
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const markers = [...(faerieGroup?.children ?? []), ...(flagGroup?.children ?? [])]
+  const markers = [
+    ...(portalGroup?.children ?? []),
+    ...(faerieGroup?.children ?? []),
+    ...(flagGroup?.children ?? []),
+  ]
   const [hit] = raycaster.intersectObjects(markers, true)
 
   let node = hit?.object ?? null
-  while (node && node.userData.peakTitle === undefined) node = node.parent
-  hoveredMarker.value = node?.userData.peakTitle
-    ? {
+  while (node && node.userData.markerType === undefined && node.userData.peakTitle === undefined) node = node.parent
+  hoveredMarker.value = node?.userData.markerType === 'portal'
+    ? { title: node.userData.destinationTitle, type: 'portal' }
+    : node?.userData.peakTitle
+      ? {
         title: node.userData.peakTitle,
         citationCount: node.userData.citationCount ?? 0,
         type: node.userData.markerType ?? 'peak',
       }
-    : null
+      : null
 
   tooltipX.value = event.clientX - rect.left
   tooltipY.value = event.clientY - rect.top
@@ -508,8 +516,8 @@ watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
       class="world-view-3d__tooltip"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
-      <strong>{{ hoveredMarker.type === 'faerie' ? `Citations in ${hoveredMarker.title}` : hoveredMarker.title }}</strong>
-      <span>{{ hoveredMarker.citationCount }} references</span>
+      <strong>{{ hoveredMarker.type === 'portal' ? `Portal to ${hoveredMarker.title}` : hoveredMarker.type === 'faerie' ? `Citations in ${hoveredMarker.title}` : hoveredMarker.title }}</strong>
+      <span v-if="hoveredMarker.type !== 'portal'">{{ hoveredMarker.citationCount }} references</span>
     </div>
   </div>
 </template>
