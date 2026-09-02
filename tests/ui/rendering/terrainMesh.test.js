@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  HEIGHT_SCALE_RATIO,
   computeHeightScale,
   computePeakFlagPosition,
   computePortalLocalPosition,
@@ -66,8 +67,8 @@ describe('computeVertexColors', () => {
 
 describe('computeHeightScale', () => {
   it('scales proportionally to the smaller grid dimension', () => {
-    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * 0.16)
-    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * 0.16)
+    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * HEIGHT_SCALE_RATIO)
+    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * HEIGHT_SCALE_RATIO)
   })
 })
 
@@ -77,7 +78,8 @@ describe('computePortalLocalPosition', () => {
     const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10)
 
     expect(position.x).toBe(0 - terrain.width / 2)
-    expect(position.y).toBe(0 - terrain.height / 2)
+    // Y is flipped to match three.js PlaneGeometry (see terrainMesh.js).
+    expect(position.y).toBe(terrain.height / 2)
   })
 
   it('floats above the terrain surface height at that cell', () => {
@@ -114,7 +116,7 @@ describe('computePeakFlagPosition', () => {
     const position = computePeakFlagPosition({ x: 0, y: 0, title: 'Early life' }, terrain, 10)
 
     expect(position.x).toBe(0 - terrain.width / 2)
-    expect(position.y).toBe(0 - terrain.height / 2)
+    expect(position.y).toBe(terrain.height / 2)
     expect(position.title).toBe('Early life')
   })
 

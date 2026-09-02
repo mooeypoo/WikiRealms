@@ -28,6 +28,7 @@ function limitLevel(nodes, depth, limits) {
 
   const limited = kept.map((node) => ({
     ...node,
+    depth,  // Explicitly set depth to ensure all nodes have it
     children: depth < limits.maxPeakDepth ? limitLevel(node.children, depth + 1, limits) : [],
   }))
 

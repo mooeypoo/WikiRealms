@@ -44,13 +44,30 @@ function citationDensity(citationCount, ownSize) {
 }
 
 /**
- * Measures a section's own prose length, excluding non-prose wrapper
- * content (citation lists, navboxes, infoboxes, styles) so a
- * citation-heavy section isn't measured as if it were a large amount of
- * real content.
- * @param {Element} sectionEl
+ * Counts sentences in prose text. Uses a simple heuristic:
+ * splits on sentence-ending punctuation (. ! ?) followed by whitespace
+ * and a capital letter or end of string, filtering out abbreviations
+ * and common false positives.
+ * @param {string} text
  */
-function measureOwnSize(sectionEl) {
+function countSentences(text) {
+  if (!text || text.trim().length === 0) return 0
+  
+  // Split on sentence-ending punctuation followed by space + capital letter or EOL
+  // This catches "word. Word" and "word?" but not "Dr. " or "U.S. "
+  const sentences = text.match(/[.!?]+(?=\s+[A-Z]|\s*$)/g)
+  return sentences ? sentences.length : 0
+}
+
+/**
+ * Measures a section's own prose length and sentence count, excluding
+ * non-prose wrapper content (citation lists, navboxes, infoboxes, styles)
+ * so a citation-heavy section isn't measured as if it were a large amount
+ * of real content.
+ * @param {Element} sectionEl
+ * @returns {{ text: string, ownSize: number, sentenceCount: number }}
+ */
+function measureOwnText(sectionEl) {
   const clone = sectionEl.cloneNode(true)
   for (const el of clone.querySelectorAll(NON_PROSE_SELECTOR)) {
     el.remove()
@@ -58,7 +75,12 @@ function measureOwnSize(sectionEl) {
   for (const nestedSection of clone.querySelectorAll('section')) {
     nestedSection.remove()
   }
-  return clone.textContent.trim().length
+  const text = clone.textContent.trim()
+  return {
+    text,
+    ownSize: text.length,
+    sentenceCount: countSentences(text),
+  }
 }
 
 function isInsideExcludedSection(sectionEl) {
@@ -99,16 +121,21 @@ function buildHierarchy(flatSections) {
 }
 
 /**
- * Recursively computes each node's subtreeSize (its own size plus all
- * descendants' sizes), mutating the tree in place.
+ * Recursively computes each node's subtreeSize and subtreeSentenceCount
+ * (total prose length and sentence count for this node plus all
+ * descendants), mutating the tree in place.
  * @param {object[]} nodes
  */
 function computeSubtreeSizes(nodes) {
   let total = 0
+  let sentenceTotal = 0
   for (const node of nodes) {
     const childrenTotal = computeSubtreeSizes(node.children)
+    const childrenSentences = node.children.reduce((sum, child) => sum + child.subtreeSentenceCount, 0)
     node.subtreeSize = node.ownSize + childrenTotal
+    node.subtreeSentenceCount = node.sentenceCount + childrenSentences
     total += node.subtreeSize
+    sentenceTotal += node.subtreeSentenceCount
   }
   return total
 }
@@ -118,6 +145,7 @@ function computeSubtreeCitations(nodes) {
     const childrenTotal = computeSubtreeCitations(node.children)
     node.subtreeCitationCount = node.citationCount + childrenTotal
     node.subtreeCitationDensity = node.subtreeSize > 0 ? node.subtreeCitationCount / node.subtreeSize : 0
+    node.subtreeCitationsPerSentence = node.subtreeSentenceCount > 0 ? node.subtreeCitationCount / node.subtreeSentenceCount : 0
   }
   return nodes.reduce((total, node) => total + node.subtreeCitationCount, 0)
 }
@@ -149,13 +177,15 @@ export function parseSectionTree(html) {
 
     if (!heading) {
       // The lead section (before the first heading) has no heading of its own.
-      const ownSize = measureOwnSize(sectionEl)
+      const { ownSize, sentenceCount } = measureOwnText(sectionEl)
       const citations = countCitations(sectionEl)
       lead = {
         ownSize,
+        sentenceCount,
         links: extractLinks(sectionEl),
         citationCount: citations,
         citationDensity: citationDensity(citations, ownSize),
+        citationsPerSentence: sentenceCount > 0 ? citations / sentenceCount : 0,
       }
       continue
     }
@@ -163,16 +193,18 @@ export function parseSectionTree(html) {
     const title = heading.textContent.trim()
   if (EXCLUDED_SECTION_TITLES.includes(title.toLowerCase()) || isInsideExcludedSection(sectionEl)) continue
 
-    const ownSize = measureOwnSize(sectionEl)
+    const { ownSize, sentenceCount } = measureOwnText(sectionEl)
     const citations = countCitations(sectionEl)
     flatSections.push({
       title,
       depth: depthFromHeadingTag(heading.tagName),
       anchor: heading.id || null,
       ownSize,
+      sentenceCount,
       links: extractLinks(sectionEl),
       citationCount: citations,
       citationDensity: citationDensity(citations, ownSize),
+      citationsPerSentence: sentenceCount > 0 ? citations / sentenceCount : 0,
     })
   }
 

@@ -280,7 +280,8 @@ function buildTerrainMesh(world) {
       if ((sample % 100) / 100 >= definition.density) continue
 
       const positions = foliagePositions.get(definition) ?? []
-      positions.push(gridX - width / 2, gridY - height / 2, heightMap[index] * heightScale + 0.8)
+      // Y is flipped to match three.js PlaneGeometry vertex layout (see terrainMesh.js).
+      positions.push(gridX - width / 2, height / 2 - gridY, heightMap[index] * heightScale + 0.8)
       foliagePositions.set(definition, positions)
     }
   }
@@ -308,7 +309,7 @@ function buildTerrainMesh(world) {
 
     const { gridX, gridY } = computeFaerieGridPosition(peak, world.seed, width, height)
     const localX = gridX - width / 2
-    const localY = gridY - height / 2
+    const localY = height / 2 - gridY
     const baseHeight = heightMap[gridY * width + gridX] * heightScale + 5
     const faerieSprite = makeFaerieSprite(peak.ownCitationCount)
     const faerieScale = Math.min(7 + peak.ownCitationCount * 0.35, 13)

@@ -155,6 +155,106 @@ export const CITATION_LUSHNESS = Object.freeze({
 })
 
 /**
+ * Citation-per-sentence biome calculation. If the article's average
+ * citations-per-sentence falls below minAverageThreshold, the entire
+ * article's biome is biased toward dry/barren regardless of relative
+ * citation density within sections. This prevents sparsely-cited articles
+ * from appearing lush just because some sections are relatively
+ * over-cited compared to equally under-cited peers.
+ *
+ * biasStrength controls how strongly to shift biomes toward DESERT when
+ * below threshold: 0 = no bias (keep relative ratios), 1 = hard desert floor
+ * (all land reads as desert). Values between create a gradual dampening curve.
+ */
+export const CITATION_PER_SENTENCE = Object.freeze({
+  minAverageThreshold: 0.15, // if article avg < this, entire article biased toward barren
+  biasStrength: 0.8, // how aggressively to dampen biome lushness below threshold (0-1)
+  desertThresholdAdjusted: 0.05, // citations/sentence threshold for DESERT when below article minimum
+  lightVegThresholdAdjusted: 0.15,
+  meadowThresholdAdjusted: 0.3,
+  woodlandThresholdAdjusted: 0.5,
+})
+
+/**
+ * Two-pass terrain generation: section bases (broad domes) and subsection
+ * peaks (taller, narrower summits). Each pass uses radial Gaussian falloff
+ * with separate radius/height/sigma tuning to reflect different scales
+ * (sections = broad and gentle, subsections = tighter and prominent).
+ *
+ * Pass 1 (sections): adds base height via exp(-distance²/sectionRadius²)
+ * Pass 2 (subsections): adds peak height on top of section dome via
+ *   exp(-distance²/subsectionRadius²), positioned within parent's footprint
+ */
+/**
+ * Continental topography generation, split into layered passes that each
+ * add a specific class of feature. The idea: start from a broad connected
+ * landmass, then add ridges, then peaks, then noise — every pass gated by
+ * "is there already land here" so we never get floating pointy sticks.
+ *
+ * Every Gaussian in these passes uses the proper `exp(-r²/(2σ²))` form
+ * where σ is a real standard deviation (in grid cells). Do NOT reintroduce
+ * the earlier `exp(-r²/σ)` shortcut — that made falloffs collapse to
+ * needle-thin peaks.
+ */
+export const TERRAIN_GENERATION = Object.freeze({
+  // Pass 1: Continental base — MAX blend of wide Gaussians. Wide σ so a
+  // cell counts as "land" whenever ANY section is within ~σ. MAX (not
+  // SUM) preserves saddles between adjacent peaks — SUM would raise the
+  // midpoint of two nearby Gaussians ABOVE either center.
+  continent: {
+    sigmaMultiplier: 2.2,
+    softCeiling: 0.45, // upper bound on the base at each peak's center
+  },
+  // Pass 2: Mountain ranges — MAX-blended prominence per section on top
+  // of the continental base. Only applied where the base is already land
+  // (gated), so no ranges float in the ocean. MAX (not SUM) preserves
+  // saddles between adjacent ranges.
+  ranges: {
+    sigmaMultiplier: 1.1,
+    heightMultiplier: 0.32,
+    landGateMin: 0.22, // start blending in ranges as base crosses this
+    landGateWidth: 0.14,
+  },
+  // Pass 3: Subsection peaks — MAX-blended prominence per subsection.
+  // Also gated: peaks only appear where a range already exists, so they
+  // read as summits ON ranges rather than isolated needles.
+  peaks: {
+    sigmaMultiplier: 0.7,
+    heightMultiplier: 0.28,
+    rangeGateMin: 0.45,
+    rangeGateWidth: 0.14,
+  },
+  // Pass 4: Fractal noise for natural surface detail. Gated by land, so
+  // ocean stays smooth and we don't create phantom underwater ripples
+  // that show up as spikes after normalization.
+  noise: {
+    weight: 0.06,
+    landGateMin: 0.24,
+    landGateWidth: 0.12,
+  },
+  // Pass 5: Light smoothing before erosion — knocks down grid-scale
+  // sharpness without erasing small saddles.
+  preErosionSmoothing: {
+    passes: 1,
+    strength: 0.2,
+  },
+  // Pass 6: Thermal erosion — iterative "material transfer downhill"
+  // that naturally rounds pointy summits into weathered slopes. Higher
+  // iterations = more weathered look. Slope threshold defines the angle
+  // of repose (steeper than this and material moves).
+  erosion: {
+    iterations: 10,
+    strength: 0.15,
+    slopeThreshold: 0.015,
+  },
+  // Pass 7: Final smoothing — polish after erosion.
+  postErosionSmoothing: {
+    passes: 1,
+    strength: 0.15,
+  },
+})
+
+/**
  * Citation visualization: glowing faerie birds hovering near cited sections.
  */
 export const CITATION_FAERIES = Object.freeze({

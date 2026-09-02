@@ -35,15 +35,18 @@ export function parseRgbColor(rgbString) {
   return [Number(match[0]), Number(match[1]), Number(match[2])]
 }
 
+/** Vertical exaggeration factor: heightMap[0..1] * this = mesh Z units. */
+export const HEIGHT_SCALE_RATIO = 0.26
+
 /**
- * A restrained vertical exaggeration for the height field, proportional
- * to the grid size so section peaks remain readable without becoming
- * implausibly steep at the exploration camera distance.
+ * Vertical exaggeration for the height field, proportional to the grid
+ * size so section peaks and mountain ranges read as prominent without
+ * becoming implausibly steep at the exploration camera distance.
  * @param {number} width
  * @param {number} height
  */
 export function computeHeightScale(width, height) {
-  return Math.min(width, height) * 0.16
+  return Math.min(width, height) * HEIGHT_SCALE_RATIO
 }
 
 /**
@@ -100,9 +103,12 @@ function computeLocalPosition(gridX, gridY, terrain, heightScale, hoverOffset) {
   const index = gridY * width + gridX
   const surfaceHeight = (heightMap[index] ?? 0) * heightScale
 
+  // Y is flipped: three.js PlaneGeometry lays out vertices with iy=0 at
+  // Y=+h/2 and iy=heightSegments at Y=-h/2, so markers indexed by
+  // gridY (row-major, top-down) must mirror to land on their vertex.
   return {
     x: gridX - width / 2,
-    y: gridY - height / 2,
+    y: height / 2 - gridY,
     z: surfaceHeight + hoverOffset,
   }
 }

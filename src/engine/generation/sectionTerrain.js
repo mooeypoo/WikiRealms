@@ -1,15 +1,30 @@
 import { createNoise2D } from 'simplex-noise'
-import { PEAK_LAYOUT, TERRAIN_DETAIL, WATER_LEVEL } from './config.js'
-import { classifyBiome, sampleFractalNoise } from './terrain.js'
+import { PEAK_LAYOUT, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
+import { classifyBiomeWithSentenceAwareness, sampleFractalNoise } from './terrain.js'
 import { computeSpiralLayout } from './layout.js'
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value))
 }
 
+function smoothstep(edge0, edge1, x) {
+  const t = clamp01((x - edge0) / Math.max(edge1 - edge0, 1e-6))
+  return t * t * (3 - 2 * t)
+}
+
 /**
- * Applies a light neighborhood blend to remove grid-scale needle peaks while
- * retaining the section-driven height field's larger mountain structure.
+ * Proper Gaussian falloff at distance `dist` with standard deviation `sigma`.
+ * Value = 1 at the center, drops smoothly to ~0.61 at dist=sigma, ~0.14 at
+ * dist=2σ, ~0.01 at dist=3σ. This is the shape that gives connected
+ * landmasses instead of pointy sticks.
+ */
+function gaussian(distSq, sigma) {
+  return Math.exp(-distSq / (2 * sigma * sigma))
+}
+
+/**
+ * Box-blur smoothing. Wider neighborhood + more passes = more geological
+ * feel (fewer visible grid artifacts, smoother slopes).
  */
 export function smoothHeightMap(heightMap, width, height, passes, strength) {
   let current = heightMap
@@ -38,6 +53,47 @@ export function smoothHeightMap(heightMap, width, height, passes, strength) {
 }
 
 /**
+ * Textbook thermal erosion (Musgrave et al.): each iteration transfers
+ * a fraction of the excess slope from a cell to its steepest cardinal
+ * neighbor. Over many iterations pointy summits get worn down into
+ * rounded, weathered shapes — the visual difference vs. raw Gaussian
+ * bumps. Cardinal-only neighbors keep the flow diagonal-free and
+ * artifact-free.
+ */
+function thermalErosion(heightMap, width, height, iterations, strength, slopeThreshold) {
+  let current = new Float64Array(heightMap)
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Float64Array(current)
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x
+        const h = current[idx]
+
+        // Find steepest downhill cardinal neighbor.
+        let maxSlope = 0
+        let steepestIdx = -1
+        const neighborIndices = [idx + 1, idx - 1, idx + width, idx - width]
+        for (const nIdx of neighborIndices) {
+          const slope = h - current[nIdx]
+          if (slope > maxSlope) {
+            maxSlope = slope
+            steepestIdx = nIdx
+          }
+        }
+
+        if (maxSlope > slopeThreshold && steepestIdx >= 0) {
+          const transfer = (maxSlope - slopeThreshold) * strength
+          next[idx] -= transfer
+          next[steepestIdx] += transfer
+        }
+      }
+    }
+    current = next
+  }
+  return current
+}
+
+/**
  * Recursively turns a (peak-limited) section tree into a flat list of
  * radial height bumps ("peaks") for a section and its direct subsections.
  * A section's subtree size controls the breadth of its mountain range;
@@ -46,7 +102,7 @@ export function smoothHeightMap(heightMap, width, height, passes, strength) {
  *
  * @param {object[]} nodes section tree nodes (title, subtreeSize, children, ...)
  * @param {{ centerX: number, centerY: number, maxRadius: number, minRadius?: number }} bounds
- * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, depth: number }[]}
+ * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, depth: number, citationsPerSentence: number, subtreeCitationsPerSentence: number }[]}
  */
 export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0 }) {
   if (!nodes || nodes.length === 0) return []
@@ -74,6 +130,8 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
       ownCitationCount: node.citationCount ?? 0,
       citationCount: node.subtreeCitationCount ?? node.citationCount ?? 0,
       citationDensity: node.subtreeCitationDensity ?? node.citationDensity ?? 0,
+      citationsPerSentence: node.citationsPerSentence ?? 0,
+      subtreeCitationsPerSentence: node.subtreeCitationsPerSentence ?? 0,
     })
 
     if (node.children.length > 0) {
@@ -103,96 +161,174 @@ function computeWaterLevelShift(totalArticleSize) {
 }
 
 /**
- * Generates a deterministic terrain grid shaped by a pre-computed peak
- * list (see flattenPeaks). Each top-level section is a mountain,
- * subsections are sub-peaks, sized by their share of their parent's
- * total text. Fractal noise is layered on top as detail, and biome
- * is a pure function of (water-level-adjusted) height + citation density
- * from the dominant peak in that cell — see docs/generation.md.
+ * Generates continental topography from a pre-flattened peak list.
+ * Pipeline (see TERRAIN_GENERATION in config.js for tunables):
+ *   1. Continental base — very wide overlapping Gaussians (σ ≈ 2× peak
+ *      radius) summed and passed through 1 − exp(−sum) to soft-cap the
+ *      total. This merges sections into ONE connected landmass instead
+ *      of a scatter of islands.
+ *   2. Mountain ranges — narrower Gaussians per section, gated so they
+ *      only appear where the continental base is already land. Adds
+ *      elevated regions on top of the base.
+ *   3. Subsection peaks — even narrower Gaussians per subsection, gated
+ *      so they only appear on top of a range. This is what stops the
+ *      "floating pointy stick" artifact — a peak in the ocean is
+ *      literally impossible because the gate is zero there.
+ *   4. Fractal noise (land-gated) for natural surface detail.
+ *   5. Water-level height shift from article size.
+ *   6. Pre-erosion smoothing pass.
+ *   7. Thermal erosion — the step that actually turns pointy summits
+ *      into rounded, weathered shapes. Runs enough iterations to be
+ *      visually obvious.
+ *   8. Post-erosion smoothing polish.
  *
- * Output shape matches the original feature-vector-driven generateTerrain
- * exactly (plus `peaks`, passed through for renderers that want to label
- * summits — see WorldView3D.vue), so 2D rendering needs no changes.
+ * Each cell's biome uses the section whose continent contribution was
+ * largest at that cell (tracked in dominantPeakMap during pass 1), fed
+ * through classifyBiomeWithSentenceAwareness so under-cited articles
+ * lean toward barren as a whole rather than by rank.
+ *
+ * Output shape (heightMap/moistureMap/biomeMap/peaks) is unchanged; the
+ * 2D and 3D renderers do not need updating.
  *
  * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number }} options
- * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array }}
+ * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array, peaks: object[] }}
  */
 export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
-  const sigmas = peaks.map((peak) => {
-    const sigmaRatio = peak.depth <= 1 ? PEAK_LAYOUT.topLevelSigmaRatio : PEAK_LAYOUT.subsectionSigmaRatio
-    return Math.max(peak.radius * sigmaRatio, 1)
-  })
-
-  const heightNoise = createNoise2D(rng)
+  const cellCount = width * height
   const waterLevelShift = computeWaterLevelShift(totalArticleSize)
 
+  const sections = peaks.filter((p) => p.depth <= 1)
+  const subsections = peaks.filter((p) => p.depth > 1)
+
+  const cfg = TERRAIN_GENERATION
+  const heightMap = new Float64Array(cellCount)
+  const dominantPeakMap = new Int32Array(cellCount).fill(-1)
+
+  // Precompute per-peak σ² (the /2σ² denominator) so the inner loop is a
+  // single exp() call per (cell × peak) with no per-cell reallocation.
+  const sectionSigmaSq = sections.map((s) => 2 * (s.radius * cfg.continent.sigmaMultiplier) ** 2)
+  const rangeSigmaSq = sections.map((s) => 2 * (s.radius * cfg.ranges.sigmaMultiplier) ** 2)
+  const peakSigmaSq = subsections.map((s) => 2 * (s.radius * cfg.peaks.sigmaMultiplier) ** 2)
+
+  // === PASS 1: Continental base ===
+  // MAX blend of very-wide Gaussians. MAX (not SUM) is what preserves
+  // section identity — with SUM, the midpoint of two overlapping
+  // Gaussians actually rises ABOVE either center (a mathematical
+  // property of Gaussian summation), which would kill saddles. MAX
+  // still gives a connected continent because Gaussians overlap at ~1.0
+  // wherever peaks are within ~1σ of each other, so the "at least one
+  // peak is nearby" region reads as one landmass.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      let maxContrib = 0
+      let dominantIdx = -1
+      for (let i = 0; i < sections.length; i++) {
+        const dx = x - sections[i].x
+        const dy = y - sections[i].y
+        const contrib = Math.exp(-(dx * dx + dy * dy) / sectionSigmaSq[i])
+        if (contrib > maxContrib) {
+          maxContrib = contrib
+          dominantIdx = i
+        }
+      }
+      heightMap[idx] = cfg.continent.softCeiling * maxContrib
+      dominantPeakMap[idx] = dominantIdx
+    }
+  }
+
+  // === PASS 2: Mountain ranges (gated by land) ===
+  // MAX blend, not SUM: overlapping ranges must preserve saddles between
+  // their summits, not fuse into a single plateau. SUM'ing here would
+  // literally put the midpoint above both peaks.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      const base = heightMap[idx]
+      const gate = smoothstep(cfg.ranges.landGateMin, cfg.ranges.landGateMin + cfg.ranges.landGateWidth, base)
+      if (gate <= 0) continue
+
+      let rangeMax = 0
+      for (let i = 0; i < sections.length; i++) {
+        const dx = x - sections[i].x
+        const dy = y - sections[i].y
+        const contrib = sections[i].amplitude * Math.exp(-(dx * dx + dy * dy) / rangeSigmaSq[i])
+        if (contrib > rangeMax) rangeMax = contrib
+      }
+      heightMap[idx] = base + rangeMax * cfg.ranges.heightMultiplier * gate
+    }
+  }
+
+  // === PASS 3: Subsection peaks (gated by range) ===
+  // Also MAX — see PASS 2. Sub-peaks close together should each show as a
+  // summit with a low col between, not additively pile up.
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      const current = heightMap[idx]
+      const gate = smoothstep(cfg.peaks.rangeGateMin, cfg.peaks.rangeGateMin + cfg.peaks.rangeGateWidth, current)
+      if (gate <= 0) continue
+
+      let peakMax = 0
+      for (let i = 0; i < subsections.length; i++) {
+        const dx = x - subsections[i].x
+        const dy = y - subsections[i].y
+        const contrib = subsections[i].amplitude * Math.exp(-(dx * dx + dy * dy) / peakSigmaSq[i])
+        if (contrib > peakMax) peakMax = contrib
+      }
+      heightMap[idx] = current + peakMax * cfg.peaks.heightMultiplier * gate
+    }
+  }
+
+  // === PASS 4: Fractal noise (land-gated) ===
+  const heightNoise = createNoise2D(rng)
   const detailParams = {
     octaves: TERRAIN_DETAIL.noiseOctaves,
     persistence: TERRAIN_DETAIL.noisePersistence,
     scale: TERRAIN_DETAIL.noiseScale,
   }
-
-  // Compute total citations across all peaks for normalization
-  const totalCitations = peaks.reduce((sum, peak) => sum + (peak.citationCount ?? 0), 0) || 1
-
-  const cellCount = width * height
-  const rawHeightMap = new Float64Array(cellCount)
-  const moistureMap = new Float64Array(cellCount) // kept for backward compat, filled with citation density
-  const biomeMap = new Uint8Array(cellCount)
-
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const index = y * width + x
-
-      let topLevelHeight = 0
-      let subsectionHeight = 0
-      let dominantTopLevelPeakIndex = -1
-      let maxTopLevelContribution = 0
-
-      for (let i = 0; i < peaks.length; i++) {
-        const peak = peaks[i]
-        const dx = x - peak.x
-        const dy = y - peak.y
-        const sigma = sigmas[i]
-        const contribution = peak.amplitude * Math.exp(-(dx * dx + dy * dy) / (2 * sigma * sigma))
-
-        // Adjacent primary sections form distinct mountain systems instead
-        // of combining into one broad continent. Nested sections still layer
-        // on top to make each system's internal hierarchy visible.
-        if (peak.depth <= 1) {
-          if (contribution > maxTopLevelContribution) {
-            maxTopLevelContribution = contribution
-            dominantTopLevelPeakIndex = i
-          }
-          topLevelHeight = Math.max(topLevelHeight, contribution)
-        } else {
-          subsectionHeight += contribution
-        }
-      }
-
+      const idx = y * width + x
+      const current = heightMap[idx]
+      const gate = smoothstep(cfg.noise.landGateMin, cfg.noise.landGateMin + cfg.noise.landGateWidth, current)
+      if (gate <= 0) continue
       const detail = sampleFractalNoise(heightNoise, x, y, detailParams)
-      const rawHeight = clamp01(topLevelHeight + subsectionHeight + (detail - 0.5) * TERRAIN_DETAIL.noiseWeight)
-      const finalHeight = clamp01(rawHeight + waterLevelShift)
-
-      // Citation density from the dominant top-level peak
-      const dominantPeak = dominantTopLevelPeakIndex >= 0 ? peaks[dominantTopLevelPeakIndex] : null
-      const citationDensity = dominantPeak ? (dominantPeak.citationCount ?? 0) / totalCitations : 0
-
-      rawHeightMap[index] = finalHeight
-      moistureMap[index] = citationDensity // repurpose for citation density (backward compat field)
+      heightMap[idx] = clamp01(current + (detail - 0.5) * cfg.noise.weight * gate)
     }
   }
 
-  const heightMap = smoothHeightMap(
-    rawHeightMap,
-    width,
-    height,
-    TERRAIN_DETAIL.smoothingPasses,
-    TERRAIN_DETAIL.smoothingStrength,
-  )
-  for (let index = 0; index < cellCount; index++) {
-    biomeMap[index] = classifyBiome(heightMap[index], moistureMap[index])
+  // === PASS 5: Water-level shift ===
+  for (let i = 0; i < cellCount; i++) {
+    heightMap[i] = clamp01(heightMap[i] + waterLevelShift)
   }
 
-  return { width, height, heightMap, moistureMap, biomeMap, peaks }
+  // === PASS 6: Pre-erosion smoothing ===
+  let terrain = smoothHeightMap(heightMap, width, height, cfg.preErosionSmoothing.passes, cfg.preErosionSmoothing.strength)
+
+  // === PASS 7: Thermal erosion ===
+  if (cfg.erosion.iterations > 0) {
+    terrain = thermalErosion(terrain, width, height, cfg.erosion.iterations, cfg.erosion.strength, cfg.erosion.slopeThreshold)
+  }
+
+  // === PASS 8: Post-erosion polish ===
+  terrain = smoothHeightMap(terrain, width, height, cfg.postErosionSmoothing.passes, cfg.postErosionSmoothing.strength)
+
+  // Biome pass: each land cell picks up its dominant section's
+  // citations-per-sentence for the sentence-aware classifier.
+  const totalCitationsPerSentence = peaks.reduce((sum, p) => sum + (p.subtreeCitationsPerSentence ?? 0), 0)
+  const averageCitationsPerSentence = totalCitationsPerSentence / Math.max(peaks.length, 1)
+
+  const moistureMap = new Float64Array(cellCount)
+  const biomeMap = new Uint8Array(cellCount)
+  for (let i = 0; i < cellCount; i++) {
+    const dominantIdx = dominantPeakMap[i]
+    const cps = dominantIdx >= 0 && dominantIdx < sections.length
+      ? sections[dominantIdx].subtreeCitationsPerSentence ?? 0
+      : 0
+    moistureMap[i] = cps
+    biomeMap[i] = classifyBiomeWithSentenceAwareness(terrain[i], cps, averageCitationsPerSentence)
+  }
+
+  return { width, height, heightMap: terrain, moistureMap, biomeMap, peaks }
 }
