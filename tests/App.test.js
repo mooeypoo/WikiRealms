@@ -127,6 +127,12 @@ describe('App', () => {
     await wrapper.find('.world-view__portal').trigger('click')
     await flushPromises()
 
+    // Confirm the portal navigation via modal
+    const confirmButton = wrapper.find('.app__portal-modal-confirm')
+    expect(confirmButton.exists()).toBe(true)
+    await confirmButton.trigger('click')
+    await flushPromises()
+
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Physics')
 
@@ -249,6 +255,12 @@ describe('App', () => {
 
     await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
+      // Confirm the portal navigation via modal
+      const confirmButton = wrapper.find('.app__portal-modal-confirm')
+      expect(confirmButton.exists()).toBe(true)
+      await confirmButton.trigger('click')
+      await flushPromises()
+
     await flushPromises()
 
     const [backButton] = wrapper.findAll('.app__nav-controls button')

@@ -25,7 +25,8 @@ This layer should not know how worlds are rendered or generated.
 ### 2. Procedural generation engine
 Responsible for:
 - deriving deterministic seeds
-- converting article features into terrain parameters
+- converting the article section tree into terrain peaks and citation-driven
+	land biomes
 - generating worlds, biomes, landmarks, and portals
 - versioning the generation algorithm
 
@@ -34,7 +35,9 @@ This layer should not know about the UI or network fetching.
 ### 3. UI / presentation layer
 Responsible for:
 - displaying the generated world
-- showing portal interactions
+- rendering 2D and Three.js 3D terrain views from the same world data
+- showing portal, section-beacon, and citation-faerie interactions
+- presenting section and citation context on hover
 - visualizing history and article context
 - handling user input and navigation actions
 

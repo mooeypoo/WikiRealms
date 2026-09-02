@@ -9,6 +9,8 @@ import {
   computeVertexColors,
   computeWaterSurfaceHeight,
 } from '../rendering/terrainMesh.js'
+import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
+import { CITATION_FAERIES } from '../../engine/generation/config.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
@@ -20,7 +22,7 @@ const emit = defineEmits(['portal-click'])
 
 const containerRef = ref(null)
 const isWebGLSupported = ref(true)
-const hoveredPeakTitle = ref(null)
+const hoveredMarker = ref(null)
 const tooltipX = ref(0)
 const tooltipY = ref(0)
 
@@ -33,6 +35,7 @@ let terrainMesh = null
 let waterMesh = null
 let portalGroup = null
 let flagGroup = null
+let faerieGroup = null
 let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
@@ -241,7 +244,28 @@ function buildTerrainMesh(world) {
     foliage.add(new THREE.Points(geometry, material))
   }
 
-  return { mesh, water, portals, flags, foliage, heightScale }
+  // Citation faeries hover within the terrain footprint of their cited section.
+  const faeries = new THREE.Group()
+  for (const peak of world.terrain.peaks ?? []) {
+    if (!peak.ownCitationCount) continue
+
+    const { gridX, gridY } = computeFaerieGridPosition(peak, world.seed, width, height)
+    const localX = gridX - width / 2
+    const localY = gridY - height / 2
+    const baseHeight = heightMap[gridY * width + gridX] * heightScale + 5
+    const faerieSprite = makeFaerieSprite(peak.ownCitationCount)
+    const faerieScale = Math.min(7 + peak.ownCitationCount * 0.35, 13)
+    faerieSprite.scale.set(faerieScale, faerieScale, 1)
+    faerieSprite.position.set(localX, localY, baseHeight)
+    faerieSprite.userData.baseHeight = baseHeight
+    faerieSprite.userData.hoverPhase = Math.random() * Math.PI * 2
+    faerieSprite.userData.peakTitle = peak.title
+    faerieSprite.userData.citationCount = peak.ownCitationCount
+    faerieSprite.userData.markerType = 'faerie'
+    faeries.add(faerieSprite)
+  }
+
+  return { mesh, water, portals, flags, faeries, foliage, heightScale }
 }
 
 function clearScene() {
@@ -255,7 +279,7 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
-  for (const group of [portalGroup, flagGroup, foliageGroup]) {
+  for (const group of [portalGroup, flagGroup, faerieGroup, foliageGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -270,13 +294,14 @@ function rebuildScene() {
   if (!scene) return
   clearScene()
 
-  const { mesh, water, portals, flags, foliage, heightScale } = buildTerrainMesh(props.world)
+  const { mesh, water, portals, flags, faeries, foliage, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
   flagGroup = flags
+  faerieGroup = faeries
   foliageGroup = foliage
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, flagGroup, foliageGroup)
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, flagGroup, faerieGroup, foliageGroup)
 
   const { width, height } = props.world.terrain
   const cameraDistance = Math.max(width, height) * 0.9
@@ -305,16 +330,21 @@ function onPointerClick(event) {
 }
 
 function onPointerMove(event) {
-  if (!flagGroup || !raycaster) return
+  if (!raycaster || (!flagGroup && !faerieGroup)) return
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const [hit] = raycaster.intersectObjects(flagGroup.children, true)
+  const markers = [...(faerieGroup?.children ?? []), ...(flagGroup?.children ?? [])]
+  const [hit] = raycaster.intersectObjects(markers, true)
 
   let node = hit?.object ?? null
   while (node && node.userData.peakTitle === undefined) node = node.parent
-  hoveredPeakTitle.value = node?.userData.peakTitle
-    ? { title: node.userData.peakTitle, citationCount: node.userData.citationCount ?? 0 }
+  hoveredMarker.value = node?.userData.peakTitle
+    ? {
+        title: node.userData.peakTitle,
+        citationCount: node.userData.citationCount ?? 0,
+        type: node.userData.markerType ?? 'peak',
+      }
     : null
 
   tooltipX.value = event.clientX - rect.left
@@ -349,6 +379,15 @@ function animate() {
       const pulse = 1 + Math.sin(t + sprite.userData.peakDepth) * 0.12
       const base = sprite.userData.baseScale
       sprite.scale.set(base * pulse, base * pulse, 1)
+    })
+  }
+
+  if (faerieGroup) {
+    const t = (performance.now() * 0.001) * CITATION_FAERIES.hoverFrequency
+    faerieGroup.children.forEach((sprite) => {
+      const hoverPhase = sprite.userData.hoverPhase || 0
+      const hoverOffset = Math.sin(t + hoverPhase) * CITATION_FAERIES.hoverAmplitude
+      sprite.position.z = sprite.userData.baseHeight + hoverOffset
     })
   }
 
@@ -410,12 +449,12 @@ watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
   <div ref="containerRef" class="world-view-3d">
     <p v-if="!isWebGLSupported" class="world-view-3d__fallback">3D view isn't supported in this browser.</p>
     <div
-      v-if="hoveredPeakTitle"
+      v-if="hoveredMarker"
       class="world-view-3d__tooltip"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
-      <strong>{{ hoveredPeakTitle.title }}</strong>
-      <span>{{ hoveredPeakTitle.citationCount }} references</span>
+      <strong>{{ hoveredMarker.type === 'faerie' ? `Citations in ${hoveredMarker.title}` : hoveredMarker.title }}</strong>
+      <span>{{ hoveredMarker.citationCount }} references</span>
     </div>
   </div>
 </template>

@@ -1,13 +1,16 @@
-import { BIOME_THRESHOLDS } from './config.js'
+import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from './config.js'
 
 /** Biome ids stored in World.terrain.biomeMap. */
 export const BIOME = Object.freeze({
   OCEAN: 0,
   BEACH: 1,
-  PLAINS: 2,
-  FOREST: 3,
-  MOUNTAIN: 4,
-  SNOW: 5,
+  DESERT: 2, // sparse citations/under-cited land
+  LIGHT_VEG: 3, // sparse vegetation (light citations)
+  MEADOW: 4, // moderate citations/lush grassland
+  WOODLAND: 5, // dense vegetation (well-cited)
+  JUNGLE: 6, // densest vegetation (heavily-cited)
+  MOUNTAIN: 7,
+  SNOW: 8,
 })
 
 /**
@@ -38,17 +41,24 @@ export function sampleFractalNoise(noise2D, x, y, { octaves, persistence, scale 
 }
 
 /**
- * Classifies a cell's biome from its height and moisture.
- * Pure and reusable so presentation layers can re-derive biome info
- * without re-running generation.
+ * Classifies a cell's biome from its height and citation density.
+ * Citation density reflects how "important" a section is (how many citations it has
+ * relative to the total article). Pure and reusable so presentation layers can
+ * re-derive biome info without re-running generation.
  * @param {number} height [0, 1]
- * @param {number} moisture [0, 1]
+ * @param {number} citationDensity [0, 1] - normalized by total article citations
  */
-export function classifyBiome(height, moisture) {
+export function classifyBiome(height, citationDensity) {
   if (height < BIOME_THRESHOLDS.oceanMaxHeight) return BIOME.OCEAN
   if (height < BIOME_THRESHOLDS.beachMaxHeight) return BIOME.BEACH
   if (height > BIOME_THRESHOLDS.snowMinHeight) return BIOME.SNOW
   if (height > BIOME_THRESHOLDS.mountainMinHeight) return BIOME.MOUNTAIN
-  return moisture > BIOME_THRESHOLDS.forestMinMoisture ? BIOME.FOREST : BIOME.PLAINS
+
+  // Land biomes determined by citation density (how "cited" the section is)
+  if (citationDensity < CITATION_LUSHNESS.desertThreshold) return BIOME.DESERT
+  if (citationDensity < CITATION_LUSHNESS.lightVegThreshold) return BIOME.LIGHT_VEG
+  if (citationDensity < CITATION_LUSHNESS.meadowThreshold) return BIOME.MEADOW
+  if (citationDensity < CITATION_LUSHNESS.woodlandThreshold) return BIOME.WOODLAND
+  return BIOME.JUNGLE
 }
 

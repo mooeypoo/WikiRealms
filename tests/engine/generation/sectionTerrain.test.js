@@ -81,7 +81,7 @@ describe('flattenPeaks', () => {
 
     const [peak] = flattenPeaks([node], bounds)
 
-    expect(peak).toMatchObject({ citationCount: 7, citationDensity: 0.07 })
+    expect(peak).toMatchObject({ ownCitationCount: 7, citationCount: 7, citationDensity: 0.07 })
   })
 
   it('uses subtree citations for a parent mountain range', () => {

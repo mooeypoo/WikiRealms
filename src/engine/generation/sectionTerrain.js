@@ -41,6 +41,7 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
       amplitude: nodeAmplitude,
       title: node.title,
       depth: node.depth,
+      ownCitationCount: node.citationCount ?? 0,
       citationCount: node.subtreeCitationCount ?? node.citationCount ?? 0,
       citationDensity: node.subtreeCitationDensity ?? node.citationDensity ?? 0,
     })
@@ -76,8 +77,8 @@ function computeWaterLevelShift(totalArticleSize) {
  * list (see flattenPeaks). Each top-level section is a mountain,
  * subsections are sub-peaks, sized by their share of their parent's
  * total text. Fractal noise is layered on top as detail, and biome
- * stays a pure function of (water-level-adjusted) height + independent
- * ambient moisture — see docs/generation.md.
+ * is a pure function of (water-level-adjusted) height + citation density
+ * from the dominant peak in that cell — see docs/generation.md.
  *
  * Output shape matches the original feature-vector-driven generateTerrain
  * exactly (plus `peaks`, passed through for renderers that want to label
@@ -92,9 +93,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
     return Math.max(peak.radius * sigmaRatio, 1)
   })
 
-
   const heightNoise = createNoise2D(rng)
-  const moistureNoise = createNoise2D(rng)
   const waterLevelShift = computeWaterLevelShift(totalArticleSize)
 
   const detailParams = {
@@ -102,11 +101,13 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
     persistence: TERRAIN_DETAIL.noisePersistence,
     scale: TERRAIN_DETAIL.noiseScale,
   }
-  const moistureParams = { octaves: 2, persistence: 0.5, scale: TERRAIN_DETAIL.noiseScale * 1.5 }
+
+  // Compute total citations across all peaks for normalization
+  const totalCitations = peaks.reduce((sum, peak) => sum + (peak.citationCount ?? 0), 0) || 1
 
   const cellCount = width * height
   const heightMap = new Float64Array(cellCount)
-  const moistureMap = new Float64Array(cellCount)
+  const moistureMap = new Float64Array(cellCount) // kept for backward compat, filled with citation density
   const biomeMap = new Uint8Array(cellCount)
 
   for (let y = 0; y < height; y++) {
@@ -115,6 +116,9 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
 
       let topLevelHeight = 0
       let subsectionHeight = 0
+      let dominantTopLevelPeakIndex = -1
+      let maxTopLevelContribution = 0
+
       for (let i = 0; i < peaks.length; i++) {
         const peak = peaks[i]
         const dx = x - peak.x
@@ -126,6 +130,10 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
         // of combining into one broad continent. Nested sections still layer
         // on top to make each system's internal hierarchy visible.
         if (peak.depth <= 1) {
+          if (contribution > maxTopLevelContribution) {
+            maxTopLevelContribution = contribution
+            dominantTopLevelPeakIndex = i
+          }
           topLevelHeight = Math.max(topLevelHeight, contribution)
         } else {
           subsectionHeight += contribution
@@ -135,11 +143,14 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
       const detail = sampleFractalNoise(heightNoise, x, y, detailParams)
       const rawHeight = clamp01(topLevelHeight + subsectionHeight + (detail - 0.5) * TERRAIN_DETAIL.noiseWeight)
       const finalHeight = clamp01(rawHeight + waterLevelShift)
-      const moisture = sampleFractalNoise(moistureNoise, x, y, moistureParams)
+
+      // Citation density from the dominant top-level peak
+      const dominantPeak = dominantTopLevelPeakIndex >= 0 ? peaks[dominantTopLevelPeakIndex] : null
+      const citationDensity = dominantPeak ? (dominantPeak.citationCount ?? 0) / totalCitations : 0
 
       heightMap[index] = finalHeight
-      moistureMap[index] = moisture
-      biomeMap[index] = classifyBiome(finalHeight, moisture)
+      moistureMap[index] = citationDensity // repurpose for citation density (backward compat field)
+      biomeMap[index] = classifyBiome(finalHeight, citationDensity)
     }
   }
 

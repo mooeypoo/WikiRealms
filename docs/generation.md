@@ -34,23 +34,28 @@ needs to be used now, but it's worth capturing so nothing is forgotten.
 - namespace — *fetched, unused*
 
 ### Content features
-- summary length — *fetched + extracted, computed but currently unused in terrain shaping*
-- number of sections — *not yet fetched; planned for section/peak-driven terrain (see brainstorm notes below)*
-- number of images — *fetched, used (roughness/persistence modifier)*
+- summary length — *fetched + extracted, currently unused in terrain shaping*
+- number of sections — *fetched from the rendered article HTML; section hierarchy drives the terrain*
+- number of images — *fetched, currently unused in terrain shaping*
 - presence of a primary image — *not fetched*
-- outbound link count — *fetched, used (terrain scale modifier + portal generation)*
+- outbound link count — *fetched for article context; per-section links drive portal generation*
 - revision date — *fetched (`latestRevisionTimestamp`), not a generation signal*
 - revision size — *not fetched*
 
-### Structural features (planned, not yet implemented)
-- section tree: title, depth, own text size, subtree total size — drives the
-  section/peak terrain model being brainstormed (each top-level section
-  becomes a mountain, subsections become sub-peaks, sized by subtree total)
+### Structural features
+- section tree: title, depth, own text size, subtree total size — each
+  top-level section becomes a mountain and subsections become sub-peaks.
+  Subtree size controls a peak footprint; a section's own prose controls
+  its height.
 - per-section outbound links — drives per-section portal placement (one
   portal per distinct link *per section*, so the same target can appear
   in multiple sections without being deduplicated away)
-- section anchors (`#Section_Title`) — enables "click a peak, jump to
-  that section" in the UI
+- per-section citation count — parsed from inline reference markers. The
+  citation density of the dominant top-level section selects land lushness:
+  desert, light vegetation, meadow, woodland, or jungle. A section's own
+  citations place a faerie marker in its peak footprint in the 3D view.
+- section anchors (`#Section_Title`) — retained for future click-to-jump
+  interactions
 - templates (infoboxes, navboxes, citation lists, etc.) — not represented
   yet. When fetching rendered HTML (not wikitext — see below), templates
   are already expanded into normal HTML, so no special parsing is needed
@@ -138,16 +143,29 @@ Two different link needs must **not** be conflated:
 
 ## Output mapping ideas
 
-Feature signals may influence:
+Feature signals currently influence:
 
 - island size
 - terrain roughness
 - water ratio
-- biome distribution
-- landmark density
+- biome distribution: citation density drives land lushness; elevation still
+  determines ocean, beach, mountain, and snow
 - portal count and placement
-- color palette
-- ambient visual style
+- citation-faerie placement
+
+## Citation Faeries
+
+The generation engine exposes both a section's own citation count and its
+subtree citation total on terrain peaks. The UI deliberately renders one
+glowing faerie per cited retained section, rather than one per individual
+reference, to preserve legibility.
+
+Faeries are placed deterministically from the world seed within the owning
+peak's footprint, offset from its summit beacon. They hover at a bounded
+height above the terrain and reveal `Citations in <section name>` and the
+section's reference count on hover. This keeps citation locations
+section-aware without inventing a false exact position for individual
+references in article prose.
 
 ## Generation pipeline
 
@@ -155,7 +173,7 @@ Feature signals may influence:
 2. Fetch metadata and content features
 3. Derive deterministic seed material
 4. Generate terrain and biome structure
-5. Place portals and landmarks
+5. Place section-aware portals and citation markers
 6. Assemble final world model
 
 ## Design notes

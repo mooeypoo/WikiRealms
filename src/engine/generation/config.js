@@ -126,12 +126,40 @@ export const TERRAIN_DETAIL = Object.freeze({
  * Derives a sea-level shift from the article's total (section) text size:
  * a stub-like article gets a higher effective sea level (smaller exposed
  * landmass), a long/detailed article gets a lower one (bigger landmass).
- * Biome itself stays a pure function of (shifted) height + moisture — see
+ * Biome itself stays a pure function of (shifted) height + citation density — see
  * docs/generation.md brainstorm notes — this only shifts height before
  * classification, it does not change the classification thresholds.
  */
 export const WATER_LEVEL = Object.freeze({
   articleSizeSoftCap: 20000, // total section text length at which the size signal saturates
   maxShift: 0.2, // maximum height adjustment applied before biome classification
+})
+
+/**
+ * Citation density thresholds used to classify land biome lushness.
+ * Reflects how "cited" or "important" a section is within the article.
+ * Thresholds represent the percentile of total article citations for a section:
+ * - desert (under-cited): 0-10%
+ * - light vegetation (sparse citations): 10-25%
+ * - meadow (moderate citations): 25-50%
+ * - woodland (well-cited): 50-75%
+ * - jungle (heavily-cited): 75%+
+ */
+export const CITATION_LUSHNESS = Object.freeze({
+  desertThreshold: 0.1,
+  lightVegThreshold: 0.25,
+  meadowThreshold: 0.5,
+  woodlandThreshold: 0.75,
+})
+
+/**
+ * Citation visualization: glowing faerie birds hovering near cited sections.
+ */
+export const CITATION_FAERIES = Object.freeze({
+  glimmerMax: 3, // small glimmer: 1-3 citations
+  faerieMax: 7, // bright faerie: 4-7 citations
+  // 8+ citations: a prominent faerie flock
+  hoverAmplitude: 1.4,
+  hoverFrequency: 0.6,
 })
 
