@@ -94,9 +94,9 @@ function reset() {
 .settings-modal {
   width: min(100%, 480px);
   overflow: hidden;
-  border: 1px solid rgba(127, 223, 255, 0.24);
-  border-radius: 8px;
-  background: linear-gradient(145deg, rgba(27, 33, 60, 0.98), rgba(12, 15, 30, 0.98));
+  border: 1px solid var(--panel-border-accent);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, var(--panel-primary), rgba(12, 15, 30, 0.98));
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
   animation: settings-rise 0.25s ease-out;
 }
@@ -106,12 +106,12 @@ function reset() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-color: rgba(127, 223, 255, 0.12);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-color: var(--panel-border);
 }
 
 .settings-modal__header {
-  border-bottom: 1px solid rgba(127, 223, 255, 0.12);
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .settings-modal__header h2 {
@@ -131,8 +131,8 @@ function reset() {
 }
 
 .settings-modal__close {
-  width: 32px;
-  height: 32px;
+  width: var(--size-touch);
+  height: var(--size-touch);
   font-size: 1.4rem;
 }
 
@@ -143,7 +143,7 @@ function reset() {
 }
 
 .settings-modal__body {
-  padding: 0.25rem 1.25rem;
+  padding: var(--spacing-xs) var(--spacing-lg);
 }
 
 .settings-modal__row {
@@ -151,8 +151,9 @@ function reset() {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid rgba(127, 223, 255, 0.1);
+  min-height: var(--size-touch);
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .settings-modal__row > span {
@@ -170,8 +171,8 @@ function reset() {
 }
 
 .settings-modal input[type='checkbox'] {
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.5rem;
+  height: 1.5rem;
   accent-color: var(--accent);
 }
 
@@ -179,7 +180,8 @@ function reset() {
   min-width: 7rem;
   border: 1px solid rgba(127, 223, 255, 0.35);
   border-radius: 4px;
-  padding: 0.4rem;
+  min-height: var(--size-touch);
+  padding: var(--spacing-sm);
   background: var(--bg-deep);
   color: var(--text-primary);
 }
@@ -189,7 +191,7 @@ function reset() {
 }
 
 .settings-modal input[type='range'] {
-  width: 9rem;
+  width: min(9rem, 42vw);
   accent-color: var(--accent);
 }
 
@@ -213,6 +215,6 @@ function reset() {
 
 @media (max-width: 767px) {
   .settings-overlay { align-items: end; padding: 0; }
-  .settings-modal { width: 100%; border-radius: 8px 8px 0 0; }
+  .settings-modal { width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
 }
 </style>

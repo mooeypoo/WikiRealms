@@ -62,13 +62,13 @@ defineEmits([
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: minmax(11rem, 1fr) minmax(16rem, 30rem) minmax(11rem, 1fr);
+  grid-template-columns: minmax(11rem, 1fr) minmax(16rem, 30rem) auto auto;
   align-items: center;
   min-height: 60px;
   padding: 0 1rem;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(120, 140, 255, 0.18);
-  background: linear-gradient(180deg, rgba(18, 22, 40, 0.92), rgba(18, 22, 40, 0.78));
+  border-bottom: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, var(--panel-primary), rgba(18, 22, 40, 0.75));
   backdrop-filter: blur(10px);
 }
 
@@ -92,7 +92,7 @@ defineEmits([
 
 .taskbar__article-title {
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -116,19 +116,28 @@ defineEmits([
   height: 36px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgba(120, 140, 255, 0.4);
-  border-radius: 6px;
-  background: rgba(127, 223, 255, 0.08);
-  color: var(--text-primary);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 1.05rem;
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+  transition: all var(--duration-fast) ease-out;
 }
 
 .taskbar__button:hover:not(:disabled) {
-  border-color: rgba(127, 223, 255, 0.85);
-  background: rgba(127, 223, 255, 0.2);
+  border-color: var(--panel-border-accent);
+  background: rgba(127, 223, 255, 0.15);
+  color: var(--accent);
+  filter: var(--glow-subtle);
   transform: translateY(-1px);
+}
+
+.taskbar__button:active:not(:disabled) {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  filter: none;
+  transform: translateY(0);
 }
 
 .taskbar__button:disabled {
@@ -150,7 +159,7 @@ defineEmits([
   width: 1px;
   height: 24px;
   margin: 0 0.25rem;
-  background: rgba(127, 223, 255, 0.22);
+  background: var(--panel-border);
 }
 
 @media (max-width: 1023px) {
@@ -163,15 +172,16 @@ defineEmits([
     top: 4.25rem;
     left: 50%;
     width: min(32rem, calc(100vw - 2rem));
-    padding: 0.75rem;
-    border: 1px solid var(--panel-border);
-    border-radius: 8px;
-    background: rgba(18, 22, 40, 0.96);
+    padding: var(--spacing-md);
+    border: 1px solid var(--panel-border-accent);
+    border-radius: var(--radius-lg);
+    background: var(--panel-primary);
+    backdrop-filter: blur(10px);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42);
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, -0.5rem);
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: opacity var(--duration-normal) ease, transform var(--duration-normal) ease;
   }
 
   .taskbar__search--open {

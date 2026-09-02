@@ -248,9 +248,6 @@ watch([current, backstack, forwardstack, articleCache], () => {
     </div>
 
     <div v-if="current" class="app__nav-controls hud hud--nav" :class="{ 'app__nav-controls--expanded': showNavigationTools }">
-      <button type="button" :disabled="!canGoBack" @click="goBack">← Back</button>
-      <button type="button" :disabled="!canGoForward" @click="goForward">Forward →</button>
-      <button v-if="world" type="button" @click="toggleViewMode">{{ viewMode === '3d' ? '2D view' : '3D view' }}</button>
       <button type="button" @click="onExportClick">Export snapshot</button>
       <label class="app__import-label">
         Import snapshot
@@ -258,7 +255,6 @@ watch([current, backstack, forwardstack, articleCache], () => {
       </label>
       <button type="button" class="app__nav-extra" @click="showInfoHub = !showInfoHub">Info</button>
       <button type="button" class="app__nav-extra" @click="showSettings = !showSettings">Settings</button>
-      <button type="button" class="app__nav-extra" @click="toggleHideHud">Hide HUD</button>
       <button type="button" class="app__nav-extra" @click="onShareClick">Share</button>
     </div>
 
@@ -276,6 +272,22 @@ watch([current, backstack, forwardstack, articleCache], () => {
         class="app__selected-article hud hud--article"
         :class="{ 'app__selected-article--collapsed': isArticlePanelCollapsed }"
       >
+        <nav v-if="backstack.length > 0" class="app__breadcrumb" aria-label="Navigation history">
+          <span class="app__breadcrumb-item">
+            <button
+              v-for="(item, index) in backstack.slice(-2)"
+              :key="`back-${index}`"
+              type="button"
+              class="app__breadcrumb-link"
+              :title="item"
+              @click="navigateTo(item)"
+            >
+              {{ item }}
+            </button>
+          </span>
+          <span class="app__breadcrumb-divider">/</span>
+          <span class="app__breadcrumb-current">{{ current }}</span>
+        </nav>
         <div class="app__article-heading">
           <h2>{{ article.title }}</h2>
           <span
@@ -416,13 +428,15 @@ watch([current, backstack, forwardstack, articleCache], () => {
 
 .hud {
   position: absolute;
-  background: rgba(var(--panel-bg-rgb), var(--hud-opacity, 0.72));
+  background: var(--panel-secondary);
   border: 1px solid var(--panel-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  padding: 1rem 1.25rem;
+  padding: var(--spacing-lg) var(--spacing-xl);
   z-index: 1;
+  opacity: var(--hud-opacity, 1);
+  transition: opacity var(--duration-normal) ease-out;
 }
 
 .hud--top {
@@ -448,10 +462,14 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .hud--nav {
   top: 4.75rem;
   right: 1.25rem;
-  display: flex;
+  display: none;
   gap: 0.5rem;
   flex-wrap: wrap;
   max-width: 220px;
+}
+
+.hud--nav.app__nav-controls--expanded {
+  display: flex;
 }
 
 .hud--article {
@@ -516,30 +534,77 @@ watch([current, backstack, forwardstack, articleCache], () => {
 }
 
 .app__alert {
-  padding: 0.6rem 0.9rem;
-  border-radius: 6px;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
   background: var(--danger-bg);
   color: var(--danger-text);
   border: 1px solid var(--danger-border);
+  font-weight: 600;
 }
 
 .app__article-heading {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--spacing-md);
   flex-wrap: wrap;
+  margin-bottom: var(--spacing-md);
 }
 
 .app__article-heading h2 {
   margin: 0;
   font-family: var(--font-display);
   letter-spacing: 0.02em;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+
+.app__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-md);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.app__breadcrumb-item {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.app__breadcrumb-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all var(--duration-fast) ease-out;
+  text-decoration: underline;
+}
+
+.app__breadcrumb-link:hover {
+  color: #9feeff;
+  filter: var(--glow-subtle);
+}
+
+.app__breadcrumb-divider {
+  color: var(--text-muted);
+  margin: 0 var(--spacing-xs);
+}
+
+.app__breadcrumb-current {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .app__badge {
   font-size: 0.75rem;
-  padding: 0.15rem 0.5rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
   border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .app__badge--stale {
@@ -550,56 +615,90 @@ watch([current, backstack, forwardstack, articleCache], () => {
 
 .app__article-meta {
   display: flex;
-  gap: 1.5rem;
+  gap: var(--spacing-2xl);
   flex-wrap: wrap;
-  margin: 0.75rem 0;
+  margin: var(--spacing-lg) 0;
+  padding: var(--spacing-lg) 0;
+  border-top: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .app__article-meta div {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-xs);
 }
 
 .app__article-meta dt {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
+  font-weight: 600;
 }
 
 .app__article-meta dd {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1.1rem;
 }
 
 .app__external-link {
   display: inline-block;
-  margin-bottom: 0.75rem;
-  font-size: 0.9rem;
+  margin: var(--spacing-md) 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--accent);
+  border: 1px solid var(--panel-border-accent);
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-decoration: none;
+  transition: all var(--duration-fast) ease-out;
+}
+
+.app__external-link:hover {
+  background: rgba(127, 223, 255, 0.15);
+  border-color: var(--accent);
+  filter: var(--glow-subtle);
 }
 
 .app__share-button {
-  display: block;
-  padding: 0;
-  border: 0;
+  display: inline-block;
+  margin: var(--spacing-md) 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--accent-warm);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-warm);
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all var(--duration-fast) ease-out;
 }
 
 .app__share-button:hover {
-  text-decoration: underline;
+  background: rgba(255, 210, 127, 0.15);
+  border-color: var(--accent-warm);
+  filter: var(--glow-warm);
+}
+
+.app__share-button:active {
+  background: rgba(255, 210, 127, 0.25);
+  filter: none;
 }
 
 .app__summary {
   position: relative;
   overflow: hidden;
+  margin-bottom: var(--spacing-md);
 }
 
 .app__summary p {
-  margin: 0 0 0.5rem;
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .app__summary--collapsed {
@@ -611,18 +710,24 @@ watch([current, backstack, forwardstack, articleCache], () => {
   position: absolute;
   inset: auto 0 0 0;
   height: 2.5em;
-  background: linear-gradient(to bottom, rgba(18, 22, 40, 0), var(--panel-bg));
+  background: linear-gradient(to bottom, transparent, var(--panel-secondary));
 }
 
 .app__summary-toggle {
-  display: block;
-  margin: 0 0 0.75rem;
+  display: inline-block;
+  margin: var(--spacing-md) 0;
   padding: 0;
   border: none;
   background: none;
   color: var(--accent);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: color var(--duration-fast) ease-out;
+}
+
+.app__summary-toggle:hover {
+  color: #9feeff;
 }
 
 .panel-enter-active,
@@ -644,19 +749,31 @@ watch([current, backstack, forwardstack, articleCache], () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
   z-index: 1000;
+  animation: fadeIn var(--duration-normal) ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .app__portal-modal-content {
-  background: var(--panel-bg, rgba(18, 22, 40, 0.95));
-  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
-  border-radius: 8px;
-  padding: 2rem;
-  max-width: 400px;
+  background: linear-gradient(135deg, var(--panel-primary), rgba(18, 22, 40, 0.9));
+  border: 1px solid var(--panel-border-accent);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-2xl);
+  max-width: 420px;
   text-align: center;
-  backdrop-filter: blur(8px);
-  animation: slideUp 0.3s ease-out;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(127, 223, 255, 0.1);
+  animation: slideUp var(--duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes slideUp {
@@ -673,71 +790,104 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .app__article-toggle {
   display: grid;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   margin-left: auto;
   place-items: center;
-  border: 1px solid rgba(127, 223, 255, 0.35);
-  border-radius: 5px;
+  border: 1px solid var(--panel-border-accent);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--accent);
   cursor: pointer;
-  font-size: 1.15rem;
+  font-size: 1.25rem;
+  transition: all var(--duration-fast) ease-out;
 }
 
 .app__article-toggle:hover {
   border-color: var(--accent);
-  background: rgba(127, 223, 255, 0.1);
+  background: rgba(127, 223, 255, 0.15);
+  filter: var(--glow-subtle);
+}
+
+.app__article-toggle:active {
+  background: var(--accent-subtle);
+  filter: none;
 }
 
 .app__portal-modal-label {
-  color: var(--text-muted, #888);
-  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin: 0 0 0.5rem 0;
+  letter-spacing: 0.08em;
+  margin: 0 0 var(--spacing-md) 0;
+  font-weight: 600;
 }
 
 .app__portal-modal-title {
-  color: var(--text-primary, #eef0ff);
-  font-size: 1.5rem;
-  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  margin: 0 0 var(--spacing-2xl) 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .app__portal-modal-actions {
   display: flex;
-  gap: 1rem;
+  gap: var(--spacing-lg);
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .app__portal-modal-cancel,
 .app__portal-modal-confirm {
-  padding: 0.6rem 1.2rem;
-  border-radius: 4px;
-  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
   font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-fast) ease-out;
+  min-height: var(--size-touch);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .app__portal-modal-cancel {
   background: transparent;
-  color: var(--text-muted, #888);
+  color: var(--text-secondary);
+  border-color: var(--panel-border);
 }
 
 .app__portal-modal-cancel:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary, #eef0ff);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: var(--panel-border-accent);
+}
+
+.app__portal-modal-cancel:active {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .app__portal-modal-confirm {
-  background: rgba(120, 140, 255, 0.2);
-  color: var(--text-primary, #eef0ff);
+  background: linear-gradient(135deg, var(--accent), #5ec9ff);
+  color: var(--bg-deep);
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 .app__portal-modal-confirm:hover {
-  background: rgba(120, 140, 255, 0.35);
-  border-color: rgba(120, 140, 255, 0.5);
+  background: linear-gradient(135deg, #9feeff, #7fd9ff);
+  filter: var(--glow-accent);
+  border-color: #9feeff;
+}
+
+.app__portal-modal-confirm:active {
+  background: linear-gradient(135deg, #5ec9ff, #3dbfff);
+  filter: none;
 }
 
 .fade-enter-active,
@@ -785,11 +935,6 @@ watch([current, backstack, forwardstack, articleCache], () => {
 @media (max-width: 1023px) {
   .hud--nav {
     top: 4.75rem;
-    display: none;
-  }
-
-  .hud--nav.app__nav-controls--expanded {
-    display: flex;
   }
 
   .app__nav-extra {
@@ -803,11 +948,26 @@ watch([current, backstack, forwardstack, articleCache], () => {
     right: 1rem;
     bottom: auto;
     display: none;
-    max-width: min(220px, calc(100vw - 2rem));
+    width: min(15rem, calc(100vw - 2rem));
+    max-width: none;
+    padding: var(--spacing-sm);
+    gap: var(--spacing-xs);
   }
 
   .hud--nav.app__nav-controls--expanded {
     display: flex;
+  }
+
+  .app__nav-controls button,
+  .app__nav-controls .app__import-label {
+    width: 100%;
+    min-height: var(--size-touch);
+    box-sizing: border-box;
+    text-align: left;
+  }
+
+  .app__nav-controls button {
+    justify-content: flex-start;
   }
 
   .hud--article {
@@ -839,6 +999,74 @@ watch([current, backstack, forwardstack, articleCache], () => {
     font-size: 1rem;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 640px) {
+  .hud--article {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-width: none;
+    bottom: 0.5rem;
+    max-height: 50vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .app__article-heading {
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .app__article-heading h2 {
+    font-size: 1.25rem;
+  }
+
+  .app__article-meta {
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md) 0;
+    margin: var(--spacing-md) 0;
+  }
+
+  .app__article-meta dt {
+    font-size: 0.65rem;
+  }
+
+  .app__article-meta dd {
+    font-size: 1rem;
+  }
+
+  .app__external-link,
+  .app__share-button {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    margin: var(--spacing-sm) 0;
+  }
+
+  .app__breadcrumb,
+  .app__breadcrumb-link {
+    font-size: 0.75rem;
+  }
+
+  .app__portal-modal-content {
+    width: calc(100vw - 2rem);
+    box-sizing: border-box;
+    padding: var(--spacing-lg);
+  }
+
+  .app__portal-modal-title {
+    font-size: 1.5rem;
+  }
+
+  .app__portal-modal-actions {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .app__portal-modal-cancel,
+  .app__portal-modal-confirm {
+    width: 100%;
   }
 }
 </style>

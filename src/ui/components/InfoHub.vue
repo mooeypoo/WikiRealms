@@ -66,8 +66,9 @@ const tabs = computed(() => infoTabs)
 .info-hub-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
+  padding: var(--spacing-md);
+  background: rgba(5, 6, 15, 0.66);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,17 +86,17 @@ const tabs = computed(() => infoTabs)
 }
 
 .info-hub {
-  background: linear-gradient(135deg, rgba(18, 22, 40, 0.95), rgba(30, 35, 60, 0.95));
-  border: 1px solid rgba(127, 223, 255, 0.2);
-  border-radius: 12px;
+  background: linear-gradient(135deg, var(--panel-primary), rgba(30, 35, 60, 0.92));
+  border: 1px solid var(--panel-border-accent);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   max-height: 85vh;
   width: 90%;
   max-width: 600px;
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(127, 223, 255, 0.1);
-  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(127, 223, 255, 0.1);
+  animation: slideUp var(--duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes slideUp {
@@ -110,10 +111,15 @@ const tabs = computed(() => infoTabs)
 }
 
 @media (max-width: 767px) {
+  .info-hub-overlay {
+    align-items: end;
+    padding: 0;
+  }
+
   .info-hub {
-    width: 95%;
+    width: 100%;
     max-height: 90vh;
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 }
 
@@ -122,8 +128,8 @@ const tabs = computed(() => infoTabs)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
-  border-bottom: 1px solid rgba(127, 223, 255, 0.1);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--panel-border);
   gap: 1rem;
 }
 
@@ -136,17 +142,17 @@ const tabs = computed(() => infoTabs)
 
 .info-hub__close {
   background: transparent;
-  border: 1px solid rgba(127, 223, 255, 0.3);
+  border: 1px solid var(--panel-border-accent);
   color: var(--text-primary);
   cursor: pointer;
   font-size: 1.5rem;
-  width: 36px;
-  height: 36px;
+  width: var(--size-touch);
+  height: var(--size-touch);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) ease-out;
 }
 
 .info-hub__close:hover {
@@ -158,14 +164,15 @@ const tabs = computed(() => infoTabs)
 .info-hub__tabs {
   display: flex;
   gap: 0;
-  border-bottom: 1px solid rgba(127, 223, 255, 0.1);
-  padding: 0 1rem;
+  border-bottom: 1px solid var(--panel-border);
+  padding: 0 var(--spacing-md);
   background: rgba(5, 6, 15, 0.3);
 }
 
 .info-hub__tab {
   flex: 1;
-  padding: 1rem 0.75rem;
+  min-height: var(--size-touch);
+  padding: var(--spacing-sm) 0.75rem;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -210,7 +217,7 @@ const tabs = computed(() => infoTabs)
 .info-hub__content {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: var(--spacing-lg);
 }
 
 .info-hub__content-pane {
@@ -327,8 +334,8 @@ const tabs = computed(() => infoTabs)
 
 /* Footer */
 .info-hub__footer {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid rgba(127, 223, 255, 0.1);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--panel-border);
   background: rgba(5, 6, 15, 0.3);
   text-align: center;
 }
@@ -370,7 +377,7 @@ const tabs = computed(() => infoTabs)
 
 .modal-fade-enter-active,
 .modal-fade-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity var(--duration-normal) ease;
 }
 
 .modal-fade-enter-from,

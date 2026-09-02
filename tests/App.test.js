@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 async function switchTo2D(wrapper) {
-  const toggleButton = wrapper.findAll('.app__nav-controls button').find((button) => button.text() === '2D view')
+  const toggleButton = wrapper.find('button[aria-label="Switch to 2D view"]')
   await toggleButton.trigger('click')
 }
 
@@ -121,7 +121,7 @@ describe('App', () => {
     await flushPromises()
 
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    expect(wrapper.find('.app__nav-controls button[disabled]').exists()).toBe(true) // both disabled initially
+    expect(wrapper.find('button[aria-label="Go back"]').attributes('disabled')).toBeDefined()
 
     await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click')
@@ -136,7 +136,7 @@ describe('App', () => {
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Physics')
 
-    const [backButton] = wrapper.findAll('.app__nav-controls button')
+    const backButton = wrapper.find('button[aria-label="Go back"]')
     expect(backButton.attributes('disabled')).toBeUndefined()
 
     await backButton.trigger('click')
@@ -198,7 +198,7 @@ describe('App', () => {
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
     expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    const [backButton] = wrapper.findAll('.app__nav-controls button')
+    const backButton = wrapper.find('button[aria-label="Go back"]')
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
   })
 
@@ -263,7 +263,7 @@ describe('App', () => {
 
     await flushPromises()
 
-    const [backButton] = wrapper.findAll('.app__nav-controls button')
+    const backButton = wrapper.find('button[aria-label="Go back"]')
     await backButton.trigger('click') // back to Albert Einstein, refetches with a newer revision
     await flushPromises()
 
