@@ -7,6 +7,7 @@ import {
   computeWallRadius,
   pickHaloOpacity,
   relationshipToHover,
+  resolveHoveredTopLevel,
 } from '../../../src/ui/rendering/sectionHalos.js'
 
 describe('computeWallHeight', () => {
@@ -163,5 +164,36 @@ describe('computeBreathingPulse', () => {
     const a = computeBreathingPulse(0.5, 0)
     const b = computeBreathingPulse(0.5, Math.PI)
     expect(a).not.toBeCloseTo(b)
+  })
+})
+
+describe('resolveHoveredTopLevel', () => {
+  const peaks = [
+    { depth: 1, sectionIndex: 0 },
+    { depth: 2, sectionIndex: 0 },
+    { depth: 2, sectionIndex: 0 },
+    { depth: 1, sectionIndex: 3 },
+    { depth: 2, sectionIndex: 3 },
+  ]
+
+  it('returns -1 for null/negative/undefined hover', () => {
+    expect(resolveHoveredTopLevel(null, peaks)).toBe(-1)
+    expect(resolveHoveredTopLevel(-1, peaks)).toBe(-1)
+    expect(resolveHoveredTopLevel(undefined, peaks)).toBe(-1)
+  })
+
+  it('returns the same index when hovered is already a top-level', () => {
+    expect(resolveHoveredTopLevel(0, peaks)).toBe(0)
+    expect(resolveHoveredTopLevel(3, peaks)).toBe(3)
+  })
+
+  it('returns the sectionIndex when hovered is a subsection', () => {
+    expect(resolveHoveredTopLevel(1, peaks)).toBe(0)
+    expect(resolveHoveredTopLevel(4, peaks)).toBe(3)
+  })
+
+  it('returns -1 when peaks array is missing or the index is out of range', () => {
+    expect(resolveHoveredTopLevel(0, null)).toBe(-1)
+    expect(resolveHoveredTopLevel(99, peaks)).toBe(-1)
   })
 })

@@ -18,6 +18,7 @@ import {
   computeWallRadius,
   pickHaloOpacity,
   relationshipToHover,
+  resolveHoveredTopLevel,
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
 import SectionTooltip from './SectionTooltip.vue'
@@ -261,6 +262,9 @@ function buildTerrainMesh(world) {
     faerieSprite.userData.peakTitle = peak.title
     faerieSprite.userData.citationCount = peak.ownCitationCount
     faerieSprite.userData.markerType = 'faerie'
+    // Peak's owning top-level section (Phase 1 stamp) — enables the
+    // section-linked pulse/dim reactions when a section is hovered.
+    faerieSprite.userData.sectionIndex = peak.sectionIndex ?? -1
     faeries.add(faerieSprite)
   }
 
@@ -634,26 +638,47 @@ function resizeToContainer() {
 function animate() {
   animationFrameId = requestAnimationFrame(animate)
 
+  const nowMs = performance.now()
+  const nowSec = nowMs * 0.001
+  const peaks = props.world?.terrain?.peaks
+  const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
+  const hasHover = hoveredTopLevel >= 0
+
   if (portalGroup) {
-    const t = performance.now() * 0.003
+    const t = nowMs * 0.003
     portalGroup.children.forEach((sprite, index) => {
       const pulse = 1 + Math.sin(t + index) * 0.15
       const base = sprite.userData.baseScale
       sprite.scale.set(base * pulse, base * pulse, 1)
+      // Section-link: dim portals whose section isn't the hovered one.
+      // Nothing hovered → all at full opacity.
+      const portalSection = sprite.userData.portal?.sectionIndex ?? -1
+      const isRelated = !hasHover || portalSection === hoveredTopLevel
+      const target = isRelated ? 1 : 0.28
+      sprite.material.opacity += (target - sprite.material.opacity) * 0.15
+      sprite.material.transparent = true
     })
   }
 
   if (haloGroup) {
-    updateHalos(performance.now() * 0.001)
+    updateHalos(nowSec)
     updateSectionTooltip()
   }
 
   if (faerieGroup) {
-    const t = (performance.now() * 0.001) * CITATION_FAERIES.hoverFrequency
+    const baseFreq = CITATION_FAERIES.hoverFrequency
+    const t = nowSec * baseFreq
     faerieGroup.children.forEach((sprite) => {
       const hoverPhase = sprite.userData.hoverPhase || 0
-      const hoverOffset = Math.sin(t + hoverPhase) * CITATION_FAERIES.hoverAmplitude
+      // Related faeries hover a bit stronger + brighter; unrelated ones
+      // dim to background presence so the hovered section reads clearly.
+      const faerieSection = sprite.userData.sectionIndex ?? -1
+      const isRelated = !hasHover || faerieSection === hoveredTopLevel
+      const amplitudeScale = isRelated ? 1.35 : 1
+      const hoverOffset = Math.sin(t + hoverPhase) * CITATION_FAERIES.hoverAmplitude * amplitudeScale
       sprite.position.z = sprite.userData.baseHeight + hoverOffset
+      const targetOpacity = isRelated ? 1 : 0.35
+      sprite.material.opacity += (targetOpacity - sprite.material.opacity) * 0.15
     })
   }
 

@@ -169,6 +169,24 @@ export function relationshipToHover(peak, hoveredIndex, peakIndex, peaks) {
 }
 
 /**
+ * Given a hovered peaks-array index (top-level OR subsection) resolves
+ * to the peaks-array index of its owning top-level section. Used by
+ * markers whose semantics only care about "which top-level range am I
+ * in" — portals and citation faeries.
+ *
+ * @param {number | null | undefined} hoveredIndex
+ * @param {object[]} peaks
+ * @returns {number} the top-level's peaks-array index, or `-1` if nothing is hovered
+ */
+export function resolveHoveredTopLevel(hoveredIndex, peaks) {
+  if (hoveredIndex === null || hoveredIndex === undefined || hoveredIndex < 0) return -1
+  const peak = Array.isArray(peaks) ? peaks[hoveredIndex] : undefined
+  if (!peak) return -1
+  if ((peak.depth ?? 1) <= 1) return hoveredIndex
+  return peak.sectionIndex ?? -1
+}
+
+/**
  * Breathing pulse offset (± amplitude) added on top of the base hovered
  * opacity. Callers pass performance.now()/1000 or an animation clock.
  * @param {number} timeSeconds
