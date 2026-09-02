@@ -39,12 +39,17 @@ function flattenLinkedSections(nodes, topLevelTitle) {
  * @param {{ x: number, y: number, radius: number, title?: string, depth?: number }[]} peaks flattened peaks from the CAPPED tree (see flattenPeaks)
  * @param {() => number} rng seeded RNG for in-region placement
  * @param {{ width: number, height: number }} gridSize
- * @returns {{ portalId: string, targetArticleId: string, gridX: number, gridY: number, origin: 'article-link', sectionTitle: string|null }[]}
+ * @returns {{ portalId: string, targetArticleId: string, gridX: number, gridY: number, origin: 'article-link', sectionTitle: string|null, sectionIndex: number }[]}
  */
 export function generateSectionPortals({ lead, sections }, peaks, rng, { width, height }) {
   const topLevelPeaksByTitle = new Map()
-  for (const peak of peaks) {
-    if (peak.depth === 1 && peak.title) topLevelPeaksByTitle.set(peak.title, peak)
+  const topLevelPeakIndicesByTitle = new Map()
+  for (let i = 0; i < peaks.length; i++) {
+    const peak = peaks[i]
+    if (peak.depth === 1 && peak.title) {
+      topLevelPeaksByTitle.set(peak.title, peak)
+      topLevelPeakIndicesByTitle.set(peak.title, i)
+    }
   }
   const fallbackPeak = topLevelPeaksByTitle.get('Miscellaneous') ?? {
     x: width / 2,
@@ -67,6 +72,9 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
 
   return pairs.slice(0, PORTAL_LIMITS.maxPortals).map((pair, index) => {
     const peak = (pair.topLevelTitle && topLevelPeaksByTitle.get(pair.topLevelTitle)) || fallbackPeak
+    const sectionIndex = pair.topLevelTitle && topLevelPeakIndicesByTitle.has(pair.topLevelTitle)
+      ? topLevelPeakIndicesByTitle.get(pair.topLevelTitle)
+      : -1
 
     const angle = rng() * Math.PI * 2
     const distance = rng() * peak.radius
@@ -79,6 +87,7 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
       gridY: clampInt(peak.y + Math.sin(angle) * distance, 0, height - 1),
       origin: 'article-link',
       sectionTitle: pair.topLevelTitle,
+      sectionIndex,
     }
   })
 }

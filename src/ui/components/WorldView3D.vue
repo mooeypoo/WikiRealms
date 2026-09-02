@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
+  computeGridCellFromLocalPosition,
   computeHeightScale,
   computePeakFlagPosition,
   computePortalLocalPosition,
@@ -10,7 +11,8 @@ import {
   computeWaterSurfaceHeight,
 } from '../rendering/terrainMesh.js'
 import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
-import { CITATION_FAERIES } from '../../engine/generation/config.js'
+import { useHoverState } from '../composables/useHoverState.js'
+import { BIOME_THRESHOLDS, CITATION_FAERIES } from '../../engine/generation/config.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 
 const props = defineProps({
@@ -26,6 +28,11 @@ const isWebGLSupported = ref(true)
 const hoveredMarker = ref(null)
 const tooltipX = ref(0)
 const tooltipY = ref(0)
+
+// Reactive "which top-level section is under the cursor" — consumed by
+// upcoming marker layers (halos, labels, tooltip) in later phases.
+const hoverState = useHoverState()
+const localHitPoint = new THREE.Vector3()
 
 let renderer = null
 let scene = null
@@ -413,6 +420,55 @@ function onPointerMove(event) {
 
   tooltipX.value = event.clientX - rect.left
   tooltipY.value = event.clientY - rect.top
+
+  updateSectionHoverFromTerrain()
+}
+
+// Terrain-raycast → grid cell → sectionOwnershipMap → hoverState. Kept
+// separate from marker hover so Phase 2+ can drive halo/label reactions
+// off hoverState without touching marker tooltip logic.
+function updateSectionHoverFromTerrain() {
+  if (!terrainMesh || !props.world?.terrain?.sectionOwnershipMap) {
+    hoverState.clear()
+    return
+  }
+  const [terrainHit] = raycaster.intersectObject(terrainMesh, false)
+  if (!terrainHit) {
+    hoverState.clear()
+    return
+  }
+
+  // Convert world-space intersection to the mesh's LOCAL frame (pre-rotation).
+  localHitPoint.copy(terrainHit.point)
+  terrainMesh.worldToLocal(localHitPoint)
+
+  const cell = computeGridCellFromLocalPosition(localHitPoint.x, localHitPoint.y, props.world.terrain)
+  if (!cell) {
+    hoverState.clear()
+    return
+  }
+  const { width, heightMap, sectionOwnershipMap } = props.world.terrain
+  const cellIdx = cell.gridY * width + cell.gridX
+
+  // Ocean cells still have a "nearest section" in the ownership map (used
+  // for biome derivation), but the user shouldn't count as hovering a
+  // section when they're pointing at open water — filter by water level.
+  if (heightMap[cellIdx] < BIOME_THRESHOLDS.oceanMaxHeight) {
+    hoverState.clear()
+    return
+  }
+
+  const ownerIdx = sectionOwnershipMap[cellIdx]
+  if (ownerIdx < 0) {
+    hoverState.clear()
+    return
+  }
+  hoverState.setHovered(ownerIdx, 'terrain')
+}
+
+function onPointerLeave() {
+  hoverState.clearNow()
+  hoveredMarker.value = null
 }
 
 function resizeToContainer() {
@@ -493,6 +549,7 @@ onMounted(() => {
 
   renderer.domElement.addEventListener('click', onPointerClick)
   renderer.domElement.addEventListener('pointermove', onPointerMove)
+  renderer.domElement.addEventListener('pointerleave', onPointerLeave)
   window.addEventListener('resize', resizeToContainer)
 })
 
@@ -501,6 +558,7 @@ onBeforeUnmount(() => {
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
   renderer?.domElement.removeEventListener('click', onPointerClick)
   renderer?.domElement.removeEventListener('pointermove', onPointerMove)
+  renderer?.domElement.removeEventListener('pointerleave', onPointerLeave)
   clearScene()
   controls?.dispose()
   renderer?.dispose()

@@ -1,7 +1,7 @@
 import { CURRENT_ENGINE_VERSION } from './engineVersion.js'
 import { deriveSeed, createRng } from './rng.js'
 import { applyPeakLimits } from './sectionPeakLimits.js'
-import { flattenPeaks, generateSectionTerrain } from './sectionTerrain.js'
+import { annotateSectionIndices, flattenPeaks, generateSectionTerrain } from './sectionTerrain.js'
 import { generateSectionPortals } from './sectionPortals.js'
 import { GRID, PEAK_LAYOUT } from './config.js'
 
@@ -39,7 +39,7 @@ export function generateWorld(
     maxRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelMaxRadiusRatio,
     minRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelInnerRadiusRatio,
   }
-  const peaks = flattenPeaks(cappedSections, layoutBounds)
+  const peaks = annotateSectionIndices(flattenPeaks(cappedSections, layoutBounds))
 
   const terrain = generateSectionTerrain({
     width,

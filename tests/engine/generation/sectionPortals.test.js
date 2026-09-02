@@ -91,6 +91,30 @@ describe('generateSectionPortals', () => {
     expect(portals.length).toBeLessThan(links.length)
   })
 
+  it('tags each portal with the peaks-array index of its owning top-level section', () => {
+    const tree = {
+      lead: { links: ['LeadLink'] },
+      sections: [
+        { title: 'Purpose', anchor: 'Purpose', links: ['Physics'], children: [] },
+        {
+          title: 'Features',
+          anchor: 'Features',
+          links: [],
+          children: [{ title: 'Sub', anchor: 'Sub', links: ['Chem'], children: [] }],
+        },
+      ],
+    }
+
+    const portals = generateSectionPortals(tree, peaks, createRng(1), { width, height })
+    const byTarget = Object.fromEntries(portals.map((p) => [p.targetArticleId, p]))
+
+    // Purpose peak is at index 0, Features peak is at index 1 in the peaks fixture.
+    expect(byTarget.Physics.sectionIndex).toBe(0)
+    expect(byTarget.Chem.sectionIndex).toBe(1)
+    // Lead-section portals have no top-level ancestor -> -1 sentinel.
+    expect(byTarget.LeadLink.sectionIndex).toBe(-1)
+  })
+
   it('is deterministic for the same tree, peaks, and rng seed', () => {
     const tree = {
       lead: { links: ['Pet'] },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   HEIGHT_SCALE_RATIO,
+  computeGridCellFromLocalPosition,
   computeHeightScale,
   computePeakFlagPosition,
   computePortalLocalPosition,
@@ -127,6 +128,35 @@ describe('computePeakFlagPosition', () => {
     const position = computePeakFlagPosition({ x: -3.7, y: 100, title: 'X' }, terrain, 10, 0)
 
     expect(position.z).toBeCloseTo(0.6 * 10)
+  })
+})
+
+describe('computeGridCellFromLocalPosition', () => {
+  const terrain = { width: 4, height: 4 }
+
+  it('is the inverse of computeLocalPosition\'s XY for grid (0, 0)', () => {
+    // computeLocalPosition maps (0, 0) -> (x: -2, y: 2) for a 4x4 terrain.
+    expect(computeGridCellFromLocalPosition(-2, 2, terrain)).toEqual({ gridX: 0, gridY: 0 })
+  })
+
+  it('is the inverse for a middle cell', () => {
+    // computeLocalPosition maps (2, 1) -> (x: 0, y: 1).
+    expect(computeGridCellFromLocalPosition(0, 1, terrain)).toEqual({ gridX: 2, gridY: 1 })
+  })
+
+  it('is the inverse for the last cell', () => {
+    // computeLocalPosition maps (3, 3) -> (x: 1, y: -1).
+    expect(computeGridCellFromLocalPosition(1, -1, terrain)).toEqual({ gridX: 3, gridY: 3 })
+  })
+
+  it('returns null for a point outside the terrain footprint', () => {
+    expect(computeGridCellFromLocalPosition(-3, 0, terrain)).toBeNull()
+    expect(computeGridCellFromLocalPosition(0, 3, terrain)).toBeNull()
+    expect(computeGridCellFromLocalPosition(10, 10, terrain)).toBeNull()
+  })
+
+  it('rounds fractional local positions to the nearest cell', () => {
+    expect(computeGridCellFromLocalPosition(-1.7, 0.4, terrain)).toEqual({ gridX: 0, gridY: 2 })
   })
 })
 

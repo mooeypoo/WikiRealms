@@ -153,6 +153,29 @@ Feature signals currently influence:
 - portal count and placement
 - citation-faerie placement
 
+## Section identity in generation output
+
+Every peak (top-level section or subsection) knows the peaks-array index
+of its owning top-level section via `peak.sectionIndex`. Top-level peaks
+own themselves; subsection peaks inherit their parent's index.
+
+The generated terrain grid additionally exposes a per-cell
+`sectionOwnershipMap` (`Int32Array`, length `width * height`): each cell
+stores the peaks-array index of the top-level section whose continental
+Gaussian was largest at that cell — or `-1` if no section reached the
+cell at all. This is what makes the biome derivation deterministic and
+what lets renderers do O(1) "which section does this cell / marker /
+raycast hit belong to" lookups without any distance math.
+
+Portals are stamped with the same `sectionIndex` at generation time
+(matching their top-level ancestor's peak, or `-1` for lead-section
+portals), so a UI can link a portal to its owning range without any
+title-string matching.
+
+This is a data-side convention only; how (or whether) a renderer chooses
+to react to the ownership map — hover halos, region highlights, biome
+labels — is a UI concern that stays out of the generation engine.
+
 ## Citation Faeries
 
 The generation engine exposes both a section's own citation count and its

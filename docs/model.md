@@ -91,6 +91,8 @@ Suggested fields:
 - `label`
 - `position`
 - `origin` (`article-link` or `generated`)
+- `sectionTitle` — top-level section (mountain range) the portal was placed under
+- `sectionIndex` — index of that top-level section's peak in `terrain.peaks` (or `-1` for lead-section portals not routed to any range); enables O(1) marker → section lookups without title-string matching
 - `visited` optional
 - `firstVisitedAt` optional
 - `metadata` optional

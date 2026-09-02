@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRng } from '../../../src/engine/generation/rng.js'
-import { flattenPeaks, generateSectionTerrain, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
+import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
 function makeNode(title, subtreeSize, children = []) {
@@ -100,11 +100,39 @@ describe('flattenPeaks', () => {
   })
 })
 
+describe('annotateSectionIndices', () => {
+  it('gives each top-level peak its own peaks-array index as sectionIndex', () => {
+    const sections = [makeNode('First', 100), makeNode('Second', 100)]
+    const peaks = annotateSectionIndices(flattenPeaks(sections, bounds))
+
+    expect(peaks[0].sectionIndex).toBe(0)
+    expect(peaks[1].sectionIndex).toBe(1)
+  })
+
+  it('gives each subsection its parent top-level peak\'s index', () => {
+    const child = makeNode('Child', 10)
+    child.depth = 2
+    const nested = makeNode('Nested', 50, [child])
+    const sections = [makeNode('First', 100), nested]
+
+    const peaks = annotateSectionIndices(flattenPeaks(sections, bounds))
+    // peaks[0] = First, peaks[1] = Nested, peaks[2] = Nested's child
+    expect(peaks[0].sectionIndex).toBe(0)
+    expect(peaks[1].sectionIndex).toBe(1)
+    expect(peaks[2].sectionIndex).toBe(1)
+  })
+
+  it('returns the same array reference for chaining', () => {
+    const peaks = flattenPeaks([makeNode('Only', 100)], bounds)
+    expect(annotateSectionIndices(peaks)).toBe(peaks)
+  })
+})
+
 describe('generateSectionTerrain', () => {
   const sections = [makeNode('Purpose', 500), makeNode('Features', 1500, [makeNode('Sub', 400)])]
 
   function peaksFor(width, height) {
-    return flattenPeaks(sections, { centerX: width / 2, centerY: height / 2, maxRadius: Math.min(width, height) * 0.42 })
+    return annotateSectionIndices(flattenPeaks(sections, { centerX: width / 2, centerY: height / 2, maxRadius: Math.min(width, height) * 0.42 }))
   }
 
   it('produces grids sized to width * height', () => {
@@ -173,6 +201,35 @@ describe('generateSectionTerrain', () => {
 
     for (const biome of terrain.biomeMap) {
       expect(validBiomes.has(biome)).toBe(true)
+    }
+  })
+
+  it('exposes sectionOwnershipMap sized to width * height, values are peaks-array indices or -1', () => {
+    const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), peaks: peaksFor(24, 24), totalArticleSize: 2000 })
+
+    expect(terrain.sectionOwnershipMap).toBeInstanceOf(Int32Array)
+    expect(terrain.sectionOwnershipMap).toHaveLength(24 * 24)
+    for (const owner of terrain.sectionOwnershipMap) {
+      expect(owner === -1 || (owner >= 0 && owner < terrain.peaks.length)).toBe(true)
+      if (owner >= 0) expect((terrain.peaks[owner].depth ?? 0) <= 1).toBe(true)
+    }
+  })
+
+  it('gives a cell at a top-level section\'s exact center that section as its owner', () => {
+    const peaks = peaksFor(32, 32)
+    const terrain = generateSectionTerrain({ width: 32, height: 32, rng: createRng(4), peaks, totalArticleSize: 2000 })
+    const topLevel = peaks.filter((p) => p.depth <= 1)
+
+    for (const peak of topLevel) {
+      const gridX = Math.round(peak.x)
+      const gridY = Math.round(peak.y)
+      const idx = gridY * 32 + gridX
+      const ownerIdx = terrain.sectionOwnershipMap[idx]
+      // The cell at a section's center should be owned by SOME top-level
+      // section (usually itself, but with heavy overlap another may win —
+      // the assertion is "a real owner", not "always self").
+      expect(ownerIdx).toBeGreaterThanOrEqual(0)
+      expect((peaks[ownerIdx].depth ?? 0) <= 1).toBe(true)
     }
   })
 

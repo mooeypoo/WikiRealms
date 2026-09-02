@@ -150,6 +150,28 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
 }
 
 /**
+ * Stamps every peak with the peaks-array index of its owning top-level
+ * section — top-level peaks own themselves, subsection peaks inherit
+ * their parent's index. Relies on flattenPeaks emitting a depth-first
+ * order (parent immediately followed by its subtree).
+ *
+ * Enables O(1) "which section does this marker belong to" lookups for
+ * portals, faeries, halos, hover state, etc. Kept as a separate pass so
+ * flattenPeaks stays free of index-bookkeeping state.
+ *
+ * @param {object[]} peaks output of flattenPeaks (mutated in place)
+ * @returns {object[]} the same peaks array, for chaining
+ */
+export function annotateSectionIndices(peaks) {
+  let currentTopLevel = -1
+  for (let i = 0; i < peaks.length; i++) {
+    if ((peaks[i].depth ?? 0) <= 1) currentTopLevel = i
+    peaks[i].sectionIndex = currentTopLevel
+  }
+  return peaks
+}
+
+/**
  * Derives a sea-level height shift from the article's total section text
  * size (see WATER_LEVEL in config.js): stub-like articles get a higher
  * effective sea level, long/detailed ones get a lower one.
@@ -183,7 +205,7 @@ function computeWaterLevelShift(totalArticleSize) {
  *   8. Post-erosion smoothing polish.
  *
  * Each cell's biome uses the section whose continent contribution was
- * largest at that cell (tracked in dominantPeakMap during pass 1), fed
+ * largest at that cell (tracked in sectionOwnershipMap during pass 1), fed
  * through classifyBiomeWithSentenceAwareness so under-cited articles
  * lean toward barren as a whole rather than by rank.
  *
@@ -191,7 +213,7 @@ function computeWaterLevelShift(totalArticleSize) {
  * 2D and 3D renderers do not need updating.
  *
  * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number }} options
- * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array, peaks: object[] }}
+ * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
  */
 export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
   const cellCount = width * height
@@ -200,9 +222,18 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   const sections = peaks.filter((p) => p.depth <= 1)
   const subsections = peaks.filter((p) => p.depth > 1)
 
+  // Map filtered-sections index back to peaks-array index so
+  // sectionOwnershipMap stores the SAME index space as peak.sectionIndex.
+  const sectionPeakIndices = []
+  for (let i = 0; i < peaks.length; i++) {
+    if ((peaks[i].depth ?? 0) <= 1) sectionPeakIndices.push(i)
+  }
+
   const cfg = TERRAIN_GENERATION
   const heightMap = new Float64Array(cellCount)
-  const dominantPeakMap = new Int32Array(cellCount).fill(-1)
+  // Per-cell peaks-array index of the section whose continental-base
+  // Gaussian was strongest here. -1 for cells beyond any section's reach.
+  const sectionOwnershipMap = new Int32Array(cellCount).fill(-1)
 
   // Precompute per-peak σ² (the /2σ² denominator) so the inner loop is a
   // single exp() call per (cell × peak) with no per-cell reallocation.
@@ -233,7 +264,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
         }
       }
       heightMap[idx] = cfg.continent.softCeiling * maxContrib
-      dominantPeakMap[idx] = dominantIdx
+      sectionOwnershipMap[idx] = dominantIdx >= 0 ? sectionPeakIndices[dominantIdx] : -1
     }
   }
 
@@ -322,13 +353,13 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   const moistureMap = new Float64Array(cellCount)
   const biomeMap = new Uint8Array(cellCount)
   for (let i = 0; i < cellCount; i++) {
-    const dominantIdx = dominantPeakMap[i]
-    const cps = dominantIdx >= 0 && dominantIdx < sections.length
-      ? sections[dominantIdx].subtreeCitationsPerSentence ?? 0
+    const ownerIdx = sectionOwnershipMap[i]
+    const cps = ownerIdx >= 0 && ownerIdx < peaks.length
+      ? peaks[ownerIdx].subtreeCitationsPerSentence ?? 0
       : 0
     moistureMap[i] = cps
     biomeMap[i] = classifyBiomeWithSentenceAwareness(terrain[i], cps, averageCitationsPerSentence)
   }
 
-  return { width, height, heightMap: terrain, moistureMap, biomeMap, peaks }
+  return { width, height, heightMap: terrain, moistureMap, biomeMap, sectionOwnershipMap, peaks }
 }

@@ -112,3 +112,25 @@ function computeLocalPosition(gridX, gridY, terrain, heightScale, hoverOffset) {
     z: surfaceHeight + hoverOffset,
   }
 }
+
+/**
+ * Inverse of the (gridX, gridY) → (x, y) mapping used by
+ * computeLocalPosition: given a point in the terrain mesh's LOCAL
+ * coordinate space (before worldGroup rotation), returns the grid cell
+ * (gridX, gridY) whose vertex is closest — or null if the point falls
+ * outside the terrain's XY footprint.
+ *
+ * Used to convert a raycaster's local-space intersection into a
+ * heightMap / sectionOwnershipMap index for hover detection.
+ *
+ * @param {number} x local-space X (before worldGroup rotation)
+ * @param {number} y local-space Y (before worldGroup rotation)
+ * @param {{ width: number, height: number }} terrain
+ * @returns {{ gridX: number, gridY: number } | null}
+ */
+export function computeGridCellFromLocalPosition(x, y, { width, height }) {
+  const gridX = Math.round(x + width / 2)
+  const gridY = Math.round(height / 2 - y)
+  if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) return null
+  return { gridX, gridY }
+}
