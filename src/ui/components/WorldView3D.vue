@@ -279,7 +279,6 @@ function buildTerrainMesh(world) {
 function buildSectionHalos(world, heightScale) {
   const group = new THREE.Group()
   const peaks = world.terrain.peaks ?? []
-  const showAll = props.showPeakFlags === 'all'
   const hidden = props.showPeakFlags === 'none'
 
   for (let i = 0; i < peaks.length; i++) {
@@ -296,11 +295,15 @@ function buildSectionHalos(world, heightScale) {
     // regardless of grid size.
     const wallHeightWorld = wallHeightGrid * (heightScale / 40)
 
+    // Initial opacity matches this peak's idle state (0 for subsections
+    // so they don't flash in on first render, low for top-level).
+    const initialOpacity = pickHaloOpacity(null, !isTopLevel)
+
     const ringGeo = new THREE.RingGeometry(ringRadii.inner, ringRadii.outer, 48)
     const ringMat = new THREE.MeshBasicMaterial({
       color: haloAccent,
       transparent: true,
-      opacity: SECTION_MARKERS.opacity.idle,
+      opacity: initialOpacity,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -320,7 +323,7 @@ function buildSectionHalos(world, heightScale) {
     const wallMat = new THREE.MeshBasicMaterial({
       color: haloAccent,
       transparent: true,
-      opacity: SECTION_MARKERS.opacity.idle,
+      opacity: initialOpacity,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -340,9 +343,12 @@ function buildSectionHalos(world, heightScale) {
     peakGroup.userData.pulsePhase = (peak.x * 0.7 + peak.y * 1.3) % (Math.PI * 2)
     peakGroup.userData.ringMaterial = ringMat
     peakGroup.userData.wallMaterial = wallMat
-    // Subsections start hidden by default; Phase 4 will flip on parent hover.
-    // `showPeakFlags='all'` bypasses LOD; `='none'` hides everything.
-    peakGroup.visible = !hidden && (isTopLevel || showAll)
+    // Every halo is scene-graph visible; opacity does the LOD work.
+    // Subsections idle at 0 opacity so they hide until their parent is
+    // hovered (see pickHaloOpacity/relationshipToHover). 'none' hides
+    // the whole group; 'all' just clamps subsection idle floor (unused
+    // for now — Phase 6 filter toggles will formalize this).
+    peakGroup.visible = !hidden
     group.add(peakGroup)
   }
 
@@ -361,8 +367,11 @@ function updateHalos(nowSeconds) {
 
   for (const peakGroup of haloGroup.children) {
     if (!peakGroup.visible) continue
+    const isSubsection = !peakGroup.userData.isTopLevel
     const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex)
-    let targetOpacity = pickHaloOpacity(rel)
+    let targetOpacity = pickHaloOpacity(rel, isSubsection)
+    // Only the hovered top-level itself pulses — child halos stay steady
+    // so the pulsing summit reads as the anchor amid its subsections.
     if (rel === 'self') {
       targetOpacity += computeBreathingPulse(nowSeconds, peakGroup.userData.pulsePhase)
     }

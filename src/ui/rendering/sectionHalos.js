@@ -31,15 +31,18 @@ export const SECTION_MARKERS = Object.freeze({
     minHeight: 6, // grid units, minimum wall height even for the smallest peak
     radialSegments: 24, // low enough to be cheap, high enough to read round
   },
-  // Opacity states — the same idle/hovered/related targets used by every
-  // Phase 2+ marker (subsections, siblings, parent breadcrumb) so opacity
-  // is a single semantic vocabulary across the whole hover language.
+  // Opacity states — one semantic vocabulary reused across every marker
+  // interaction. Top-level idle/unrelated stays visible at a low
+  // background presence; subsections default to 0 so they hide entirely
+  // and only reveal (via 'child') when their parent is hovered.
   opacity: Object.freeze({
-    idle: 0.08,
-    hovered: 0.75,
-    parent: 0.42, // parent of hovered subsection (Phase 4)
-    sibling: 0.05, // sibling of a hovered peak (Phase 4)
-    unrelated: 0.04,
+    idle: 0.08, // top-level, nothing hovered
+    hovered: 0.75, // hovered top-level (with breathing pulse on top)
+    child: 0.4, // subsection of hovered top-level — the LOD reveal
+    parent: 0.42, // top-level whose subsection is hovered (Phase 5+, when subsection hover exists)
+    sibling: 0.06, // sibling of a hovered peak (Phase 5+)
+    unrelated: 0.04, // top-level, another section hovered
+    subsectionIdle: 0, // subsection when nothing/other is hovered — hides
   }),
   // Slow breathing pulse on the hovered wall — modulates opacity so it
   // reads as "attention" without being distracting. Kept slow (period ~2s)
@@ -86,25 +89,32 @@ export function computeWallRadius(peakRadius) {
  * currently hovered section. Consumers lerp toward this each frame.
  *
  * Relationship semantics:
- * - 'self':      this peak is the hovered section (or the hovered peak itself)
- * - 'parent':    this top-level section owns the hovered subsection
- * - 'sibling':   this subsection shares a parent with a hovered subsection,
- *                or two top-level peaks with a hovered top-level
- * - 'unrelated': no relationship (or Phase 4 hasn't landed yet, so treat
- *                everything not-self as unrelated)
- * - null / 'none': nothing is hovered → idle
+ * - 'self':      the hovered top-level peak
+ * - 'child':     a subsection whose owning top-level is the hovered section
+ *                (Phase 4's LOD reveal — subsections fade in when their
+ *                parent is hovered)
+ * - 'parent':    top-level whose subsection is hovered directly (Phase 5+)
+ * - 'sibling':   sibling of a hovered peak (Phase 5+)
+ * - 'unrelated': no relationship
+ * - null:        nothing is hovered → idle
  *
- * @param {'self' | 'parent' | 'sibling' | 'unrelated' | null} relationship
+ * `isSubsection` (default false) lets subsections use their own idle
+ * value — 0 by default — so they don't clutter the map when their
+ * parent isn't hovered.
+ *
+ * @param {'self' | 'child' | 'parent' | 'sibling' | 'unrelated' | null} relationship
+ * @param {boolean} [isSubsection]
  * @returns {number}
  */
-export function pickHaloOpacity(relationship) {
+export function pickHaloOpacity(relationship, isSubsection = false) {
   const o = SECTION_MARKERS.opacity
   switch (relationship) {
     case 'self': return o.hovered
+    case 'child': return o.child
     case 'parent': return o.parent
     case 'sibling': return o.sibling
-    case 'unrelated': return o.unrelated
-    default: return o.idle
+    case 'unrelated': return isSubsection ? o.subsectionIdle : o.unrelated
+    default: return isSubsection ? o.subsectionIdle : o.idle
   }
 }
 
@@ -116,18 +126,18 @@ export function pickHaloOpacity(relationship) {
  * @param {{ sectionIndex: number, depth?: number } | null | undefined} peak
  * @param {number | null | undefined} hoveredSectionIndex peaks-array index of the hovered top-level section
  * @param {number} peakIndex this peak's own peaks-array index
- * @returns {'self' | 'parent' | 'sibling' | 'unrelated' | null}
+ * @returns {'self' | 'child' | 'parent' | 'sibling' | 'unrelated' | null}
  */
 export function relationshipToHover(peak, hoveredSectionIndex, peakIndex) {
   if (hoveredSectionIndex === null || hoveredSectionIndex === undefined || hoveredSectionIndex < 0) {
     return null
   }
-  // The peak IS the hovered section.
+  // The peak IS the hovered top-level section.
   if (peakIndex === hoveredSectionIndex) return 'self'
-  // Subsection whose owning top-level is the hovered section — that's the
-  // hovered range's own subsection. Also 'self' for hover purposes: it
-  // lights up with its parent.
-  if ((peak?.sectionIndex ?? -1) === hoveredSectionIndex) return 'self'
+  // Subsection whose owning top-level is the hovered section — the LOD-
+  // reveal case. Rendered dimmer than the top-level itself so the parent
+  // range still visually dominates.
+  if ((peak?.sectionIndex ?? -1) === hoveredSectionIndex) return 'child'
   return 'unrelated'
 }
 

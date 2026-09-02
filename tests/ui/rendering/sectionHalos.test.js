@@ -54,18 +54,34 @@ describe('pickHaloOpacity', () => {
   it('returns hovered for self', () => {
     expect(pickHaloOpacity('self')).toBe(SECTION_MARKERS.opacity.hovered)
   })
+  it('returns child for child (subsection of hovered top-level)', () => {
+    expect(pickHaloOpacity('child')).toBe(SECTION_MARKERS.opacity.child)
+  })
   it('returns parent for parent', () => {
     expect(pickHaloOpacity('parent')).toBe(SECTION_MARKERS.opacity.parent)
   })
   it('returns sibling for sibling', () => {
     expect(pickHaloOpacity('sibling')).toBe(SECTION_MARKERS.opacity.sibling)
   })
-  it('returns unrelated for unrelated', () => {
+  it('returns unrelated for unrelated top-level', () => {
     expect(pickHaloOpacity('unrelated')).toBe(SECTION_MARKERS.opacity.unrelated)
   })
-  it('returns idle when nothing is hovered', () => {
+  it('returns idle for null relationship on a top-level', () => {
     expect(pickHaloOpacity(null)).toBe(SECTION_MARKERS.opacity.idle)
     expect(pickHaloOpacity(undefined)).toBe(SECTION_MARKERS.opacity.idle)
+  })
+
+  it('hides subsections (idle=0) when unrelated or nothing hovered', () => {
+    expect(pickHaloOpacity('unrelated', true)).toBe(SECTION_MARKERS.opacity.subsectionIdle)
+    expect(pickHaloOpacity(null, true)).toBe(SECTION_MARKERS.opacity.subsectionIdle)
+    expect(pickHaloOpacity('unrelated', true)).toBe(0)
+  })
+
+  it('reveals subsections (child target) when their parent top-level is hovered', () => {
+    // A 'child' relationship uses the same child opacity regardless of
+    // isSubsection — it's a semantic relationship, not a per-depth override.
+    expect(pickHaloOpacity('child', true)).toBe(SECTION_MARKERS.opacity.child)
+    expect(SECTION_MARKERS.opacity.child).toBeGreaterThan(0)
   })
 })
 
@@ -83,9 +99,8 @@ describe('relationshipToHover', () => {
     expect(relationshipToHover(topLevel, 0, 0)).toBe('self')
   })
 
-  it('identifies a subsection of the hovered top-level as self', () => {
-    // Subsection lights up with its parent — same "self" bucket.
-    expect(relationshipToHover(subOfZero, 0, 1)).toBe('self')
+  it('identifies a subsection of the hovered top-level as child (LOD reveal)', () => {
+    expect(relationshipToHover(subOfZero, 0, 1)).toBe('child')
   })
 
   it('returns unrelated for a different top-level section', () => {
