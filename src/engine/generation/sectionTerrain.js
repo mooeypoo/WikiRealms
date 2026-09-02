@@ -127,6 +127,8 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
       amplitude: nodeAmplitude,
       title: node.title,
       depth: node.depth,
+      ownSize: node.ownSize ?? 0,
+      subtreeSize: node.subtreeSize ?? node.ownSize ?? 0,
       ownCitationCount: node.citationCount ?? 0,
       citationCount: node.subtreeCitationCount ?? node.citationCount ?? 0,
       citationDensity: node.subtreeCitationDensity ?? node.citationDensity ?? 0,

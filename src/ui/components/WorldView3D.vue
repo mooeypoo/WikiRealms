@@ -19,6 +19,8 @@ import {
   pickHaloOpacity,
   relationshipToHover,
 } from '../rendering/sectionHalos.js'
+import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
+import SectionTooltip from './SectionTooltip.vue'
 import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { BIOME_THRESHOLDS, CITATION_FAERIES } from '../../engine/generation/config.js'
@@ -42,6 +44,15 @@ const tooltipY = ref(0)
 // upcoming marker layers (halos, labels, tooltip) in later phases.
 const hoverState = useHoverState()
 const localHitPoint = new THREE.Vector3()
+
+// Section tooltip: DOM overlay anchored to the projected summit position
+// of the currently hovered top-level section. Updated every frame in
+// animate() so it follows OrbitControls camera moves.
+const sectionTooltipModel = ref(null)
+const sectionTooltipX = ref(0)
+const sectionTooltipY = ref(0)
+const sectionTooltipVisible = ref(false)
+const summitProjectionVec = new THREE.Vector3()
 
 let renderer = null
 let scene = null
@@ -365,6 +376,56 @@ function updateHalos(nowSeconds) {
   }
 }
 
+/**
+ * Per-frame section tooltip position + content update. Projects the
+ * hovered top-level peak's summit position (via its halo group's ring
+ * mesh, which sits ON the terrain summit) into DOM pixel coords and
+ * pushes into the reactive refs the <SectionTooltip> template reads.
+ *
+ * We use the halo ring's world position rather than recomputing the
+ * summit from the heightMap because the ring already accounts for the
+ * Y-flip and worldGroup rotation via its scene-graph parent chain.
+ */
+function updateSectionTooltip() {
+  const hoveredIdx = hoverState.sectionIndex.value
+  if (hoveredIdx === null || hoveredIdx < 0 || !haloGroup || !camera || !renderer) {
+    if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
+    return
+  }
+
+  // Find the halo peakGroup for the hovered top-level.
+  const peakGroup = haloGroup.children.find((c) => c.userData.peakIndex === hoveredIdx)
+  if (!peakGroup || !peakGroup.userData.isTopLevel) {
+    if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
+    return
+  }
+
+  // Ring's world position is the summit. Project to NDC via the camera.
+  peakGroup.userData.ringMaterial // (touch, so accidental prune doesn't happen)
+  const ring = peakGroup.children[0]
+  ring.getWorldPosition(summitProjectionVec)
+  summitProjectionVec.project(camera)
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  const projected = projectClipToScreen(summitProjectionVec, { width: rect.width, height: rect.height })
+  if (projected.isBehindCamera) {
+    if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
+    return
+  }
+
+  const peaks = props.world?.terrain?.peaks ?? []
+  const peak = peaks[hoveredIdx]
+  if (!peak) {
+    if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
+    return
+  }
+
+  sectionTooltipModel.value = buildTooltipModel(peak, peaks)
+  sectionTooltipX.value = projected.screenX
+  sectionTooltipY.value = projected.screenY
+  sectionTooltipVisible.value = true
+}
+
 function clearScene() {
   if (terrainMesh) {
     worldGroup.remove(terrainMesh)
@@ -530,6 +591,7 @@ function animate() {
 
   if (haloGroup) {
     updateHalos(performance.now() * 0.001)
+    updateSectionTooltip()
   }
 
   if (faerieGroup) {
@@ -610,6 +672,12 @@ watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
       <strong>{{ hoveredMarker.type === 'portal' ? `Portal to ${hoveredMarker.title}` : hoveredMarker.type === 'faerie' ? `Citations in ${hoveredMarker.title}` : hoveredMarker.title }}</strong>
       <span v-if="hoveredMarker.type !== 'portal'">{{ hoveredMarker.citationCount }} references</span>
     </div>
+    <SectionTooltip
+      :model="sectionTooltipModel"
+      :screen-x="sectionTooltipX"
+      :screen-y="sectionTooltipY"
+      :visible="sectionTooltipVisible"
+    />
   </div>
 </template>
 
