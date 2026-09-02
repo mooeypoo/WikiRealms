@@ -11,6 +11,7 @@ import {
 } from '../rendering/terrainMesh.js'
 import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
 import { CITATION_FAERIES } from '../../engine/generation/config.js'
+import { BIOME } from '../../engine/generation/terrain.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
@@ -154,6 +155,56 @@ function makeSectionBeaconSubsection() {
   return sprite
 }
 
+function makeFoliageTexture(kind) {
+  const canvas = document.createElement('canvas')
+  const size = 64
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const center = size / 2
+
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  if (kind === 'scrub') {
+    ctx.arc(center - 10, center + 8, 10, Math.PI, 0)
+    ctx.arc(center + 4, center + 4, 13, Math.PI, 0)
+    ctx.arc(center + 15, center + 10, 9, Math.PI, 0)
+  } else if (kind === 'grass') {
+    ctx.moveTo(center - 18, center + 20)
+    ctx.lineTo(center - 12, center - 10)
+    ctx.lineTo(center - 3, center + 17)
+    ctx.lineTo(center + 4, center - 18)
+    ctx.lineTo(center + 10, center + 16)
+    ctx.lineTo(center + 20, center - 8)
+    ctx.lineTo(center + 17, center + 20)
+    ctx.closePath()
+  } else if (kind === 'tree') {
+    ctx.moveTo(center, 5)
+    ctx.lineTo(10, 42)
+    ctx.lineTo(23, 40)
+    ctx.lineTo(7, 57)
+    ctx.lineTo(57, 57)
+    ctx.lineTo(41, 40)
+    ctx.lineTo(54, 42)
+    ctx.closePath()
+  } else {
+    ctx.arc(center - 10, center + 2, 17, 0, Math.PI * 2)
+    ctx.arc(center + 8, center - 5, 20, 0, Math.PI * 2)
+    ctx.arc(center + 18, center + 12, 15, 0, Math.PI * 2)
+  }
+  ctx.fill()
+
+  return new THREE.CanvasTexture(canvas)
+}
+
+const FOLIAGE_BY_BIOME = {
+  [BIOME.DESERT]: { color: 0x9a7d42, kind: 'scrub', density: 0.1, size: 1.5 },
+  [BIOME.LIGHT_VEG]: { color: 0xa7c86b, kind: 'grass', density: 0.3, size: 1.8 },
+  [BIOME.MEADOW]: { color: 0x75ba55, kind: 'grass', density: 0.5, size: 2.1 },
+  [BIOME.WOODLAND]: { color: 0x3f793f, kind: 'tree', density: 0.7, size: 3.8 },
+  [BIOME.JUNGLE]: { color: 0x1f6937, kind: 'canopy', density: 0.85, size: 4.8 },
+}
+
 function buildTerrainMesh(world) {
   const { width, height, heightMap } = world.terrain
   const heightScale = computeHeightScale(width, height)
@@ -166,9 +217,9 @@ function buildTerrainMesh(world) {
   geometry.setAttribute('color', new THREE.BufferAttribute(computeVertexColors(world.terrain), 3))
   geometry.computeVertexNormals()
 
-  // flatShading gives the terrain a faceted, rugged/rocky look instead of a
-  // smoothed-over dome — much more legible as distinct peaks.
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true })
+  // Smooth normals soften the grid's artificial triangular facets while the
+  // section-derived height field preserves the world's distinct peak layout.
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
   const mesh = new THREE.Mesh(geometry, material)
 
   const water = new THREE.Mesh(
@@ -197,8 +248,6 @@ function buildTerrainMesh(world) {
   }
 
   const flags = new THREE.Group()
-  const foliage = new THREE.Group()
-  const foliagePositions = []
   for (const peak of world.terrain.peaks ?? []) {
     if (props.showPeakFlags !== 'none' && (props.showPeakFlags === 'all' || peak.depth <= 1)) {
       const local = computePeakFlagPosition(peak, world.terrain, heightScale)
@@ -215,30 +264,36 @@ function buildTerrainMesh(world) {
       flags.add(sprite)
     }
 
-    if (!peak.citationCount) continue
-    const density = Math.min(1, peak.citationDensity * 120)
-    const tuftCount = Math.min(14, 3 + Math.round(density * 11))
-    for (let index = 0; index < tuftCount; index++) {
-      const angle = index * 2.399963229728653
-      const distance = peak.radius * (0.16 + ((index * 0.618033988749895) % 0.62))
-      const gridX = Math.round(Math.min(width - 1, Math.max(0, peak.x + Math.cos(angle) * distance)))
-      const gridY = Math.round(Math.min(height - 1, Math.max(0, peak.y + Math.sin(angle) * distance)))
-      const localX = gridX - width / 2
-      const localY = gridY - height / 2
-      const localZ = heightMap[gridY * width + gridX] * heightScale + 0.7
-      foliagePositions.push(localX, localY, localZ)
+  }
+
+  const foliage = new THREE.Group()
+  const foliagePositions = new Map()
+  for (let gridY = 2; gridY < height - 2; gridY += 4) {
+    for (let gridX = 2; gridX < width - 2; gridX += 4) {
+      const index = gridY * width + gridX
+      const definition = FOLIAGE_BY_BIOME[world.terrain.biomeMap[index]]
+      if (!definition) continue
+
+      const sample = ((gridX * 73856093) ^ (gridY * 19349663) ^ world.seed) >>> 0
+      if ((sample % 100) / 100 >= definition.density) continue
+
+      const positions = foliagePositions.get(definition) ?? []
+      positions.push(gridX - width / 2, gridY - height / 2, heightMap[index] * heightScale + 0.8)
+      foliagePositions.set(definition, positions)
     }
   }
 
-  if (foliagePositions.length) {
+  for (const [definition, positions] of foliagePositions) {
     const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(foliagePositions, 3))
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     const material = new THREE.PointsMaterial({
-      color: 0x8acb62,
-      size: 1.8,
+      color: definition.color,
+      map: makeFoliageTexture(definition.kind),
+      size: definition.size,
       sizeAttenuation: true,
       transparent: true,
-      opacity: 0.8,
+      alphaTest: 0.1,
+      opacity: 0.9,
       depthWrite: false,
     })
     foliage.add(new THREE.Points(geometry, material))

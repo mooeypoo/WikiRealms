@@ -66,8 +66,8 @@ describe('computeVertexColors', () => {
 
 describe('computeHeightScale', () => {
   it('scales proportionally to the smaller grid dimension', () => {
-    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * 0.25)
-    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * 0.25)
+    expect(computeHeightScale(128, 128)).toBeCloseTo(128 * 0.16)
+    expect(computeHeightScale(64, 128)).toBeCloseTo(64 * 0.16)
   })
 })
 

@@ -103,10 +103,10 @@ export const PEAK_LAYOUT = Object.freeze({
   minPeakRadius: 10, // grid cells; below this a peak isn't visually distinct from noise roughness
   childRadiusRatio: 0.68, // a parent's children are placed within this fraction of its own radius
   childInnerRadiusRatio: 0.28, // child peaks begin away from the parent summit so the range has a readable shape
-  minTopLevelAmplitude: 0.58, // every retained primary section must rise above sea level
-  minSubsectionAmplitude: 0.46, // nested sections remain visible as secondary peaks
-  topLevelSigmaRatio: 0.44, // broad base of a section's mountain range
-  subsectionSigmaRatio: 0.2, // sharper summits that give the range its subsection shape
+  minTopLevelAmplitude: 0.42, // smaller primary sections stay distinct without matching major ranges in height
+  minSubsectionAmplitude: 0.3, // nested sections read as lower ridges within their parent range
+  topLevelSigmaRatio: 0.58, // broad primary shoulders and foothills around each section summit
+  subsectionSigmaRatio: 0.32, // broad secondary ridges within their parent mountain range
 })
 
 /**
@@ -120,6 +120,8 @@ export const TERRAIN_DETAIL = Object.freeze({
   noiseScale: 18,
   noiseOctaves: 2,
   noisePersistence: 0.45,
+  smoothingPasses: 2, // rounds grid-scale spikes without changing the section layout
+  smoothingStrength: 0.18,
 })
 
 /**

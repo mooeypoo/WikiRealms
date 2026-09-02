@@ -36,14 +36,14 @@ export function parseRgbColor(rgbString) {
 }
 
 /**
- * A reasonable vertical exaggeration for the height field, proportional
- * to the grid size so peaks stay visually readable regardless of GRID
- * config changes.
+ * A restrained vertical exaggeration for the height field, proportional
+ * to the grid size so section peaks remain readable without becoming
+ * implausibly steep at the exploration camera distance.
  * @param {number} width
  * @param {number} height
  */
 export function computeHeightScale(width, height) {
-  return Math.min(width, height) * 0.25
+  return Math.min(width, height) * 0.16
 }
 
 /**

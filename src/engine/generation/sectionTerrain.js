@@ -8,6 +8,36 @@ function clamp01(value) {
 }
 
 /**
+ * Applies a light neighborhood blend to remove grid-scale needle peaks while
+ * retaining the section-driven height field's larger mountain structure.
+ */
+export function smoothHeightMap(heightMap, width, height, passes, strength) {
+  let current = heightMap
+  for (let pass = 0; pass < passes; pass++) {
+    const next = new Float64Array(current.length)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let total = 0
+        let count = 0
+        for (let offsetY = -1; offsetY <= 1; offsetY++) {
+          for (let offsetX = -1; offsetX <= 1; offsetX++) {
+            const neighborX = x + offsetX
+            const neighborY = y + offsetY
+            if (neighborX < 0 || neighborX >= width || neighborY < 0 || neighborY >= height) continue
+            total += current[neighborY * width + neighborX]
+            count++
+          }
+        }
+        const index = y * width + x
+        next[index] = current[index] * (1 - strength) + (total / count) * strength
+      }
+    }
+    current = next
+  }
+  return current
+}
+
+/**
  * Recursively turns a (peak-limited) section tree into a flat list of
  * radial height bumps ("peaks") for a section and its direct subsections.
  * A section's subtree size controls the breadth of its mountain range;
@@ -106,7 +136,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   const totalCitations = peaks.reduce((sum, peak) => sum + (peak.citationCount ?? 0), 0) || 1
 
   const cellCount = width * height
-  const heightMap = new Float64Array(cellCount)
+  const rawHeightMap = new Float64Array(cellCount)
   const moistureMap = new Float64Array(cellCount) // kept for backward compat, filled with citation density
   const biomeMap = new Uint8Array(cellCount)
 
@@ -148,10 +178,20 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
       const dominantPeak = dominantTopLevelPeakIndex >= 0 ? peaks[dominantTopLevelPeakIndex] : null
       const citationDensity = dominantPeak ? (dominantPeak.citationCount ?? 0) / totalCitations : 0
 
-      heightMap[index] = finalHeight
+      rawHeightMap[index] = finalHeight
       moistureMap[index] = citationDensity // repurpose for citation density (backward compat field)
-      biomeMap[index] = classifyBiome(finalHeight, citationDensity)
     }
+  }
+
+  const heightMap = smoothHeightMap(
+    rawHeightMap,
+    width,
+    height,
+    TERRAIN_DETAIL.smoothingPasses,
+    TERRAIN_DETAIL.smoothingStrength,
+  )
+  for (let index = 0; index < cellCount; index++) {
+    biomeMap[index] = classifyBiome(heightMap[index], moistureMap[index])
   }
 
   return { width, height, heightMap, moistureMap, biomeMap, peaks }

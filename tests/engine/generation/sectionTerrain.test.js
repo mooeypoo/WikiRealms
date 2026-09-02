@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRng } from '../../../src/engine/generation/rng.js'
-import { flattenPeaks, generateSectionTerrain } from '../../../src/engine/generation/sectionTerrain.js'
+import { flattenPeaks, generateSectionTerrain, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
 function makeNode(title, subtreeSize, children = []) {
@@ -37,7 +37,7 @@ describe('flattenPeaks', () => {
   it('gives every retained section a visible minimum amplitude', () => {
     const [tiny] = flattenPeaks([makeNode('Tiny', 1), makeNode('Large', 99999)], bounds)
 
-    expect(tiny.amplitude).toBeGreaterThanOrEqual(0.58)
+    expect(tiny.amplitude).toBeGreaterThanOrEqual(0.42)
   })
 
   it('places direct children around the parent footprint using their own-content height', () => {
@@ -48,7 +48,7 @@ describe('flattenPeaks', () => {
 
     expect(peaks).toHaveLength(2) // parent + child
     const [parentPeak, childPeak] = peaks
-    expect(childPeak.amplitude).toBeGreaterThanOrEqual(0.46)
+    expect(childPeak.amplitude).toBeGreaterThanOrEqual(0.3)
 
     const distance = Math.hypot(childPeak.x - parentPeak.x, childPeak.y - parentPeak.y)
     expect(distance).toBeGreaterThan(0)
@@ -196,5 +196,21 @@ describe('generateSectionTerrain', () => {
 
     expect(terrain.heightMap).toHaveLength(256)
     expect(Array.from(terrain.heightMap).every((v) => v >= 0 && v <= 1)).toBe(true)
+  })
+})
+
+describe('smoothHeightMap', () => {
+  it('rounds an isolated spike while retaining it as the local maximum', () => {
+    const source = new Float64Array([
+      0, 0, 0,
+      0, 1, 0,
+      0, 0, 0,
+    ])
+
+    const smoothed = smoothHeightMap(source, 3, 3, 2, 0.18)
+
+    expect(smoothed[4]).toBeLessThan(1)
+    expect(smoothed[4]).toBeGreaterThan(smoothed[0])
+    expect(smoothed[4]).toBeGreaterThan(smoothed[1])
   })
 })

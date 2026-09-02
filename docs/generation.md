@@ -167,6 +167,16 @@ section's reference count on hover. This keeps citation locations
 section-aware without inventing a false exact position for individual
 references in article prose.
 
+## Biome-Aware Foliage
+
+The 3D renderer sparsely samples the generated biome grid using a stable
+coordinate hash and adds lightweight point-sprite foliage above eligible
+land cells. Desert cells receive scrub, light vegetation and meadow cells
+receive grass, woodland cells receive conifers, and jungle cells receive
+broad canopy. Ocean, beach, mountain, and snow cells deliberately receive
+no foliage. These are presentation-only details: they consume the
+deterministic terrain data and do not alter world generation.
+
 ## Generation pipeline
 
 1. Normalize article identity
