@@ -119,25 +119,52 @@ export function pickHaloOpacity(relationship, isSubsection = false) {
 }
 
 /**
- * Determines a peak's relationship to the currently hovered section, using
- * peak.sectionIndex (added by annotateSectionIndices) to resolve owning
- * top-level section without any tree walking.
+ * Determines a peak's relationship to the currently hovered peak, using
+ * peak.sectionIndex (added by annotateSectionIndices) plus the peaks
+ * array for the depth/parent lookups needed when a subsection is hovered.
+ *
+ * Cases:
+ * - hoveredIndex === peakIndex → 'self'
+ * - hovered is a TOP-LEVEL:
+ *   - this peak's sectionIndex === hoveredIndex (subsection of hovered) → 'child'
+ *   - else → 'unrelated'
+ * - hovered is a SUBSECTION:
+ *   - this is its owning top-level (peakIndex === hovered.sectionIndex) → 'parent'
+ *   - this is a sibling subsection (same owning top-level, different peak) → 'sibling'
+ *   - else → 'unrelated'
  *
  * @param {{ sectionIndex: number, depth?: number } | null | undefined} peak
- * @param {number | null | undefined} hoveredSectionIndex peaks-array index of the hovered top-level section
+ * @param {number | null | undefined} hoveredIndex peaks-array index of the hovered peak
  * @param {number} peakIndex this peak's own peaks-array index
+ * @param {object[]} [peaks] full peaks array — required for subsection-hover cases
  * @returns {'self' | 'child' | 'parent' | 'sibling' | 'unrelated' | null}
  */
-export function relationshipToHover(peak, hoveredSectionIndex, peakIndex) {
-  if (hoveredSectionIndex === null || hoveredSectionIndex === undefined || hoveredSectionIndex < 0) {
+export function relationshipToHover(peak, hoveredIndex, peakIndex, peaks) {
+  if (hoveredIndex === null || hoveredIndex === undefined || hoveredIndex < 0) {
     return null
   }
-  // The peak IS the hovered top-level section.
-  if (peakIndex === hoveredSectionIndex) return 'self'
-  // Subsection whose owning top-level is the hovered section — the LOD-
-  // reveal case. Rendered dimmer than the top-level itself so the parent
-  // range still visually dominates.
-  if ((peak?.sectionIndex ?? -1) === hoveredSectionIndex) return 'child'
+  if (peakIndex === hoveredIndex) return 'self'
+
+  const hoveredPeak = Array.isArray(peaks) ? peaks[hoveredIndex] : undefined
+  const hoveredIsTopLevel = (hoveredPeak?.depth ?? 1) <= 1
+
+  if (hoveredIsTopLevel || !hoveredPeak) {
+    // A subsection whose owning top-level is the hovered section — LOD-
+    // reveal case (Phase 4). Also the fallback when no peaks array was
+    // passed: we can't distinguish subsection hover, so we assume top-level.
+    if ((peak?.sectionIndex ?? -1) === hoveredIndex) return 'child'
+    return 'unrelated'
+  }
+
+  // Hovered is a subsection.
+  const hoveredParent = hoveredPeak.sectionIndex ?? -1
+
+  // This peak IS the hovered subsection's parent top-level range.
+  if (peakIndex === hoveredParent) return 'parent'
+
+  // This peak is a sibling subsection (same owning top-level, not the same peak).
+  if ((peak?.sectionIndex ?? -1) === hoveredParent && (peak?.depth ?? 0) > 1) return 'sibling'
+
   return 'unrelated'
 }
 

@@ -93,10 +93,16 @@ describe('countDirectSubsections', () => {
     { title: 'B.1', depth: 2, sectionIndex: 4 },
   ]
 
-  it('counts only direct children of a top-level section', () => {
+  it('counts direct children of a top-level section', () => {
     // A has two direct children (A.1, A.2). A.1.a is a grandchild, doesn't count.
     expect(countDirectSubsections(peaks, 0)).toBe(2)
     expect(countDirectSubsections(peaks, 4)).toBe(1)
+  })
+
+  it('counts direct children of a subsection (depth-agnostic)', () => {
+    // A.1 (index 1) has one direct child (A.1.a). A.2 has none.
+    expect(countDirectSubsections(peaks, 1)).toBe(1)
+    expect(countDirectSubsections(peaks, 3)).toBe(0)
   })
 
   it('returns 0 for a top-level with no subsections', () => {
@@ -146,5 +152,18 @@ describe('buildTooltipModel', () => {
     expect(model.title).toBe('')
     expect(model.subsectionCount).toBe(0)
     expect(model.densityBucket).toBe('barren')
+  })
+
+  it('counts children of a subsection when peakIndex is provided', () => {
+    // Build a peaks list where index 1 is a subsection with one grandchild.
+    const deep = [
+      { title: 'Root', depth: 1, sectionIndex: 0, ownSize: 100 },
+      { title: 'Sub', depth: 2, sectionIndex: 0, ownSize: 200, subtreeCitationsPerSentence: 0.06 },
+      { title: 'Sub.Sub', depth: 3, sectionIndex: 0 },
+    ]
+    const model = buildTooltipModel(deep[1], deep, 1)
+    expect(model.title).toBe('Sub')
+    expect(model.subsectionCount).toBe(1)
+    expect(model.densityBucket).toBe('light')
   })
 })

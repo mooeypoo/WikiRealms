@@ -76,29 +76,30 @@ export function formatWords(n) {
 }
 
 /**
- * Counts a peak's direct subsections by walking the peaks array from the
- * top-level peak's index forward until the next top-level (or the end).
- * Uses peak.depth to detect the boundary.
+ * Counts a peak's direct children by walking the peaks array from the
+ * peak's own index forward until the depth drops back to (or below) the
+ * peak's own depth. Depth-agnostic — works for a top-level's subsections
+ * as well as a subsection's own sub-subsections.
  *
  * Works because flattenPeaks emits a depth-first order:
  *   [topA, subA1, subA1a, subA2, topB, subB1, ...]
- * Counting direct children means: peaks after topA whose sectionIndex
- * points to topA (Phase 1 stamp) and whose depth is exactly topA.depth + 1.
+ * A peak's direct children are the peaks with depth = parent + 1 that
+ * appear before the depth drops back to the parent's level.
  *
  * @param {object[]} peaks
- * @param {number} topLevelIndex peaks-array index of the top-level section
+ * @param {number} parentIndex peaks-array index of the parent peak
  * @returns {number}
  */
-export function countDirectSubsections(peaks, topLevelIndex) {
-  if (!Array.isArray(peaks) || topLevelIndex < 0 || topLevelIndex >= peaks.length) return 0
-  const parent = peaks[topLevelIndex]
+export function countDirectSubsections(peaks, parentIndex) {
+  if (!Array.isArray(peaks) || parentIndex < 0 || parentIndex >= peaks.length) return 0
+  const parent = peaks[parentIndex]
   if (!parent) return 0
   const parentDepth = parent.depth ?? 1
   let count = 0
-  for (let i = topLevelIndex + 1; i < peaks.length; i++) {
-    const p = peaks[i]
-    if ((p.depth ?? 0) <= parentDepth) break // hit next top-level (or shallower)
-    if (p.sectionIndex === topLevelIndex && (p.depth ?? 0) === parentDepth + 1) count++
+  for (let i = parentIndex + 1; i < peaks.length; i++) {
+    const depth = peaks[i].depth ?? 0
+    if (depth <= parentDepth) break // out of this parent's subtree
+    if (depth === parentDepth + 1) count++
   }
   return count
 }
@@ -108,19 +109,21 @@ export function countDirectSubsections(peaks, topLevelIndex) {
  * the surrounding peaks array. Pure — the Vue component just displays
  * these fields.
  *
- * @param {object} peak the hovered top-level peak (must have title, ownSize/subtreeSize, citationsPerSentence, sectionIndex, depth)
+ * @param {object} peak the hovered peak (must have title, ownSize/subtreeSize, citationsPerSentence, sectionIndex, depth)
  * @param {object[]} peaks full peaks array (for subsection count)
+ * @param {number} [peakIndex] the peak's own index in `peaks`. When omitted, subsection count falls back to counting children of the top-level `peak.sectionIndex` (matches old behavior for top-level-only tooltips).
  * @returns {{ title: string, subsectionCount: number, wordsLabel: string, densityBucket: string }}
  */
-export function buildTooltipModel(peak, peaks) {
+export function buildTooltipModel(peak, peaks, peakIndex = null) {
   if (!peak) return { title: '', subsectionCount: 0, wordsLabel: '', densityBucket: 'barren' }
   // Use subtreeSize when meaningfully larger — sections whose prose lives
   // in their subsections have ownSize=0 but a real subtreeSize.
   const size = Math.max(peak.subtreeSize ?? 0, peak.ownSize ?? 0)
   const words = estimateWordCount(size)
+  const parentIndex = peakIndex ?? peak.sectionIndex ?? -1
   return {
     title: peak.title ?? 'Untitled section',
-    subsectionCount: countDirectSubsections(peaks ?? [], peak.sectionIndex ?? -1),
+    subsectionCount: countDirectSubsections(peaks ?? [], parentIndex),
     wordsLabel: formatWords(words),
     densityBucket: classifyCitationDensity(
       peak.subtreeCitationsPerSentence ?? peak.citationsPerSentence ?? 0,

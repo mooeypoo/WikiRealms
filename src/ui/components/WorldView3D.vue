@@ -364,14 +364,15 @@ function buildSectionHalos(world, heightScale) {
 function updateHalos(nowSeconds) {
   if (!haloGroup) return
   const hoveredIdx = hoverState.sectionIndex.value
+  const peaks = props.world?.terrain?.peaks
 
   for (const peakGroup of haloGroup.children) {
     if (!peakGroup.visible) continue
     const isSubsection = !peakGroup.userData.isTopLevel
-    const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex)
+    const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex, peaks)
     let targetOpacity = pickHaloOpacity(rel, isSubsection)
-    // Only the hovered top-level itself pulses — child halos stay steady
-    // so the pulsing summit reads as the anchor amid its subsections.
+    // Only the hovered peak itself pulses — related peaks stay steady
+    // so the pulsing summit reads as the anchor of the hover context.
     if (rel === 'self') {
       targetOpacity += computeBreathingPulse(nowSeconds, peakGroup.userData.pulsePhase)
     }
@@ -402,15 +403,14 @@ function updateSectionTooltip() {
     return
   }
 
-  // Find the halo peakGroup for the hovered top-level.
+  // Find the halo peakGroup for the hovered peak — top-level OR subsection.
   const peakGroup = haloGroup.children.find((c) => c.userData.peakIndex === hoveredIdx)
-  if (!peakGroup || !peakGroup.userData.isTopLevel) {
+  if (!peakGroup) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
   }
 
   // Ring's world position is the summit. Project to NDC via the camera.
-  peakGroup.userData.ringMaterial // (touch, so accidental prune doesn't happen)
   const ring = peakGroup.children[0]
   ring.getWorldPosition(summitProjectionVec)
   summitProjectionVec.project(camera)
@@ -429,7 +429,7 @@ function updateSectionTooltip() {
     return
   }
 
-  sectionTooltipModel.value = buildTooltipModel(peak, peaks)
+  sectionTooltipModel.value = buildTooltipModel(peak, peaks, hoveredIdx)
   sectionTooltipX.value = projected.screenX
   sectionTooltipY.value = projected.screenY
   sectionTooltipVisible.value = true
@@ -526,7 +526,52 @@ function onPointerMove(event) {
   tooltipX.value = event.clientX - rect.left
   tooltipY.value = event.clientY - rect.top
 
-  updateSectionHoverFromTerrain()
+  // Halo hit takes priority over terrain — a visible subsection halo
+  // sitting on top of its parent's terrain should resolve to the
+  // subsection, not the terrain-owned top-level.
+  if (!tryHoverHalo()) {
+    updateSectionHoverFromTerrain()
+  }
+}
+
+/**
+ * Raycasts the halo group's meshes and, if a hit lands on a peakGroup
+ * whose ring material is currently visible enough to read, sets that
+ * peak as the hovered index. Returns true if a halo was hovered so the
+ * caller knows to skip the terrain fallback.
+ *
+ * Subsection halos get first-pass priority so a user aiming at a
+ * specific subsection ring doesn't get caught by their parent's much
+ * larger outer ring. Only when nothing subsection-level is hit do we
+ * check top-level halos.
+ *
+ * Opacity threshold (0.1) prevents accidentally hovering a subsection
+ * halo whose parent isn't hovered yet (its opacity is still ~0).
+ */
+function tryHoverHalo() {
+  if (!haloGroup || !raycaster) return false
+
+  const subMeshes = []
+  const topMeshes = []
+  for (const peakGroup of haloGroup.children) {
+    if (!peakGroup.visible) continue
+    const opacity = peakGroup.userData.ringMaterial?.opacity ?? 0
+    if (opacity < 0.1) continue
+    const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
+    for (const child of peakGroup.children) bucket.push(child)
+  }
+
+  let hit = null
+  if (subMeshes.length > 0) [hit] = raycaster.intersectObjects(subMeshes, false)
+  if (!hit && topMeshes.length > 0) [hit] = raycaster.intersectObjects(topMeshes, false)
+  if (!hit) return false
+
+  let node = hit.object
+  while (node && node.userData.peakIndex === undefined) node = node.parent
+  if (!node) return false
+
+  hoverState.setHovered(node.userData.peakIndex, 'halo')
+  return true
 }
 
 // Terrain-raycast → grid cell → sectionOwnershipMap → hoverState. Kept

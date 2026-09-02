@@ -86,30 +86,63 @@ describe('pickHaloOpacity', () => {
 })
 
 describe('relationshipToHover', () => {
-  const topLevel = { sectionIndex: 0, depth: 1 }
-  const subOfZero = { sectionIndex: 0, depth: 2 }
-  const otherTopLevel = { sectionIndex: 3, depth: 1 }
+  // Simulated peaks array: 0 is a top-level with subsections at 1, 2;
+  // 3 is another top-level with a subsection at 4.
+  const peaks = [
+    { title: 'A', depth: 1, sectionIndex: 0 },
+    { title: 'A.1', depth: 2, sectionIndex: 0 },
+    { title: 'A.2', depth: 2, sectionIndex: 0 },
+    { title: 'B', depth: 1, sectionIndex: 3 },
+    { title: 'B.1', depth: 2, sectionIndex: 3 },
+  ]
 
   it('returns null when nothing is hovered', () => {
-    expect(relationshipToHover(topLevel, null, 0)).toBeNull()
-    expect(relationshipToHover(topLevel, -1, 0)).toBeNull()
+    expect(relationshipToHover(peaks[0], null, 0, peaks)).toBeNull()
+    expect(relationshipToHover(peaks[0], -1, 0, peaks)).toBeNull()
   })
 
-  it('identifies the hovered top-level peak itself as self', () => {
-    expect(relationshipToHover(topLevel, 0, 0)).toBe('self')
+  it('identifies the hovered peak itself as self', () => {
+    expect(relationshipToHover(peaks[0], 0, 0, peaks)).toBe('self')
+    expect(relationshipToHover(peaks[1], 1, 1, peaks)).toBe('self')
   })
 
-  it('identifies a subsection of the hovered top-level as child (LOD reveal)', () => {
-    expect(relationshipToHover(subOfZero, 0, 1)).toBe('child')
+  it('identifies a subsection of a hovered top-level as child', () => {
+    expect(relationshipToHover(peaks[1], 0, 1, peaks)).toBe('child')
+    expect(relationshipToHover(peaks[2], 0, 2, peaks)).toBe('child')
+  })
+
+  it('identifies the parent top-level when a subsection is hovered', () => {
+    // Hovering A.1 (index 1) → A (index 0) is 'parent'.
+    expect(relationshipToHover(peaks[0], 1, 0, peaks)).toBe('parent')
+  })
+
+  it('identifies sibling subsections when a subsection is hovered', () => {
+    // Hovering A.1 (index 1) → A.2 (index 2) is 'sibling'.
+    expect(relationshipToHover(peaks[2], 1, 2, peaks)).toBe('sibling')
   })
 
   it('returns unrelated for a different top-level section', () => {
-    expect(relationshipToHover(otherTopLevel, 0, 3)).toBe('unrelated')
+    // Hovering A (index 0) → B (index 3) is 'unrelated'.
+    expect(relationshipToHover(peaks[3], 0, 3, peaks)).toBe('unrelated')
   })
 
   it('returns unrelated for a subsection under a different parent', () => {
-    const otherSub = { sectionIndex: 3, depth: 2 }
-    expect(relationshipToHover(otherSub, 0, 4)).toBe('unrelated')
+    // Hovering A (index 0) → B.1 (index 4) is 'unrelated' (its section-
+    // Index is 3, not 0).
+    expect(relationshipToHover(peaks[4], 0, 4, peaks)).toBe('unrelated')
+  })
+
+  it('returns unrelated when a subsection of a different top-level is hovered', () => {
+    // Hovering A.1 (index 1) → B.1 (index 4) has a different parent → unrelated.
+    expect(relationshipToHover(peaks[4], 1, 4, peaks)).toBe('unrelated')
+  })
+
+  it('falls back to top-level assumption when peaks array is omitted', () => {
+    // Without the peaks array we can't tell if the hovered is a
+    // subsection, so a peak whose sectionIndex points to the hovered
+    // index is treated as 'child' (the Phase-4 default behavior).
+    expect(relationshipToHover(peaks[1], 0, 1)).toBe('child')
+    expect(relationshipToHover(peaks[3], 0, 3)).toBe('unrelated')
   })
 })
 
