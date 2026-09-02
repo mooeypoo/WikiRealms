@@ -23,9 +23,14 @@ import {
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
 import SectionTooltip from './SectionTooltip.vue'
 import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
+import {
+  cellFoliageRolls,
+  computeArticleAverageCps,
+  computeFoliageDensityScale,
+  pickFoliageVariant,
+} from '../rendering/foliage.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { BIOME_THRESHOLDS, CITATION_FAERIES } from '../../engine/generation/config.js'
-import { BIOME } from '../../engine/generation/terrain.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
@@ -158,14 +163,6 @@ function makeFoliageTexture(kind) {
   return new THREE.CanvasTexture(canvas)
 }
 
-const FOLIAGE_BY_BIOME = {
-  [BIOME.DESERT]: { color: 0x9a7d42, kind: 'scrub', density: 0.1, size: 1.5 },
-  [BIOME.LIGHT_VEG]: { color: 0xa7c86b, kind: 'grass', density: 0.3, size: 1.8 },
-  [BIOME.MEADOW]: { color: 0x75ba55, kind: 'grass', density: 0.5, size: 2.1 },
-  [BIOME.WOODLAND]: { color: 0x3f793f, kind: 'tree', density: 0.7, size: 3.8 },
-  [BIOME.JUNGLE]: { color: 0x1f6937, kind: 'canopy', density: 0.85, size: 4.8 },
-}
-
 function buildTerrainMesh(world) {
   const { width, height, heightMap } = world.terrain
   const heightScale = computeHeightScale(width, height)
@@ -214,29 +211,30 @@ function buildTerrainMesh(world) {
 
   const foliage = new THREE.Group()
   const foliagePositions = new Map()
+  const articleAvgCps = computeArticleAverageCps(world.terrain.peaks ?? [])
   for (let gridY = 2; gridY < height - 2; gridY += 4) {
     for (let gridX = 2; gridX < width - 2; gridX += 4) {
       const index = gridY * width + gridX
-      const definition = FOLIAGE_BY_BIOME[world.terrain.biomeMap[index]]
-      if (!definition) continue
+      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed)
+      const variant = pickFoliageVariant(world.terrain.biomeMap[index], variantRoll)
+      if (!variant) continue
+      const densityScale = computeFoliageDensityScale(world.terrain.moistureMap[index], articleAvgCps)
+      if (densityRoll >= variant.density * densityScale) continue
 
-      const sample = ((gridX * 73856093) ^ (gridY * 19349663) ^ world.seed) >>> 0
-      if ((sample % 100) / 100 >= definition.density) continue
-
-      const positions = foliagePositions.get(definition) ?? []
+      const positions = foliagePositions.get(variant) ?? []
       // Y is flipped to match three.js PlaneGeometry vertex layout (see terrainMesh.js).
       positions.push(gridX - width / 2, height / 2 - gridY, heightMap[index] * heightScale + 0.8)
-      foliagePositions.set(definition, positions)
+      foliagePositions.set(variant, positions)
     }
   }
 
-  for (const [definition, positions] of foliagePositions) {
+  for (const [variant, positions] of foliagePositions) {
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
     const material = new THREE.PointsMaterial({
-      color: definition.color,
-      map: makeFoliageTexture(definition.kind),
-      size: definition.size,
+      color: variant.color,
+      map: makeFoliageTexture(variant.kind),
+      size: variant.size,
       sizeAttenuation: true,
       transparent: true,
       alphaTest: 0.1,
