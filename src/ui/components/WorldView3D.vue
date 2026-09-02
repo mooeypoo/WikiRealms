@@ -10,6 +10,15 @@ import {
   computeVertexColors,
   computeWaterSurfaceHeight,
 } from '../rendering/terrainMesh.js'
+import {
+  SECTION_MARKERS,
+  computeBreathingPulse,
+  computeRingRadii,
+  computeWallHeight,
+  computeWallRadius,
+  pickHaloOpacity,
+  relationshipToHover,
+} from '../rendering/sectionHalos.js'
 import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { BIOME_THRESHOLDS, CITATION_FAERIES } from '../../engine/generation/config.js'
@@ -42,12 +51,16 @@ let worldGroup = null
 let terrainMesh = null
 let waterMesh = null
 let portalGroup = null
-let flagGroup = null
+let haloGroup = null
 let faerieGroup = null
 let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
+
+// Cached accent color for section halos — sourced from the app's --accent
+// CSS variable at rebuildScene time so a theme swap picks up automatically.
+let haloAccent = new THREE.Color(0xffd58c)
 
 function detectWebGLSupport() {
   try {
@@ -56,6 +69,17 @@ function detectWebGLSupport() {
   } catch {
     return false
   }
+}
+
+/** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
+function resolveAccentColor() {
+  try {
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+    if (value) return new THREE.Color(value)
+  } catch {
+    // ignore — fall through to default warm hue
+  }
+  return new THREE.Color(0xffd58c)
 }
 
 /** Draws an emoji onto a canvas texture, used for the whirlpool portal sprites. */
@@ -76,90 +100,6 @@ function makeEmojiSprite(emoji, size = 96) {
     blending: THREE.AdditiveBlending,
   })
   return new THREE.Sprite(material)
-}
-
-/** Creates an animated beacon for a top-level article section. */
-function makeSectionBeaconMain() {
-  const canvas = document.createElement('canvas')
-  const size = 128
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-
-  const center = size / 2
-  const glow = ctx.createRadialGradient(center, center, 4, center, center, 46)
-  glow.addColorStop(0, 'rgba(255, 224, 130, 1)')
-  glow.addColorStop(0.38, 'rgba(255, 174, 56, 0.8)')
-  glow.addColorStop(1, 'rgba(255, 174, 56, 0)')
-  ctx.fillStyle = glow
-  ctx.beginPath()
-  ctx.arc(center, center, 46, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.strokeStyle = 'rgba(255, 240, 190, 0.95)'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.arc(center, center, 23, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.fillStyle = 'rgba(255, 250, 225, 1)'
-  ctx.beginPath()
-  ctx.arc(center, center, 8, 0, Math.PI * 2)
-  ctx.fill()
-
-  const material = new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(canvas),
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    sizeAttenuation: true,
-  })
-  const sprite = new THREE.Sprite(material)
-  sprite.userData.isSubsectionBeacon = false
-  return sprite
-}
-
-/** Creates an animated beacon for a nested article section. */
-function makeSectionBeaconSubsection() {
-  const canvas = document.createElement('canvas')
-  const size = 96
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-
-  const center = size / 2
-  const glow = ctx.createRadialGradient(center, center, 3, center, center, 34)
-  glow.addColorStop(0, 'rgba(255, 250, 213, 0.95)')
-  glow.addColorStop(0.4, 'rgba(255, 213, 117, 0.7)')
-  glow.addColorStop(1, 'rgba(255, 213, 117, 0)')
-  ctx.fillStyle = glow
-  ctx.beginPath()
-  ctx.arc(center, center, 34, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.strokeStyle = 'rgba(255, 248, 207, 0.9)'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.arc(center, center, 16, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.fillStyle = 'rgba(255, 255, 242, 1)'
-  ctx.beginPath()
-  ctx.arc(center, center, 5, 0, Math.PI * 2)
-  ctx.fill()
-
-  const material = new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(canvas),
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    sizeAttenuation: true,
-  })
-  const sprite = new THREE.Sprite(material)
-  sprite.userData.isSubsectionBeacon = true
-  return sprite
 }
 
 function makeFoliageTexture(kind) {
@@ -256,24 +196,7 @@ function buildTerrainMesh(world) {
     }
   }
 
-  const flags = new THREE.Group()
-  for (const peak of world.terrain.peaks ?? []) {
-    if (props.showPeakFlags !== 'none' && (props.showPeakFlags === 'all' || peak.depth <= 1)) {
-      const local = computePeakFlagPosition(peak, world.terrain, heightScale)
-      const isSubsection = peak.depth > 1
-      const sprite = isSubsection ? makeSectionBeaconSubsection() : makeSectionBeaconMain()
-      const spriteScale = isSubsection ? 10 : 14
-
-      sprite.scale.set(spriteScale, spriteScale, 1)
-      sprite.position.set(local.x, local.y, local.z)
-      sprite.userData.peakTitle = local.title
-      sprite.userData.peakDepth = peak.depth
-      sprite.userData.citationCount = peak.citationCount
-      sprite.userData.baseScale = spriteScale
-      flags.add(sprite)
-    }
-
-  }
+  const halos = buildSectionHalos(world, heightScale)
 
   const foliage = new THREE.Group()
   const foliagePositions = new Map()
@@ -330,7 +253,116 @@ function buildTerrainMesh(world) {
     faeries.add(faerieSprite)
   }
 
-  return { mesh, water, portals, flags, faeries, foliage, heightScale }
+  return { mesh, water, portals, halos, faeries, foliage, heightScale }
+}
+
+/**
+ * Builds one THREE.Group per world containing a "ground ring" + "energy
+ * wall" pair for every top-level and subsection peak. Positioned in the
+ * mesh's local frame — the shared worldGroup rotation carries them into
+ * world-Y-up along with the terrain.
+ *
+ * Halo opacities are animated per-frame from hoverState in updateHalos();
+ * this function only allocates geometry and initial idle opacity.
+ */
+function buildSectionHalos(world, heightScale) {
+  const group = new THREE.Group()
+  const peaks = world.terrain.peaks ?? []
+  const showAll = props.showPeakFlags === 'all'
+  const hidden = props.showPeakFlags === 'none'
+
+  for (let i = 0; i < peaks.length; i++) {
+    const peak = peaks[i]
+    const isTopLevel = (peak.depth ?? 0) <= 1
+
+    const local = computePeakFlagPosition(peak, world.terrain, heightScale, 0)
+    const ringRadii = computeRingRadii(peak.radius)
+    const wallRadiusGrid = computeWallRadius(peak.radius)
+    const wallHeightGrid = computeWallHeight(peak.amplitude)
+
+    // The wall's world Z-height is grid-height units, matched to the
+    // terrain's own heightScale so visual proportions stay consistent
+    // regardless of grid size.
+    const wallHeightWorld = wallHeightGrid * (heightScale / 40)
+
+    const ringGeo = new THREE.RingGeometry(ringRadii.inner, ringRadii.outer, 48)
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: haloAccent,
+      transparent: true,
+      opacity: SECTION_MARKERS.opacity.idle,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+    const ring = new THREE.Mesh(ringGeo, ringMat)
+    ring.position.set(local.x, local.y, local.z + SECTION_MARKERS.ring.hoverOffset)
+
+    // Open cylinder (lateral surface only) — the "energy wall".
+    const wallGeo = new THREE.CylinderGeometry(
+      wallRadiusGrid,
+      wallRadiusGrid,
+      wallHeightWorld,
+      SECTION_MARKERS.wall.radialSegments,
+      1,
+      true,
+    )
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: haloAccent,
+      transparent: true,
+      opacity: SECTION_MARKERS.opacity.idle,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+    const wall = new THREE.Mesh(wallGeo, wallMat)
+    // three.js CylinderGeometry is Y-axis-aligned; we want its axis to be
+    // the world-up axis, which is Z BEFORE worldGroup rotation, so rotate π/2 on X.
+    wall.rotation.x = Math.PI / 2
+    wall.position.set(local.x, local.y, local.z + wallHeightWorld / 2)
+
+    const peakGroup = new THREE.Group()
+    peakGroup.add(ring, wall)
+    peakGroup.userData.peakIndex = i
+    peakGroup.userData.peak = peak
+    peakGroup.userData.isTopLevel = isTopLevel
+    // Per-peak phase so adjacent halos don't beat in unison.
+    peakGroup.userData.pulsePhase = (peak.x * 0.7 + peak.y * 1.3) % (Math.PI * 2)
+    peakGroup.userData.ringMaterial = ringMat
+    peakGroup.userData.wallMaterial = wallMat
+    // Subsections start hidden by default; Phase 4 will flip on parent hover.
+    // `showPeakFlags='all'` bypasses LOD; `='none'` hides everything.
+    peakGroup.visible = !hidden && (isTopLevel || showAll)
+    group.add(peakGroup)
+  }
+
+  return group
+}
+
+/**
+ * Per-frame halo opacity + pulse update. Reads hoverState reactively (via
+ * .value) inside the animate loop — that's the seam where Phase 2's
+ * plumbing meets rendering. Kept out of animate() itself so it's easy
+ * to swap out or extend when Phase 4 adds LOD/breadcrumb.
+ */
+function updateHalos(nowSeconds) {
+  if (!haloGroup) return
+  const hoveredIdx = hoverState.sectionIndex.value
+
+  for (const peakGroup of haloGroup.children) {
+    if (!peakGroup.visible) continue
+    const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex)
+    let targetOpacity = pickHaloOpacity(rel)
+    if (rel === 'self') {
+      targetOpacity += computeBreathingPulse(nowSeconds, peakGroup.userData.pulsePhase)
+    }
+
+    const ringMat = peakGroup.userData.ringMaterial
+    const wallMat = peakGroup.userData.wallMaterial
+    // Simple exponential lerp toward target for smooth in/out.
+    const alpha = 0.15
+    ringMat.opacity += (targetOpacity - ringMat.opacity) * alpha
+    wallMat.opacity += (targetOpacity - wallMat.opacity) * alpha
+  }
 }
 
 function clearScene() {
@@ -344,7 +376,7 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
-  for (const group of [portalGroup, flagGroup, faerieGroup, foliageGroup]) {
+  for (const group of [portalGroup, haloGroup, faerieGroup, foliageGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -359,14 +391,18 @@ function rebuildScene() {
   if (!scene) return
   clearScene()
 
-  const { mesh, water, portals, flags, faeries, foliage, heightScale } = buildTerrainMesh(props.world)
+  // Pull the accent color from CSS so a theme change gets picked up on
+  // the next world rebuild without any three.js code touching styling.
+  haloAccent = resolveAccentColor()
+
+  const { mesh, water, portals, halos, faeries, foliage, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
-  flagGroup = flags
+  haloGroup = halos
   faerieGroup = faeries
   foliageGroup = foliage
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, flagGroup, faerieGroup, foliageGroup)
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, faerieGroup, foliageGroup)
 
   const { width, height } = props.world.terrain
   const cameraDistance = Math.max(width, height) * 0.9
@@ -395,14 +431,13 @@ function onPointerClick(event) {
 }
 
 function onPointerMove(event) {
-  if (!raycaster || (!portalGroup && !flagGroup && !faerieGroup)) return
+  if (!raycaster || (!portalGroup && !faerieGroup)) return
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
   const markers = [
     ...(portalGroup?.children ?? []),
     ...(faerieGroup?.children ?? []),
-    ...(flagGroup?.children ?? []),
   ]
   const [hit] = raycaster.intersectObjects(markers, true)
 
@@ -493,13 +528,8 @@ function animate() {
     })
   }
 
-  if (flagGroup) {
-    const t = performance.now() * 0.002
-    flagGroup.children.forEach((sprite) => {
-      const pulse = 1 + Math.sin(t + sprite.userData.peakDepth) * 0.12
-      const base = sprite.userData.baseScale
-      sprite.scale.set(base * pulse, base * pulse, 1)
-    })
+  if (haloGroup) {
+    updateHalos(performance.now() * 0.001)
   }
 
   if (faerieGroup) {
@@ -525,7 +555,9 @@ onMounted(() => {
   renderer = new THREE.WebGLRenderer({ antialias: true })
   containerRef.value.appendChild(renderer.domElement)
 
-  // A single rotated group so terrain/water/portals/flags all share one
+  // A single rotated group so terrain/water/portals/halos/faeries/foliage
+  // all share one consistent transform from grid-space (XY, Z-up) to
+  // world-space (Y-up).
   // consistent transform from grid-space (XY, Z-up) to world-space (Y-up).
   worldGroup = new THREE.Group()
   worldGroup.rotation.x = -Math.PI / 2
