@@ -234,7 +234,9 @@ watch([current, backstack, forwardstack, articleCache], () => {
         v-if="worldStatus === 'success' && world && viewMode === '3d'"
         :world="world"
         :show-portals="preferences.showPortals"
-        :show-peak-flags="preferences.showPeakFlags"
+        :show-sections="preferences.showSections"
+        :show-faeries="preferences.showFaeries"
+        :show-foliage="preferences.showFoliage"
         class="cosmos__world"
         @portal-click="onPortalClick"
       />

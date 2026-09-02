@@ -9,25 +9,40 @@
           </header>
 
           <div class="settings-modal__body">
-            <label class="settings-modal__row">
-              <span>
-                <strong>Show portals</strong>
-                <small>Display links to related articles.</small>
-              </span>
-              <input type="checkbox" :checked="preferences.showPortals" @change="update('showPortals', $event.target.checked)" />
-            </label>
+            <fieldset class="settings-modal__fieldset">
+              <legend>Map layers</legend>
+              <label class="settings-modal__row">
+                <span>
+                  <strong>🏔️ Sections</strong>
+                  <small>Section halos + energy walls. Subsections reveal on hover.</small>
+                </span>
+                <input type="checkbox" :checked="preferences.showSections" @change="update('showSections', $event.target.checked)" />
+              </label>
 
-            <label class="settings-modal__row">
-              <span>
-                <strong>Peak flags</strong>
-                <small>Control which section labels are visible.</small>
-              </span>
-              <select :value="preferences.showPeakFlags" @change="update('showPeakFlags', $event.target.value)">
-                <option value="all">All peaks</option>
-                <option value="main">Main peaks</option>
-                <option value="none">None</option>
-              </select>
-            </label>
+              <label class="settings-modal__row">
+                <span>
+                  <strong>🌀 Portals</strong>
+                  <small>Links to related Wikipedia articles.</small>
+                </span>
+                <input type="checkbox" :checked="preferences.showPortals" @change="update('showPortals', $event.target.checked)" />
+              </label>
+
+              <label class="settings-modal__row">
+                <span>
+                  <strong>✨ Citation faeries</strong>
+                  <small>Hovering sprites — one per cited section.</small>
+                </span>
+                <input type="checkbox" :checked="preferences.showFaeries" @change="update('showFaeries', $event.target.checked)" />
+              </label>
+
+              <label class="settings-modal__row">
+                <span>
+                  <strong>🌲 Foliage</strong>
+                  <small>Trees, grass, and scrub matching each biome.</small>
+                </span>
+                <input type="checkbox" :checked="preferences.showFoliage" @change="update('showFoliage', $event.target.checked)" />
+              </label>
+            </fieldset>
 
             <label class="settings-modal__row settings-modal__row--range">
               <span>
@@ -71,8 +86,10 @@ function update(key, value) {
 
 function reset() {
   emit('update:preferences', {
+    showSections: true,
     showPortals: true,
-    showPeakFlags: 'main',
+    showFaeries: true,
+    showFoliage: true,
     panelOpacity: 0.9,
     autoHideHUD: false,
   })
@@ -144,6 +161,20 @@ function reset() {
 
 .settings-modal__body {
   padding: var(--spacing-xs) var(--spacing-lg);
+}
+
+.settings-modal__fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--spacing-md);
+}
+
+.settings-modal__fieldset legend {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+  padding: 0 0 var(--spacing-xs);
 }
 
 .settings-modal__row {

@@ -30,7 +30,9 @@ import { BIOME } from '../../engine/generation/terrain.js'
 const props = defineProps({
   world: { type: Object, required: true },
   showPortals: { type: Boolean, default: true },
-  showPeakFlags: { type: String, default: 'main' },
+  showSections: { type: Boolean, default: true },
+  showFaeries: { type: Boolean, default: true },
+  showFoliage: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['portal-click'])
@@ -283,7 +285,7 @@ function buildTerrainMesh(world) {
 function buildSectionHalos(world, heightScale) {
   const group = new THREE.Group()
   const peaks = world.terrain.peaks ?? []
-  const hidden = props.showPeakFlags === 'none'
+  const hidden = !props.showSections
 
   for (let i = 0; i < peaks.length; i++) {
     const peak = peaks[i]
@@ -476,6 +478,11 @@ function rebuildScene() {
   haloGroup = halos
   faerieGroup = faeries
   foliageGroup = foliage
+  // Apply the current layer toggles so a rebuild respects the user's
+  // last on/off state without waiting for the layer-watch to fire.
+  haloGroup.visible = props.showSections
+  faerieGroup.visible = props.showFaeries
+  foliageGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, faerieGroup, foliageGroup)
 
   const { width, height } = props.world.terrain
@@ -737,7 +744,20 @@ onBeforeUnmount(() => {
   renderer?.dispose()
 })
 
-watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
+// Rebuild when the world or portal-inclusion changes (portals are
+// generated at build-time from world data). Other layer toggles just
+// flip .visible on their existing groups — no rebuild needed.
+watch(() => [props.world, props.showPortals], rebuildScene)
+
+watch(
+  () => [props.showSections, props.showFaeries, props.showFoliage],
+  () => {
+    if (haloGroup) haloGroup.visible = props.showSections
+    if (faerieGroup) faerieGroup.visible = props.showFaeries
+    if (foliageGroup) foliageGroup.visible = props.showFoliage
+  },
+  { immediate: false },
+)
 </script>
 
 <template>

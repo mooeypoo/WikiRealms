@@ -13,8 +13,11 @@ export const useUIState = () => {
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';
   const preferences = reactive({
+    // Marker layer toggles — each is an independent on/off.
+    showSections: true,
     showPortals: true,
-    showPeakFlags: 'main', // 'all', 'main', 'none'
+    showFaeries: true,
+    showFoliage: true,
     panelOpacity: 0.9,
     autoHideHUD: false,
     firstVisitDone: false,
@@ -26,6 +29,12 @@ export const useUIState = () => {
       const stored = localStorage.getItem(PREFERENCES_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        // Migrate legacy `showPeakFlags` string ('all' | 'main' | 'none')
+        // into the new boolean showSections. 'none' → false, else true.
+        if (parsed.showPeakFlags !== undefined && parsed.showSections === undefined) {
+          parsed.showSections = parsed.showPeakFlags !== 'none';
+          delete parsed.showPeakFlags;
+        }
         Object.assign(preferences, parsed);
       }
     } catch (e) {
