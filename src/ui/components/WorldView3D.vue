@@ -33,6 +33,7 @@ let terrainMesh = null
 let waterMesh = null
 let portalGroup = null
 let flagGroup = null
+let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
@@ -193,23 +194,54 @@ function buildTerrainMesh(world) {
   }
 
   const flags = new THREE.Group()
+  const foliage = new THREE.Group()
+  const foliagePositions = []
   for (const peak of world.terrain.peaks ?? []) {
-    if (props.showPeakFlags === 'none' || (props.showPeakFlags === 'main' && peak.depth > 1)) continue
-    const local = computePeakFlagPosition(peak, world.terrain, heightScale)
-    const isSubsection = peak.depth > 1
-    const sprite = isSubsection ? makeSectionBeaconSubsection() : makeSectionBeaconMain()
-    
-    const spriteScale = isSubsection ? 10 : 14
-    sprite.scale.set(spriteScale, spriteScale, 1)
-    
-    sprite.position.set(local.x, local.y, local.z)
-    sprite.userData.peakTitle = local.title
-    sprite.userData.peakDepth = peak.depth
-    sprite.userData.baseScale = spriteScale
-    flags.add(sprite)
+    if (props.showPeakFlags !== 'none' && (props.showPeakFlags === 'all' || peak.depth <= 1)) {
+      const local = computePeakFlagPosition(peak, world.terrain, heightScale)
+      const isSubsection = peak.depth > 1
+      const sprite = isSubsection ? makeSectionBeaconSubsection() : makeSectionBeaconMain()
+      const spriteScale = isSubsection ? 10 : 14
+
+      sprite.scale.set(spriteScale, spriteScale, 1)
+      sprite.position.set(local.x, local.y, local.z)
+      sprite.userData.peakTitle = local.title
+      sprite.userData.peakDepth = peak.depth
+      sprite.userData.citationCount = peak.citationCount
+      sprite.userData.baseScale = spriteScale
+      flags.add(sprite)
+    }
+
+    if (!peak.citationCount) continue
+    const density = Math.min(1, peak.citationDensity * 120)
+    const tuftCount = Math.min(14, 3 + Math.round(density * 11))
+    for (let index = 0; index < tuftCount; index++) {
+      const angle = index * 2.399963229728653
+      const distance = peak.radius * (0.16 + ((index * 0.618033988749895) % 0.62))
+      const gridX = Math.round(Math.min(width - 1, Math.max(0, peak.x + Math.cos(angle) * distance)))
+      const gridY = Math.round(Math.min(height - 1, Math.max(0, peak.y + Math.sin(angle) * distance)))
+      const localX = gridX - width / 2
+      const localY = gridY - height / 2
+      const localZ = heightMap[gridY * width + gridX] * heightScale + 0.7
+      foliagePositions.push(localX, localY, localZ)
+    }
   }
 
-  return { mesh, water, portals, flags, heightScale }
+  if (foliagePositions.length) {
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(foliagePositions, 3))
+    const material = new THREE.PointsMaterial({
+      color: 0x8acb62,
+      size: 1.8,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+    })
+    foliage.add(new THREE.Points(geometry, material))
+  }
+
+  return { mesh, water, portals, flags, foliage, heightScale }
 }
 
 function clearScene() {
@@ -223,7 +255,7 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
-  for (const group of [portalGroup, flagGroup]) {
+  for (const group of [portalGroup, flagGroup, foliageGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -238,12 +270,13 @@ function rebuildScene() {
   if (!scene) return
   clearScene()
 
-  const { mesh, water, portals, flags, heightScale } = buildTerrainMesh(props.world)
+  const { mesh, water, portals, flags, foliage, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
   flagGroup = flags
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, flagGroup)
+  foliageGroup = foliage
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, flagGroup, foliageGroup)
 
   const { width, height } = props.world.terrain
   const cameraDistance = Math.max(width, height) * 0.9
@@ -280,7 +313,9 @@ function onPointerMove(event) {
 
   let node = hit?.object ?? null
   while (node && node.userData.peakTitle === undefined) node = node.parent
-  hoveredPeakTitle.value = node?.userData.peakTitle ?? null
+  hoveredPeakTitle.value = node?.userData.peakTitle
+    ? { title: node.userData.peakTitle, citationCount: node.userData.citationCount ?? 0 }
+    : null
 
   tooltipX.value = event.clientX - rect.left
   tooltipY.value = event.clientY - rect.top
@@ -379,7 +414,8 @@ watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
       class="world-view-3d__tooltip"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
-      {{ hoveredPeakTitle }}
+      <strong>{{ hoveredPeakTitle.title }}</strong>
+      <span>{{ hoveredPeakTitle.citationCount }} references</span>
     </div>
   </div>
 </template>
@@ -414,5 +450,16 @@ watch(() => [props.world, props.showPortals, props.showPeakFlags], rebuildScene)
   color: var(--text-primary, #eef0ff);
   pointer-events: none;
   white-space: nowrap;
+}
+
+.world-view-3d__tooltip strong,
+.world-view-3d__tooltip span {
+  display: block;
+}
+
+.world-view-3d__tooltip span {
+  margin-top: 0.1rem;
+  color: var(--text-muted, #9aa3c7);
+  font-size: 0.72rem;
 }
 </style>

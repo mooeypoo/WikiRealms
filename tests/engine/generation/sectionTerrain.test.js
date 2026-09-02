@@ -73,6 +73,31 @@ describe('flattenPeaks', () => {
 
     expect(tiny.radius).toBeGreaterThanOrEqual(6) // PEAK_LAYOUT.minPeakRadius
   })
+
+  it('preserves a section citation signal on its peak', () => {
+    const node = makeNode('Sourced', 100)
+    node.citationCount = 7
+    node.citationDensity = 0.07
+
+    const [peak] = flattenPeaks([node], bounds)
+
+    expect(peak).toMatchObject({ citationCount: 7, citationDensity: 0.07 })
+  })
+
+  it('uses subtree citations for a parent mountain range', () => {
+    const child = makeNode('Child', 50)
+    child.citationCount = 2
+    child.subtreeCitationCount = 2
+    child.subtreeCitationDensity = 0.04
+    const parent = makeNode('Parent', 100, [child])
+    parent.citationCount = 0
+    parent.subtreeCitationCount = 2
+    parent.subtreeCitationDensity = 2 / 150
+
+    const [parentPeak] = flattenPeaks([parent], bounds)
+
+    expect(parentPeak.citationCount).toBe(2)
+  })
 })
 
 describe('generateSectionTerrain', () => {

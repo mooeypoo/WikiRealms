@@ -1,5 +1,5 @@
 <script setup>
-import { defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
@@ -41,6 +41,7 @@ const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showNavigationTools = ref(false)
 const isArticlePanelCollapsed = ref(false)
+const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
 function toggleViewMode() {
   viewMode.value = viewMode.value === '3d' ? '2d' : '3d'
@@ -195,7 +196,11 @@ watch([current, backstack, forwardstack, articleCache], () => {
 </script>
 
 <template>
-  <div class="cosmos" :class="{ 'cosmos--hud-hidden': showHudHidden }" :style="{ '--hud-opacity': preferences.panelOpacity }">
+  <div
+    class="cosmos"
+    :class="{ 'cosmos--hud-hidden': showHudHidden }"
+    :style="{ '--hud-opacity': preferences.panelOpacity, '--citation-atmosphere': citationAtmosphere }"
+  >
     <Taskbar
       :current-article-title="article?.title"
       :can-go-back="canGoBack"
@@ -307,6 +312,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
             <div><dt>Revision</dt><dd>{{ article.latestRevisionId }}</dd></div>
             <div><dt>Categories</dt><dd>{{ article.categories.length }}</dd></div>
             <div><dt>Sections</dt><dd>{{ countSections(article.sections) }}</dd></div>
+            <div><dt>References</dt><dd>{{ article.sections?.citationCount ?? 0 }}</dd></div>
             <div><dt>Outbound links</dt><dd>{{ article.links.length }}</dd></div>
           </dl>
           <a
@@ -373,6 +379,21 @@ watch([current, backstack, forwardstack, articleCache], () => {
   background-size: 400px 400px;
   opacity: 0.6;
   pointer-events: none;
+}
+
+.cosmos__field::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 12% 38%, rgba(255, 223, 141, 0.9) 50%, transparent 50%),
+    radial-gradient(1px 1px at 28% 78%, rgba(255, 223, 141, 0.8) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 51% 18%, rgba(255, 223, 141, 0.9) 50%, transparent 50%),
+    radial-gradient(1px 1px at 73% 32%, rgba(255, 223, 141, 0.8) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 88% 76%, rgba(255, 223, 141, 0.9) 50%, transparent 50%);
+  background-repeat: repeat;
+  background-size: 320px 320px;
+  opacity: calc(var(--citation-atmosphere, 0) * 0.42);
 }
 
 .cosmos__stage {

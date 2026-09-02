@@ -12,10 +12,11 @@ function makeArticle(overrides = {}) {
     links: ['Physics', 'Nobel Prize in Physics', 'General relativity'],
     images: ['Einstein.jpg'],
     sections: {
-      lead: { ownSize: 200, links: ['Physics'] },
+      lead: { ownSize: 200, links: ['Physics'], citationCount: 3, citationDensity: 0.015 },
+      citationCount: 10,
       totalSize: 500,
       sections: [
-        { title: 'Early life', anchor: 'Early_life', ownSize: 150, subtreeSize: 150, links: ['Germany'], children: [] },
+        { title: 'Early life', anchor: 'Early_life', ownSize: 150, subtreeSize: 150, links: ['Germany'], citationCount: 5, citationDensity: 0.033, children: [] },
         {
           title: 'Career',
           anchor: 'Career',
@@ -29,6 +30,8 @@ function makeArticle(overrides = {}) {
               ownSize: 50,
               subtreeSize: 50,
               links: ['General relativity'],
+              citationCount: 2,
+              citationDensity: 0.04,
               children: [],
             },
           ],
@@ -72,6 +75,7 @@ describe('generateWorld', () => {
     expect(world.revisionId).toBe(1234)
     expect(world.engineVersion).toBe(CURRENT_ENGINE_VERSION)
     expect(world.worldId).toBe(`en:736@1234:${CURRENT_ENGINE_VERSION}`)
+    expect(world.citationCount).toBe(10)
   })
 
   it('uses the injected clock for generatedAt', () => {
@@ -86,6 +90,15 @@ describe('generateWorld', () => {
     // lead(Physics) + Early life(Germany) + Career(Nobel Prize in Physics) + Relativity(General relativity)
     expect(world.portals).toHaveLength(4)
     expect(world.portals.every((p) => p.origin === 'article-link')).toBe(true)
+  })
+
+  it('preserves citation metadata for section peaks', () => {
+    const world = generateWorld(makeArticle(), { width: 16, height: 16 })
+
+    expect(world.terrain.peaks.find((peak) => peak.title === 'Early life')).toMatchObject({
+      citationCount: 5,
+      citationDensity: 0.033,
+    })
   })
 
   it('degrades gracefully to an empty section tree when article.sections is missing', () => {

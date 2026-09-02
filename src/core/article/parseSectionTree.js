@@ -30,6 +30,19 @@ function extractLinks(sectionEl) {
   return Array.from(titles)
 }
 
+/** Counts Wikipedia's inline citation markers, excluding nested sections. */
+function countCitations(sectionEl) {
+  const clone = sectionEl.cloneNode(true)
+  for (const nestedSection of clone.querySelectorAll('section')) {
+    nestedSection.remove()
+  }
+  return clone.querySelectorAll('sup.reference, sup.mw-ref, sup[typeof~="mw:Extension/ref"]').length
+}
+
+function citationDensity(citationCount, ownSize) {
+  return ownSize > 0 ? citationCount / ownSize : 0
+}
+
 /**
  * Measures a section's own prose length, excluding non-prose wrapper
  * content (citation lists, navboxes, infoboxes, styles) so a
@@ -100,19 +113,35 @@ function computeSubtreeSizes(nodes) {
   return total
 }
 
+function computeSubtreeCitations(nodes) {
+  for (const node of nodes) {
+    const childrenTotal = computeSubtreeCitations(node.children)
+    node.subtreeCitationCount = node.citationCount + childrenTotal
+    node.subtreeCitationDensity = node.subtreeSize > 0 ? node.subtreeCitationCount / node.subtreeSize : 0
+  }
+  return nodes.reduce((total, node) => total + node.subtreeCitationCount, 0)
+}
+
+function countTreeCitations(nodes) {
+  return nodes.reduce(
+    (total, node) => total + node.citationCount + countTreeCitations(node.children),
+    0,
+  )
+}
+
 /**
  * Parses a Wikipedia article's rendered HTML (from the REST `with_html`
  * endpoint — see docs/generation.md) into a hierarchical section tree.
  * Pure and deterministic: the same HTML always produces the same tree.
  *
  * @param {string} html
- * @returns {{ lead: { ownSize: number, links: string[] }, sections: object[], totalSize: number }}
+ * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number }}
  */
 export function parseSectionTree(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const articleSections = doc.body.querySelectorAll('section')
 
-  let lead = { ownSize: 0, links: [] }
+  let lead = { ownSize: 0, links: [], citationCount: 0, citationDensity: 0 }
   const flatSections = []
 
   for (const sectionEl of articleSections) {
@@ -120,24 +149,37 @@ export function parseSectionTree(html) {
 
     if (!heading) {
       // The lead section (before the first heading) has no heading of its own.
-      lead = { ownSize: measureOwnSize(sectionEl), links: extractLinks(sectionEl) }
+      const ownSize = measureOwnSize(sectionEl)
+      const citations = countCitations(sectionEl)
+      lead = {
+        ownSize,
+        links: extractLinks(sectionEl),
+        citationCount: citations,
+        citationDensity: citationDensity(citations, ownSize),
+      }
       continue
     }
 
     const title = heading.textContent.trim()
   if (EXCLUDED_SECTION_TITLES.includes(title.toLowerCase()) || isInsideExcludedSection(sectionEl)) continue
 
+    const ownSize = measureOwnSize(sectionEl)
+    const citations = countCitations(sectionEl)
     flatSections.push({
       title,
       depth: depthFromHeadingTag(heading.tagName),
       anchor: heading.id || null,
-      ownSize: measureOwnSize(sectionEl),
+      ownSize,
       links: extractLinks(sectionEl),
+      citationCount: citations,
+      citationDensity: citationDensity(citations, ownSize),
     })
   }
 
   const sections = buildHierarchy(flatSections)
   const sectionsTotal = computeSubtreeSizes(sections)
+  computeSubtreeCitations(sections)
+  const citationCount = lead.citationCount + countTreeCitations(sections)
 
-  return { lead, sections, totalSize: lead.ownSize + sectionsTotal }
+  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount }
 }

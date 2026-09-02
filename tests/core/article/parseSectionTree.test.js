@@ -141,6 +141,47 @@ describe('parseSectionTree', () => {
     expect(sections[0].links).toEqual([])
   })
 
+  it('counts in-text citation markers and normalizes them by section prose', () => {
+    const { lead, sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="0"><p>Longer lead prose<sup class="reference"><a href="./X#cite_note-1">1</a></sup></p></section>
+        <section data-mw-section-id="1"><h2 id="Body">Body</h2><p>Text<sup class="reference"><a href="./X#cite_note-2">2</a></sup><sup class="reference"><a href="./X#cite_note-3">3</a></sup></p></section>
+      `),
+    )
+
+    expect(lead.citationCount).toBe(1)
+    expect(sections[0].citationCount).toBe(2)
+    expect(sections[0].citationDensity).toBeGreaterThan(lead.citationDensity)
+  })
+
+  it('keeps nested-section citations out of the parent count and totals them for the article', () => {
+    const { sections, citationCount } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Parent">Parent</h2><p>Parent<sup class="reference"><a>1</a></sup></p>
+          <section data-mw-section-id="2"><h3 id="Child">Child</h3><p>Child<sup class="reference"><a>2</a></sup></p></section>
+        </section>
+      `),
+    )
+
+    expect(sections[0].citationCount).toBe(1)
+    expect(sections[0].children[0].citationCount).toBe(1)
+    expect(sections[0].subtreeCitationCount).toBe(2)
+    expect(sections[0].children[0].subtreeCitationCount).toBe(1)
+    expect(citationCount).toBe(2)
+  })
+
+  it('counts either supported inline citation marker form exactly once', () => {
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Body">Body</h2><p>
+          <sup class="reference">1</sup><sup class="mw-ref">2</sup><sup typeof="mw:Extension/ref">3</sup>
+        </p></section>
+      `),
+    )
+
+    expect(sections[0].citationCount).toBe(3)
+  })
+
   it('excludes known boilerplate section titles entirely, case-insensitively', () => {
     const { sections, totalSize } = parseSectionTree(
       html(`

@@ -33,12 +33,17 @@ function limitLevel(nodes, depth, limits) {
 
   if (folded.length > 0) {
     const foldedSize = folded.reduce((sum, node) => sum + node.subtreeSize, 0)
+    const foldedCitations = folded.reduce((sum, node) => sum + (node.subtreeCitationCount ?? node.citationCount ?? 0), 0)
     limited.push({
       title: 'Miscellaneous',
       depth,
       anchor: null,
       ownSize: foldedSize,
       subtreeSize: foldedSize,
+      citationCount: foldedCitations,
+      citationDensity: foldedSize > 0 ? foldedCitations / foldedSize : 0,
+      subtreeCitationCount: foldedCitations,
+      subtreeCitationDensity: foldedSize > 0 ? foldedCitations / foldedSize : 0,
       children: [],
       folded: true,
     })

@@ -5,7 +5,7 @@ import { flattenPeaks, generateSectionTerrain } from './sectionTerrain.js'
 import { generateSectionPortals } from './sectionPortals.js'
 import { GRID, PEAK_LAYOUT } from './config.js'
 
-const EMPTY_SECTION_TREE = { lead: { ownSize: 0, links: [] }, sections: [], totalSize: 0 }
+const EMPTY_SECTION_TREE = { lead: { ownSize: 0, links: [], citationCount: 0 }, sections: [], totalSize: 0, citationCount: 0 }
 
 /**
  * Generates a deterministic World from an Article (docs/model.md).
@@ -57,6 +57,7 @@ export function generateWorld(
     engineVersion,
     seed,
     generatedAt: now(),
+    citationCount: sectionTree.citationCount ?? 0,
     terrain,
     portals,
   }
