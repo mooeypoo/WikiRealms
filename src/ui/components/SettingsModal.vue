@@ -14,9 +14,10 @@ defineProps({
 
 const emit = defineEmits(['update:preferences', 'close'])
 
-const VIEW_MODES = [
-  { value: 'sphere', label: 'Planet', icon: 'globe' },
-  { value: 'flat', label: 'Flat', icon: 'map' },
+const RENDERING = [
+  { value: 'high', label: 'High' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'low', label: 'Low' },
 ]
 
 function update(key, value) {
@@ -26,6 +27,7 @@ function update(key, value) {
 function reset() {
   emit('update:preferences', {
     worldShape: 'sphere',
+    rendering: 'auto',
     showSections: true,
     showPortals: true,
     showFoliage: true,
@@ -47,23 +49,25 @@ function reset() {
     </template>
 
     <fieldset class="settings__group">
-      <legend>World shape</legend>
+      <legend>Rendering</legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ preferences.worldShape === 'sphere' ? 'Planet' : 'Flat map' }}</strong>
-          <small>Two views of the same generated world — switching never re-rolls the terrain.</small>
+          <strong>{{ RENDERING.find((option) => option.value === (preferences.rendering ?? 'auto')).label }}</strong>
+          <small>
+            High always draws the world in 3D. Low uses the flat canvas, which asks less of the
+            device. Auto picks by what the browser can do.
+          </small>
         </span>
-        <div class="settings__segmented" role="radiogroup" aria-label="World shape">
+        <div class="settings__segmented" role="radiogroup" aria-label="Rendering quality">
           <button
-            v-for="option in VIEW_MODES"
+            v-for="option in RENDERING"
             :key="option.value"
             type="button"
             role="radio"
-            :aria-checked="preferences.worldShape === option.value"
-            :class="['settings__segment', { 'is-active': preferences.worldShape === option.value }]"
-            @click="update('worldShape', option.value)"
+            :aria-checked="(preferences.rendering ?? 'auto') === option.value"
+            :class="['settings__segment', { 'is-active': (preferences.rendering ?? 'auto') === option.value }]"
+            @click="update('rendering', option.value)"
           >
-            <Icon :name="option.icon" :size="16" />
             {{ option.label }}
           </button>
         </div>

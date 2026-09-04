@@ -4,6 +4,7 @@ import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
 import Taskbar from './ui/components/Taskbar.vue'
+import Helm from './ui/components/Helm.vue'
 import InfoHub from './ui/components/InfoHub.vue'
 import SettingsModal from './ui/components/SettingsModal.vue'
 import { useArticle } from './ui/composables/useArticle.js'
@@ -14,6 +15,7 @@ import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
 import { useKeymap } from './ui/design/useKeymap.js'
 import { onHistoryPop, pushRealm, readRealm } from './adapters/urlState.js'
+import { supportsWebGL } from './ui/rendering/webglSupport.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 
@@ -50,7 +52,7 @@ const articleCache = ref({})
 const isStale = ref(false)
 const isSummaryExpanded = ref(false)
 const portalConfirmation = ref(null)  // { targetArticleId, targetTitle }
-const viewMode = ref('3d')
+const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showNavigationTools = ref(false)
@@ -60,9 +62,32 @@ const isArticlePanelCollapsed = ref(false)
 const focusedSectionAnchor = ref(null)
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
-function toggleViewMode() {
-  viewMode.value = viewMode.value === '3d' ? '2d' : '3d'
+/**
+ * ONE view axis (docs/ux-vision.md D1). Planet and Flat are two renderings
+ * of the identical world; switching never re-rolls terrain.
+ *
+ * The 2D canvas is no longer a peer of these — it is the fallback, chosen
+ * by capability or explicitly in settings. Before this, "Flat" named both
+ * it and the flat 3D map, from two unrelated controls.
+ */
+function setWorldShape(shape) {
+  updatePreferences({ worldShape: shape })
 }
+
+function toggleWorldShape() {
+  setWorldShape(preferences.worldShape === 'sphere' ? 'flat' : 'sphere')
+}
+
+function recenterView() {
+  worldViewRef.value?.recenter?.()
+}
+
+const rendersInWebGL = computed(() => {
+  const quality = preferences.rendering ?? 'auto'
+  if (quality === 'low') return false
+  if (quality === 'high') return true
+  return supportsWebGL()
+})
 
 function countSections(sectionTree) {
   if (!sectionTree || !sectionTree.sections) return 0
@@ -175,8 +200,8 @@ const { register } = useKeymap()
 register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
 register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
 register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
-register({ keys: '1', label: 'Flat map view', group: 'View', run: () => (viewMode.value = '2d') })
-register({ keys: '3', label: 'Planet view', group: 'View', run: () => (viewMode.value = '3d') })
+register({ keys: 'v', label: 'Switch between planet and flat', group: 'View', run: toggleWorldShape })
+register({ keys: 'c', label: 'Recentre the view', group: 'View', run: recenterView })
 register({
   keys: 'ArrowLeft',
   label: 'Back through your trail',
@@ -300,14 +325,12 @@ watch([graph, articleCache], () => {
       :can-go-back="canGoBack"
       :can-go-forward="canGoForward"
       :has-world="Boolean(world)"
-      :view-mode="viewMode"
       :search-open="isSearchOpen || !article"
       @toggle-info-hub="showInfoHub = !showInfoHub"
       @toggle-settings="showSettings = !showSettings"
       @toggle-search="isSearchOpen = !isSearchOpen"
       @go-back="goBack"
       @go-forward="goForward"
-      @toggle-view-mode="toggleViewMode"
       @toggle-navigation-tools="toggleNavigationTools"
     >
       <template #search>
@@ -325,7 +348,8 @@ watch([graph, articleCache], () => {
         <Spinner /> Generating world…
       </p>
       <WorldView3D
-        v-if="worldStatus === 'success' && world && viewMode === '3d'"
+        v-if="worldStatus === 'success' && world && rendersInWebGL"
+        ref="worldViewRef"
         :world="world"
         :show-portals="preferences.showPortals"
         :show-sections="preferences.showSections"
@@ -343,6 +367,15 @@ watch([graph, articleCache], () => {
         @portal-click="onPortalClick"
       />
     </div>
+
+    <Helm
+      v-if="world"
+      :world-shape="preferences.worldShape"
+      :disabled="worldStatus !== 'success'"
+      :can-recenter="rendersInWebGL"
+      @update:world-shape="setWorldShape"
+      @recenter="recenterView"
+    />
 
     <div v-if="current" class="app__nav-controls hud hud--nav" :class="{ 'app__nav-controls--expanded': showNavigationTools }">
       <button type="button" @click="onExportClick">Export snapshot</button>

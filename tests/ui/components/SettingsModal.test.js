@@ -10,6 +10,7 @@ const PREFERENCES = {
   showPortals: true,
   showFoliage: true,
   panelOpacity: 0.9,
+  rendering: 'auto',
 }
 
 function mountSettings(preferences = {}) {
@@ -41,27 +42,34 @@ describe('SettingsModal', () => {
     wrapper.unmount()
   })
 
-  it('marks the active world shape on the segmented control', () => {
-    const wrapper = mountSettings({ worldShape: 'flat' })
+  it('no longer offers world shape — that is the helm\'s, and having both was the confusion', () => {
+    const wrapper = mountSettings()
+
+    expect(document.body.textContent).not.toContain('World shape')
+    wrapper.unmount()
+  })
+
+  it('marks the active rendering quality', () => {
+    const wrapper = mountSettings({ rendering: 'low' })
     const checked = [...document.querySelectorAll('[role="radio"]')].filter(
       (button) => button.getAttribute('aria-checked') === 'true',
     )
 
     expect(checked).toHaveLength(1)
-    expect(checked[0].textContent).toContain('Flat')
+    expect(checked[0].textContent).toContain('Low')
     wrapper.unmount()
   })
 
   it('asks the owner to change a preference rather than mutating it', async () => {
     const wrapper = mountSettings()
-    const flat = [...document.querySelectorAll('[role="radio"]')].find((button) =>
-      button.textContent.includes('Flat'),
+    const high = [...document.querySelectorAll('[role="radio"]')].find((button) =>
+      button.textContent.includes('High'),
     )
 
-    flat.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    high.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ worldShape: 'flat' }])
+    expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ rendering: 'high' }])
     wrapper.unmount()
   })
 
@@ -77,14 +85,12 @@ describe('SettingsModal', () => {
     wrapper.unmount()
   })
 
-  it('uses drawn icons rather than emoji for its controls', () => {
+  it('uses no emoji as affordances', () => {
     // The emoji that remain live in the info content, which is rewritten
-    // later; nothing that acts as an affordance should still be one.
+    // later; nothing that acts as a control should still be one.
     const wrapper = mountSettings()
-    const controls = document.querySelector('.settings__segmented')
 
-    expect(controls.querySelectorAll('svg')).toHaveLength(2)
-    expect(controls.textContent).not.toMatch(/\p{Extended_Pictographic}/u)
+    expect(document.querySelector('.sheet').textContent).not.toMatch(/\p{Extended_Pictographic}/u)
     wrapper.unmount()
   })
 

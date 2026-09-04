@@ -21,6 +21,9 @@ export const useUIState = () => {
     // choice — both views show the identical generated world, so
     // switching never regenerates terrain.
     worldShape: 'sphere',
+    // How the world is drawn, as opposed to what shape it is: 'high' forces
+    // WebGL, 'low' forces the 2D canvas fallback, 'auto' picks by capability.
+    rendering: 'auto',
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
@@ -50,6 +53,7 @@ export const useUIState = () => {
         // a future build, or hand-edited storage) silently disabling the
         // 3D view — fall back to the flat map.
         if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
+        if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

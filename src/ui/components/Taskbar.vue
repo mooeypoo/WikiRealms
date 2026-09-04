@@ -14,14 +14,6 @@
       <span class="taskbar__divider" aria-hidden="true"></span>
       <button class="taskbar__button" type="button" aria-label="Go back" title="Go back" :disabled="!props.canGoBack" @click="$emit('go-back')">←</button>
       <button class="taskbar__button" type="button" aria-label="Go forward" title="Go forward" :disabled="!props.canGoForward" @click="$emit('go-forward')">→</button>
-      <span v-if="props.hasWorld" class="taskbar__divider" aria-hidden="true"></span>
-      <button
-        v-if="props.hasWorld"
-        class="taskbar__button taskbar__button--view"
-        type="button"
-        :aria-label="`Switch to ${props.viewMode === '3d' ? '2D' : '3D'} view`"
-        @click="$emit('toggle-view-mode')"
-      >{{ props.viewMode === '3d' ? '2D' : '3D' }}</button>
       <span class="taskbar__divider" aria-hidden="true"></span>
       <button class="taskbar__button" type="button" aria-label="More controls" title="More controls" @click="$emit('toggle-navigation-tools')">⋯</button>
     </nav>
@@ -38,8 +30,6 @@ const props = defineProps({
   currentArticleTitle: { type: String, default: null },
   canGoBack: { type: Boolean, default: false },
   canGoForward: { type: Boolean, default: false },
-  hasWorld: { type: Boolean, default: false },
-  viewMode: { type: String, default: '3d' },
   searchOpen: { type: Boolean, default: false },
 })
 
@@ -49,7 +39,6 @@ defineEmits([
   'toggle-search',
   'go-back',
   'go-forward',
-  'toggle-view-mode',
   'toggle-navigation-tools',
 ])
 </script>
@@ -148,11 +137,6 @@ defineEmits([
 .taskbar__button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.taskbar__button--view {
-  font-size: 0.72rem;
-  font-weight: 700;
 }
 
 .taskbar__divider {

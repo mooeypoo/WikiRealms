@@ -5,6 +5,7 @@ import { onStage } from '../../.storybook/preview.js'
 import * as iconStories from '../../stories/ui/design/Icon.stories.js'
 import * as overlayStories from '../../stories/ui/design/Overlays.stories.js'
 import * as sheetStories from '../../stories/ui/design/Sheet.stories.js'
+import * as helmStories from '../../stories/ui/components/Helm.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -65,6 +66,7 @@ describe('Storybook story contract', () => {
     ['Tokens', tokenStories],
     ['Overlays', overlayStories],
     ['Sheet', sheetStories],
+    ['Helm', helmStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 

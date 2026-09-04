@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import {
   computePeakFlagPosition,
   computePortalLocalPosition,
@@ -121,15 +122,6 @@ let accentColor = new THREE.Color(0xffd58c)
 // portalId currently under the cursor, read by the animate loop to grow
 // that sprite. Plain variable, not a ref — it's per-frame render state.
 let hoveredPortalId = null
-
-function detectWebGLSupport() {
-  try {
-    const canvas = document.createElement('canvas')
-    return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'))
-  } catch {
-    return false
-  }
-}
 
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
 function resolveAccentColor() {
@@ -627,6 +619,7 @@ function rebuildScene() {
   foliageGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, foliageGroup)
 
+  currentHeightScale = heightScale
   frameCamera(props.world.terrain, heightScale)
 }
 
@@ -636,6 +629,8 @@ function rebuildScene() {
  * views resets the constraints the other one set rather than inheriting
  * them.
  */
+let currentHeightScale = 1
+
 function frameCamera(terrain, heightScale) {
   if (projection.isSpherical) {
     const radius = planetRadius(terrain)
@@ -982,6 +977,18 @@ onBeforeUnmount(() => {
 // vertex position depends on the projection — but a view-mode switch only
 // re-renders the SAME world, it never regenerates terrain. Other layer
 // toggles just flip .visible on their existing groups — no rebuild needed.
+/**
+ * Puts the camera back where a rebuild would have left it. Exposed rather
+ * than driven by a prop because it is an EVENT — "do this now" — and a
+ * prop would need a counter or a flag to say it happened twice.
+ */
+function recenter() {
+  if (!props.world) return
+  frameCamera(props.world.terrain, currentHeightScale)
+}
+
+defineExpose({ recenter })
+
 watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
 
 watch(
