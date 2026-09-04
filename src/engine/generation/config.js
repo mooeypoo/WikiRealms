@@ -15,9 +15,19 @@
  * Terrain grid dimensions. Several groups below document an assumption
  * on this size (visual/peak-count budgets); revisit those if this changes
  * substantially.
+ *
+ * The 2:1 aspect is load-bearing for the planet view: the grid is treated
+ * as an equirectangular map, so `width` columns span 360° of longitude and
+ * `height` rows span 180° of latitude. A square grid would stretch every
+ * landmass 2× east-west once wrapped onto a sphere.
+ *
+ * Peak sizing below keys off min(width, height), which is unchanged from
+ * the old 256² grid — the extra columns add ocean, not smaller land. That
+ * also puts the ±180° meridian (the seam) and both poles in deep water,
+ * where the discontinuity is invisible and sits under the water surface.
  */
 export const GRID = Object.freeze({
-  width: 256,
+  width: 512,
   height: 256,
 })
 
@@ -107,15 +117,97 @@ export const EXCLUDED_SECTION_TITLES = Object.freeze([
  * layout.js's spiral placement and sectionTerrain.js). Assumes GRID above.
  */
 export const PEAK_LAYOUT = Object.freeze({
-  topLevelMaxRadiusRatio: 0.38, // fraction of min(width,height) spanned by the top-level spiral
-  topLevelInnerRadiusRatio: 0.18, // multi-section articles reserve a central basin instead of forcing one section to the center
+  // How far apart top-level sections are SPREAD, as a fraction of the
+  // grid WIDTH (i.e. of 360° of longitude). Sections used to be packed
+  // into a min(width,height) disc, which fused them into one
+  // mountain-range island on the flat map and left most of the planet
+  // empty ocean. Spreading them around the globe is what makes each
+  // section read as its own landmass. Requires the seam-wrapping in
+  // sectionTerrain.js — at this spread, land crosses the ±180° meridian.
+  topLevelSpreadRatio: 0.46,
+  topLevelInnerSpreadRatio: 0.14, // multi-section articles reserve a central basin instead of forcing one section to the center
   minPeakRadius: 10, // grid cells; below this a peak isn't visually distinct from noise roughness
+  // Scales a section's footprint from its share of the article, as a
+  // fraction of min(width,height). Separate from the spread ratio above
+  // so widening the spread doesn't inflate every section to the cap.
+  peakRadiusRatio: 0.28,
+  // Upper bound on a peak's footprint, as a fraction of min(width,height).
+  // A peak's radius is maxRadius * sqrt(its share of the article), so an
+  // article with FEW sections gives each one an enormous footprint — a
+  // 2-section stub used to get radius ~69, whose continental skirt
+  // (sigma 2.2x, see TERRAIN_GENERATION) blanketed the whole grid. That
+  // read as "stub = more land than a featured article", inverting the
+  // size signal WATER_LEVEL is trying to send, and on the planet it
+  // wrapped land over the poles as a pinched wedge.
+  maxPeakRadiusRatio: 0.14,
   childRadiusRatio: 0.68, // a parent's children are placed within this fraction of its own radius
   childInnerRadiusRatio: 0.28, // child peaks begin away from the parent summit so the range has a readable shape
   minTopLevelAmplitude: 0.42, // smaller primary sections stay distinct without matching major ranges in height
   minSubsectionAmplitude: 0.3, // nested sections read as lower ridges within their parent range
   topLevelSigmaRatio: 0.58, // broad primary shoulders and foothills around each section summit
   subsectionSigmaRatio: 0.32, // broad secondary ridges within their parent mountain range
+  // Baseline stretch of every peak's own Gaussian along its axis. A
+  // section's overall SHAPE no longer comes from here — it emerges from
+  // the chain of subsection contributions strung along its wandering
+  // ridge (see TERRAIN_GENERATION.continent.subsectionRadiusRatio). This
+  // just keeps individual peaks off being perfect circles.
+  minSectionElongation: 1.25,
+  // Subsection ridge geometry (see computeRidgePath). The spine.s
+  // half-length is the greater of this multiple of the parent's radius
+  // and what ridgeMinSpacing demands for the child count, so long ranges
+  // stretch out instead of packing tighter. Curvature bows the spine;
+  // jitter knocks individual peaks off the curve so it isn't a drawn arc.
+  ridgeHalfLengthRatio: 0.95,
+  // Centre-to-centre grid cells between adjacent summits. A subsection
+  // peak's sigma is ~7 cells, so anything under ~2 sigma smears them
+  // into an unreadable ridge.
+  ridgeMinSpacing: 15,
+  // Lateral swing of the spine as a fraction of its half-length. This is
+  // what turns a drawn arc into something that reads as geology — and,
+  // because a wandering path is longer than the straight line between its
+  // ends, it also buys adjacent summits more separation for free.
+  ridgeWander: 0.34,
+  // Clear grid cells required between two sections' footprints once
+  // they've been pushed apart (see separateSections). Sized to cover the
+  // halo margin drawn on either side plus visible water between them.
+  sectionSeparationGap: 16,
+  // Rows of open water to keep between a subsection ridge and the polar
+  // icecaps. Subsections build land (see TERRAIN_GENERATION.continent),
+  // so without this a long north-south spine welds a continent to a cap.
+  polarClearanceRows: 22,
+  // Vertical squash on peak PLACEMENT (not peak radii — see layout.js).
+  // Grid rows are latitude in the planet view, and an uncompressed spiral
+  // plus outward-spiralling subsections puts land over both poles, where
+  // equirectangular longitude compression pinches it. This keeps the
+  // continents off the polar caps; the value is tuned so a maximal
+  // article's land stops short of the pole rows entirely.
+  latitudeCompression: 0.20,
+})
+
+/**
+ * Small snowy islands centred on each pole.
+ *
+ * The latitude band that keeps continents off the poles (see
+ * PEAK_LAYOUT.latitudeCompression) leaves both caps as empty ocean, which
+ * reads as an unfinished planet. These fill them with a modest icecap.
+ *
+ * Being centred ON the pole is what makes them safe: they cover every
+ * longitude at the top and bottom rows, so they converge to a smooth cap
+ * rather than the pinched wedge that arbitrary land near a pole produces.
+ * `reachRows` is deliberately small — these are landmarks, not continents.
+ */
+export const POLAR_CAPS = Object.freeze({
+  reachRows: 9, // rows from the pole the cap can reach, out of GRID.height
+  // How deeply the noise bites into the disc. 0 would be a perfect
+  // circle — the thing that made every other landmass look artificial.
+  roughness: 0.5,
+  noiseScale: 16,
+  noiseOctaves: 2,
+  noisePersistence: 0.5,
+  // Height added at the pole, on top of sea level. Deliberately shallow —
+  // these read as ice floes just clearing the water, not as a third
+  // mountain range competing with the article's own sections.
+  peakLift: 0.09,
 })
 
 /**
@@ -211,8 +303,23 @@ export const TERRAIN_GENERATION = Object.freeze({
   // SUM) preserves saddles between adjacent peaks — SUM would raise the
   // midpoint of two nearby Gaussians ABOVE either center.
   continent: {
-    sigmaMultiplier: 2.2,
+    sigmaMultiplier: 1.4,
     softCeiling: 0.45, // upper bound on the base at each peak's center
+    // Domain warp: the sample point is displaced by low-frequency noise
+    // before the Gaussians are evaluated, so a footprint comes out as an
+    // irregular coast with bays and headlands instead of a smooth oval.
+    // Amplitude is in grid cells; the scale is deliberately well above a
+    // peak radius so it deforms whole coastlines rather than adding fuzz
+    // (that's what TERRAIN_DETAIL's noise is for).
+    // Subsections also raise the continental base, at this fraction of
+    // their own footprint radius, so the coastline sweeps along a section's
+    // mountain chain instead of ignoring it. Below 1 so a subsection makes
+    // a shoulder on its parent's landmass, not an island of its own.
+    subsectionRadiusRatio: 0.72,
+    warpAmplitude: 15,
+    warpScale: 70,
+    warpOctaves: 2,
+    warpPersistence: 0.5,
   },
   // Pass 2: Mountain ranges — MAX-blended prominence per section on top
   // of the continental base. Only applied where the base is already land
@@ -220,7 +327,7 @@ export const TERRAIN_GENERATION = Object.freeze({
   // saddles between adjacent ranges.
   ranges: {
     sigmaMultiplier: 1.1,
-    heightMultiplier: 0.32,
+    heightMultiplier: 0.38,
     landGateMin: 0.22, // start blending in ranges as base crosses this
     landGateWidth: 0.14,
   },
@@ -228,8 +335,8 @@ export const TERRAIN_GENERATION = Object.freeze({
   // Also gated: peaks only appear where a range already exists, so they
   // read as summits ON ranges rather than isolated needles.
   peaks: {
-    sigmaMultiplier: 0.7,
-    heightMultiplier: 0.28,
+    sigmaMultiplier: 0.55,
+    heightMultiplier: 0.44,
     rangeGateMin: 0.45,
     rangeGateWidth: 0.14,
   },

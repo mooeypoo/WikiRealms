@@ -1,9 +1,9 @@
 import { CURRENT_ENGINE_VERSION } from './engineVersion.js'
 import { deriveSeed, createRng } from './rng.js'
 import { applyPeakLimits } from './sectionPeakLimits.js'
-import { annotateSectionIndices, flattenPeaks, generateSectionTerrain } from './sectionTerrain.js'
+import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, separateSections } from './sectionTerrain.js'
 import { generateSectionPortals } from './sectionPortals.js'
-import { GRID, PEAK_LAYOUT } from './config.js'
+import { GRID, PEAK_LAYOUT, POLAR_CAPS } from './config.js'
 
 const EMPTY_SECTION_TREE = { lead: { ownSize: 0, links: [], citationCount: 0 }, sections: [], totalSize: 0, citationCount: 0 }
 
@@ -33,13 +33,34 @@ export function generateWorld(
   const rng = createRng(seed)
 
   const cappedSections = applyPeakLimits(sectionTree.sections)
+  // Sections spread around the whole globe in longitude (hence `width`,
+  // not min(width,height)) but stay in a latitude band via yScale, so the
+  // polar caps remain open ocean. Footprint size is scaled separately —
+  // see flattenPeaks.
   const layoutBounds = {
     centerX: width / 2,
     centerY: height / 2,
-    maxRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelMaxRadiusRatio,
-    minRadius: Math.min(width, height) * PEAK_LAYOUT.topLevelInnerRadiusRatio,
+    maxRadius: width * PEAK_LAYOUT.topLevelSpreadRatio,
+    minRadius: width * PEAK_LAYOUT.topLevelInnerSpreadRatio,
+    yScale: PEAK_LAYOUT.latitudeCompression,
+    peakRadiusScale: Math.min(width, height) * PEAK_LAYOUT.peakRadiusRatio,
+    // Subsections raise the continental base now, so a long north-south
+    // ridge could march land straight into a polar icecap. Clamping the
+    // spine keeps open water between the continents and the caps.
+    latitudeBand: {
+      min: POLAR_CAPS.reachRows + PEAK_LAYOUT.polarClearanceRows,
+      max: height - 1 - POLAR_CAPS.reachRows - PEAK_LAYOUT.polarClearanceRows,
+    },
   }
-  const peaks = annotateSectionIndices(flattenPeaks(cappedSections, layoutBounds))
+  // Spread sections apart AFTER layout: how much room each one needs
+  // depends on the subsection ridge it ended up with, which the spiral
+  // that placed it cannot know.
+  const peaks = separateSections(annotateSectionIndices(flattenPeaks(cappedSections, layoutBounds)), {
+    width,
+    minY: layoutBounds.latitudeBand.min,
+    maxY: layoutBounds.latitudeBand.max,
+    gap: PEAK_LAYOUT.sectionSeparationGap,
+  })
 
   const terrain = generateSectionTerrain({
     width,

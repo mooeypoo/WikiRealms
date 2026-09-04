@@ -10,6 +10,29 @@
 
           <div class="settings-modal__body">
             <fieldset class="settings-modal__fieldset">
+              <legend>World shape</legend>
+              <div class="settings-modal__row settings-modal__row--stacked">
+                <span>
+                  <strong>{{ preferences.worldShape === 'sphere' ? '🪐 Planet' : '🗺️ Flat map' }}</strong>
+                  <small>Two views of the same generated world — switching never re-rolls the terrain.</small>
+                </span>
+                <div class="settings-modal__segmented" role="radiogroup" aria-label="World shape">
+                  <button
+                    v-for="option in VIEW_MODES"
+                    :key="option.value"
+                    type="button"
+                    role="radio"
+                    :aria-checked="preferences.worldShape === option.value"
+                    :class="['settings-modal__segment', { 'is-active': preferences.worldShape === option.value }]"
+                    @click="update('worldShape', option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="settings-modal__fieldset">
               <legend>Map layers</legend>
               <label class="settings-modal__row">
                 <span>
@@ -72,12 +95,18 @@ const props = defineProps({
 
 const emit = defineEmits(['update:preferences', 'close'])
 
+const VIEW_MODES = [
+  { value: 'sphere', label: '🪐 Planet' },
+  { value: 'flat', label: '🗺️ Flat' },
+]
+
 function update(key, value) {
   emit('update:preferences', { [key]: value })
 }
 
 function reset() {
   emit('update:preferences', {
+    worldShape: 'sphere',
     showSections: true,
     showPortals: true,
     showFoliage: true,
@@ -181,6 +210,47 @@ function reset() {
 .settings-modal__row > span {
   display: grid;
   gap: 0.25rem;
+}
+
+/* The segmented control needs the full row width, so it stacks under its
+   label instead of sitting beside it like a checkbox. */
+.settings-modal__row--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--spacing-md);
+}
+
+.settings-modal__segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.settings-modal__segment {
+  min-height: var(--size-touch);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 0.25rem);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.settings-modal__segment:hover {
+  color: var(--text-primary);
+}
+
+.settings-modal__segment.is-active {
+  background: var(--panel-border-accent);
+  color: var(--text-primary);
 }
 
 .settings-modal__row strong {

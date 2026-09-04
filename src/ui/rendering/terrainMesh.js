@@ -1,5 +1,6 @@
 import { biomeColor } from './biomeColor.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { flatProjection } from './projection.js'
 
 /**
  * Computes per-vertex RGB colors (0..1 floats, matching three.js's
@@ -35,34 +36,25 @@ export function parseRgbColor(rgbString) {
   return [Number(match[0]), Number(match[1]), Number(match[2])]
 }
 
-/** Vertical exaggeration factor: heightMap[0..1] * this = mesh Z units. */
-export const HEIGHT_SCALE_RATIO = 0.26
-
-/**
- * Vertical exaggeration for the height field, proportional to the grid
- * size so section peaks and mountain ranges read as prominent without
- * becoming implausibly steep at the exploration camera distance.
- * @param {number} width
- * @param {number} height
- */
-export function computeHeightScale(width, height) {
-  return Math.min(width, height) * HEIGHT_SCALE_RATIO
-}
-
 /**
  * Computes a portal's position in the terrain mesh's local (pre-rotation)
- * coordinate space: centered on the grid, floating just above the
- * terrain surface at that cell.
+ * coordinate space, floating just above the terrain surface at that cell.
+ *
+ * Submerged cells are lifted to sea level first so a portal over deep
+ * ocean floats above the water rather than drowning under it.
  *
  * @param {{ gridX: number, gridY: number }} portal
  * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
  * @param {number} heightScale
  * @param {number} [hoverOffset] how far above the surface the marker floats
+ * @param {object} [projection] see projection.js; defaults to the flat map
  * @returns {{ x: number, y: number, z: number }}
  */
-export function computePortalLocalPosition(portal, terrain, heightScale, hoverOffset = 6) {
-  const position = computeLocalPosition(portal.gridX, portal.gridY, terrain, heightScale, 0)
-  return { ...position, z: Math.max(position.z, computeWaterSurfaceHeight(heightScale)) + hoverOffset }
+export function computePortalLocalPosition(portal, terrain, heightScale, hoverOffset = 6, projection = flatProjection) {
+  const gridX = Math.round(clamp(portal.gridX, 0, terrain.width - 1))
+  const gridY = Math.round(clamp(portal.gridY, 0, terrain.height - 1))
+  const surfaceH01 = Math.max(terrain.heightMap[gridY * terrain.width + gridX] ?? 0, BIOME_THRESHOLDS.oceanMaxHeight)
+  return { ...projection.toLocal(gridX, gridY, surfaceH01, terrain, heightScale, hoverOffset), gridX, gridY, surfaceH01 }
 }
 
 /**
@@ -71,66 +63,32 @@ export function computePortalLocalPosition(portal, terrain, heightScale, hoverOf
  * terrain surface at that cell (not the peak's idealized/theoretical
  * height, since overlapping peaks and noise can shift the real surface).
  *
+ * Returns the resolved grid cell and normalized surface height alongside
+ * the position — marker geometry that has to orient itself to the surface
+ * (section halos on a planet) needs those to ask the projection for a
+ * normal and a marker circle.
+ *
  * @param {{ x: number, y: number, title: string }} peak flattened peak (grid-space x/y, see sectionTerrain.js)
  * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
  * @param {number} heightScale
  * @param {number} [hoverOffset]
- * @returns {{ x: number, y: number, z: number, title: string }}
+ * @param {object} [projection] see projection.js; defaults to the flat map
+ * @returns {{ x: number, y: number, z: number, title: string, gridX: number, gridY: number, surfaceH01: number }}
  */
-export function computePeakFlagPosition(peak, terrain, heightScale, hoverOffset = 2) {
+export function computePeakFlagPosition(peak, terrain, heightScale, hoverOffset = 2, projection = flatProjection) {
   const gridX = Math.round(clamp(peak.x, 0, terrain.width - 1))
   const gridY = Math.round(clamp(peak.y, 0, terrain.height - 1))
-  return { ...computeLocalPosition(gridX, gridY, terrain, heightScale, hoverOffset), title: peak.title }
-}
-
-/**
- * The world's sea-level height, in the same units as the terrain mesh's
- * vertex Z displacement — used to place a translucent water plane so
- * submerged terrain remains visible beneath it. Kept in sync with
- * classifyBiome's own ocean threshold (single source of truth).
- * @param {number} heightScale
- */
-export function computeWaterSurfaceHeight(heightScale) {
-  return BIOME_THRESHOLDS.oceanMaxHeight * heightScale
+  const surfaceH01 = terrain.heightMap[gridY * terrain.width + gridX] ?? 0
+  return {
+    ...projection.toLocal(gridX, gridY, surfaceH01, terrain, heightScale, hoverOffset),
+    title: peak.title,
+    gridX,
+    gridY,
+    surfaceH01,
+  }
 }
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
 
-function computeLocalPosition(gridX, gridY, terrain, heightScale, hoverOffset) {
-  const { width, height, heightMap } = terrain
-  const index = gridY * width + gridX
-  const surfaceHeight = (heightMap[index] ?? 0) * heightScale
-
-  // Y is flipped: three.js PlaneGeometry lays out vertices with iy=0 at
-  // Y=+h/2 and iy=heightSegments at Y=-h/2, so markers indexed by
-  // gridY (row-major, top-down) must mirror to land on their vertex.
-  return {
-    x: gridX - width / 2,
-    y: height / 2 - gridY,
-    z: surfaceHeight + hoverOffset,
-  }
-}
-
-/**
- * Inverse of the (gridX, gridY) → (x, y) mapping used by
- * computeLocalPosition: given a point in the terrain mesh's LOCAL
- * coordinate space (before worldGroup rotation), returns the grid cell
- * (gridX, gridY) whose vertex is closest — or null if the point falls
- * outside the terrain's XY footprint.
- *
- * Used to convert a raycaster's local-space intersection into a
- * heightMap / sectionOwnershipMap index for hover detection.
- *
- * @param {number} x local-space X (before worldGroup rotation)
- * @param {number} y local-space Y (before worldGroup rotation)
- * @param {{ width: number, height: number }} terrain
- * @returns {{ gridX: number, gridY: number } | null}
- */
-export function computeGridCellFromLocalPosition(x, y, { width, height }) {
-  const gridX = Math.round(x + width / 2)
-  const gridY = Math.round(height / 2 - y)
-  if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) return null
-  return { gridX, gridY }
-}

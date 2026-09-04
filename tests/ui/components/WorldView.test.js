@@ -22,12 +22,12 @@ function makeWorld(overrides = {}) {
 }
 
 describe('WorldView', () => {
-  it('sizes the canvas to the terrain grid at 8px per cell', () => {
+  it('sizes the canvas to the terrain grid at 4px per cell', () => {
     const wrapper = mount(WorldView, { props: { world: makeWorld() } })
 
     const canvas = wrapper.find('canvas')
-    expect(canvas.attributes('width')).toBe('32')
-    expect(canvas.attributes('height')).toBe('32')
+    expect(canvas.attributes('width')).toBe('16')
+    expect(canvas.attributes('height')).toBe('16')
   })
 
   it('renders one portal marker per portal, positioned by grid coordinates', () => {
@@ -35,8 +35,8 @@ describe('WorldView', () => {
 
     const portalButtons = wrapper.findAll('.world-view__portal')
     expect(portalButtons).toHaveLength(1)
-    expect(portalButtons[0].attributes('style')).toContain('left: 8px')
-    expect(portalButtons[0].attributes('style')).toContain('top: 16px')
+    expect(portalButtons[0].attributes('style')).toContain('left: 4px')
+    expect(portalButtons[0].attributes('style')).toContain('top: 8px')
     expect(portalButtons[0].attributes('title')).toBe('Travel to Physics')
   })
 

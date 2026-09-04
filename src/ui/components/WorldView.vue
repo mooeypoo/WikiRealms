@@ -2,7 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { biomeColor } from '../rendering/biomeColor.js'
 
-const CELL_SIZE = 8
+// Halved from 8 when GRID went to 512 × 256 for the planet view — at 8px
+// the equirectangular map would be a 4096px-wide stage to scroll around.
+const CELL_SIZE = 4
 
 const props = defineProps({
   world: { type: Object, required: true },

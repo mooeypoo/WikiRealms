@@ -14,13 +14,28 @@ export const SECTION_MARKERS = Object.freeze({
   // Ring on the ground tracing the section footprint. Slightly larger
   // than the peak radius so it reads as an outline, not an inscribed disk.
   ring: {
-    radiusMultiplier: 1.05,
-    thickness: 1.4, // grid units, ring's inner-to-outer band width
+    // Grid cells the ring sits OUTSIDE the footprint it encloses. For a
+    // section that footprint is the envelope of its subsections, so this
+    // is the clear gap between the subsection markers and their
+    // section's boundary.
+    margin: 5,
+    // A subsection gets a much tighter margin. The section-level value
+    // exists to hold its subsections at arm's length; applied to the
+    // subsections themselves it is most of the gap between neighbouring
+    // summits, so their drawn boundaries would merge however small their
+    // footprints were made.
+    subsectionMargin: 2.2,
+    thickness: 1.6, // grid units, ring's inner-to-outer band width
     hoverOffset: 0.4, // sits just above the terrain surface to avoid z-fighting
+    // Half-window of the moving average that rounds the section boundary.
+    // The ray sweep steps abruptly between subsection discs, and those
+    // steps read as dents in the finished ribbon.
+    outlineSmoothing: 6,
   },
   // Vertical "energy wall" cylinder around the section perimeter.
   wall: {
-    radiusMultiplier: 1.02, // matches the ring closely
+    // How far inside the ring the curtain stands, so the two don't fight.
+    inset: 0.8,
     // Wall height = peak.amplitude * heightMultiplier, floored so tiny
     // sections still get a visible marker instead of a 0-height sliver.
     // Sized to a fraction of the terrain's own vertical scale so a big
@@ -84,24 +99,33 @@ export function computeWallHeight(amplitude) {
 }
 
 /**
- * Radii for the ground ring geometry (RingGeometry inner/outer radius),
- * in grid units. Slightly larger than peak.radius so the ring outlines
- * the footprint rather than sitting inside it.
+ * Ring band offsets in grid units: how far OUTSIDE the footprint the
+ * ribbon's inner and outer edges sit. The footprint itself is whatever
+ * shape haloGeometry traces — an ellipse for a lone peak, the envelope of
+ * its subsections for a section — so these are margins, not radii.
  * @param {number} peakRadius peak.radius (grid units)
  */
-export function computeRingRadii(peakRadius) {
-  const outer = peakRadius * SECTION_MARKERS.ring.radiusMultiplier
+export function computeRingRadii(margin = SECTION_MARKERS.ring.margin) {
+  const outer = margin
   const inner = Math.max(outer - SECTION_MARKERS.ring.thickness, 0.1)
   return { inner, outer }
 }
 
 /**
- * Wall radius (grid units). Uses its own multiplier so the wall can sit
- * a hair outside or inside the ring without either fighting the other.
- * @param {number} peakRadius peak.radius (grid units)
+ * The ring margin appropriate to a peak's level — see `subsectionMargin`.
+ * @param {boolean} isTopLevel
  */
-export function computeWallRadius(peakRadius) {
-  return peakRadius * SECTION_MARKERS.wall.radiusMultiplier
+export function ringMarginFor(isTopLevel) {
+  return isTopLevel ? SECTION_MARKERS.ring.margin : SECTION_MARKERS.ring.subsectionMargin
+}
+
+/**
+ * Wall margin (grid units) outside the footprint: just inside the ring,
+ * so the curtain rises from the ribbon's lip rather than through it.
+ * @param {number} ringMargin
+ */
+export function computeWallRadius(ringMargin = SECTION_MARKERS.ring.margin) {
+  return Math.max(ringMargin - SECTION_MARKERS.wall.inset, 0.2)
 }
 
 /**

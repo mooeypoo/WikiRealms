@@ -14,29 +14,42 @@ export const BIOME = Object.freeze({
 })
 
 /**
- * Samples fractal (multi-octave) noise at (x, y), normalized to [0, 1].
- * Exported for reuse by other terrain-shaping strategies (e.g.
- * sectionTerrain.js) that still want natural noise-based detail on top of
- * their own structural height.
- * @param {import('simplex-noise').NoiseFunction2D} noise2D
- * @param {number} x
- * @param {number} y
+ * Fractal noise sampled on a CYLINDER rather than a plane, so it is
+ * continuous across the grid's left/right edges.
+ *
+ * The grid is an equirectangular map (see config.js GRID): column 0 and
+ * column width-1 are neighbouring meridians. Plain 2D noise sampled at
+ * x/scale knows nothing about that and leaves a visible discontinuity in
+ * surface detail down the seam wherever land crosses it. Wrapping the x
+ * axis onto a circle of circumference `width` makes the noise periodic in
+ * x by construction, at the same feature size as the planar version —
+ * the circle's radius is chosen so one grid column is one unit of arc.
+ *
+ * @param {import('simplex-noise').NoiseFunction3D} noise3D
+ * @param {number} x grid column
+ * @param {number} y grid row
+ * @param {number} width grid width, i.e. the wrap period
  * @param {{ octaves: number, persistence: number, scale: number }} params
  */
-export function sampleFractalNoise(noise2D, x, y, { octaves, persistence, scale }) {
+export function sampleFractalNoiseWrapped(noise3D, x, y, width, { octaves, persistence, scale }) {
+  const circleRadius = width / (2 * Math.PI)
+  const angle = (x / width) * 2 * Math.PI
+  const cylinderX = Math.cos(angle) * circleRadius
+  const cylinderY = Math.sin(angle) * circleRadius
+
   let amplitude = 1
   let frequency = 1
   let sum = 0
   let maxAmplitude = 0
 
   for (let i = 0; i < octaves; i++) {
-    sum += noise2D((x / scale) * frequency, (y / scale) * frequency) * amplitude
+    sum +=
+      noise3D((cylinderX / scale) * frequency, (cylinderY / scale) * frequency, (y / scale) * frequency) * amplitude
     maxAmplitude += amplitude
     amplitude *= persistence
     frequency *= 2
   }
 
-  // noise2D returns [-1, 1]; normalize the accumulated sum to [0, 1]
   return (sum / maxAmplitude + 1) / 2
 }
 
