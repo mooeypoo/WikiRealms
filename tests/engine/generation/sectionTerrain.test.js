@@ -175,22 +175,73 @@ describe('generateSectionTerrain', () => {
     expect(Array.from(a.heightMap)).not.toEqual(Array.from(b.heightMap))
   })
 
+  // MAX-blending the section Gaussians (rather than SUM'ing them) is what
+  // keeps a low col between two neighbouring ranges — summing would put
+  // the midpoint of two Gaussians ABOVE either centre.
+  //
+  // Proportions matter here: peak radius has to be small relative to the
+  // grid, the way GRID and the peak-sizing ratios actually produce. With a
+  // footprint wider than the world there is no saddle to find, and the
+  // assertion just measures noise.
   it('keeps a saddle between nearby top-level section peaks', () => {
+    const width = 128
+    const height = 64
     const terrain = generateSectionTerrain({
-      width: 32,
-      height: 32,
+      width,
+      height,
       rng: createRng(7),
       peaks: [
-        { x: 11, y: 16, radius: 20, amplitude: 0.8, depth: 1, title: 'First' },
-        { x: 21, y: 16, radius: 20, amplitude: 0.8, depth: 1, title: 'Second' },
+        { x: 40, y: 32, radius: 14, amplitude: 0.8, depth: 1, title: 'First' },
+        { x: 88, y: 32, radius: 14, amplitude: 0.8, depth: 1, title: 'Second' },
       ],
       totalArticleSize: 2000,
     })
 
-    const heightAt = (x, y) => terrain.heightMap[y * terrain.width + x]
+    const heightAt = (x, y) => terrain.heightMap[y * width + x]
 
-    expect(heightAt(16, 16)).toBeLessThan(heightAt(11, 16))
-    expect(heightAt(16, 16)).toBeLessThan(heightAt(21, 16))
+    expect(heightAt(64, 32)).toBeLessThan(heightAt(40, 32))
+    expect(heightAt(64, 32)).toBeLessThan(heightAt(88, 32))
+  })
+
+  // The grid is an equirectangular map, so column 0 and column width-1 are
+  // neighbouring meridians. Every pass that measures an x-distance or reads
+  // an x-neighbour wraps; without that, land spanning the ±180° meridian
+  // gets a cliff down it.
+  it('joins the left and right edges continuously across the seam', () => {
+    const width = 128
+    const height = 64
+    // A section sitting ON the seam: half its footprint is off each edge.
+    const terrain = generateSectionTerrain({
+      width,
+      height,
+      rng: createRng(11),
+      peaks: [{ x: 0, y: 32, radius: 16, amplitude: 0.9, depth: 1, title: 'Meridian' }],
+      totalArticleSize: 40000,
+    })
+
+    // The seam is just another column boundary, so the test is relative,
+    // not absolute: the step across it must be the same ORDER as the
+    // steepest step between any other adjacent pair of columns in the
+    // same row. An absolute threshold would only measure steepness.
+    //
+    // The 2x headroom is for the seam happening to fall on a steep face —
+    // it's one pair out of `width`, so it can legitimately be the row's
+    // worst. It still catches what this guards against by a wide margin:
+    // drop the wrapping and a peak straddling the meridian leaves a step
+    // of ~0.75, some forty times the tolerance here.
+    for (let y = 0; y < height; y++) {
+      const row = y * width
+      let steepestInterior = 0
+      for (let x = 0; x < width - 2; x++) {
+        steepestInterior = Math.max(steepestInterior, Math.abs(terrain.heightMap[row + x] - terrain.heightMap[row + x + 1]))
+      }
+      const acrossSeam = Math.abs(terrain.heightMap[row] - terrain.heightMap[row + width - 1])
+      expect(acrossSeam).toBeLessThanOrEqual(steepestInterior * 2)
+    }
+
+    // And the peak straddling the seam must actually raise both edges.
+    expect(terrain.heightMap[32 * width]).toBeGreaterThan(0.32)
+    expect(terrain.heightMap[32 * width + (width - 1)]).toBeGreaterThan(0.32)
   })
 
   it('keeps height and moisture within [0, 1]', () => {

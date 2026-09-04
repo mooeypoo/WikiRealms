@@ -9,6 +9,16 @@ function clampInt(value, min, max) {
   return Math.min(max, Math.max(min, Math.round(value)))
 }
 
+/**
+ * Wraps a column index into [0, width). Longitude wraps, so a portal
+ * placed just past the ±180° meridian belongs on the far edge — clamping
+ * it would pile every such portal onto column 0 in a visible line.
+ */
+function wrapInt(value, width) {
+  const rounded = Math.round(value)
+  return ((rounded % width) + width) % width
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
 }
@@ -192,7 +202,7 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
       portalId: `portal-${index}`,
       targetArticleId: pair.targetArticleId,
       targetTitle: pair.targetArticleId,
-      gridX: clampInt(x, 0, width - 1),
+      gridX: wrapInt(x, width),
       gridY: clampInt(y, 0, height - 1),
       origin: 'article-link',
       sectionTitle: pair.topLevelTitle,

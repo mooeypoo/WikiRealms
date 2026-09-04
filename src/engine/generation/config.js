@@ -15,9 +15,19 @@
  * Terrain grid dimensions. Several groups below document an assumption
  * on this size (visual/peak-count budgets); revisit those if this changes
  * substantially.
+ *
+ * The 2:1 aspect is load-bearing for the planet view: the grid is treated
+ * as an equirectangular map, so `width` columns span 360° of longitude and
+ * `height` rows span 180° of latitude. A square grid would stretch every
+ * landmass 2× east-west once wrapped onto a sphere.
+ *
+ * Peak sizing below keys off min(width, height), which is unchanged from
+ * the old 256² grid — the extra columns add ocean, not smaller land. That
+ * also puts the ±180° meridian (the seam) and both poles in deep water,
+ * where the discontinuity is invisible and sits under the water surface.
  */
 export const GRID = Object.freeze({
-  width: 256,
+  width: 512,
   height: 256,
 })
 

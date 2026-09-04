@@ -22,7 +22,10 @@ describe('generation engine config', () => {
     expect(BIOME_THRESHOLDS.mountainMinHeight).toBeLessThan(BIOME_THRESHOLDS.snowMinHeight)
   })
 
-  it('keeps the grid square by default', () => {
-    expect(GRID.width).toBe(GRID.height)
+  // The planet view reads the grid as an equirectangular map: width spans
+  // 360° of longitude, height spans 180° of latitude. Any other aspect
+  // stretches every landmass when wrapped onto a sphere.
+  it('keeps the grid at a 2:1 equirectangular aspect', () => {
+    expect(GRID.width).toBe(GRID.height * 2)
   })
 })

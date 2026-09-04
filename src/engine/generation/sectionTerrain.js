@@ -1,7 +1,30 @@
-import { createNoise2D } from 'simplex-noise'
+import { createNoise3D } from 'simplex-noise'
 import { PEAK_LAYOUT, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
-import { classifyBiomeWithSentenceAwareness, sampleFractalNoise } from './terrain.js'
+import { classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
 import { computeSpiralLayout } from './layout.js'
+
+/**
+ * The grid is an equirectangular map: column 0 and column width-1 are
+ * adjacent meridians, not opposite ends of the world. Every pass that
+ * measures an x-distance or reads an x-neighbour has to say so, or a
+ * landmass spanning the seam gets a cliff down the ±180° line.
+ *
+ * Full modular reduction rather than a single ±width nudge: the
+ * bounding-box pass below walks x from `peak.x - reach`, which for a wide
+ * peak is several widths outside the grid.
+ *
+ * Latitude does NOT wrap — the top and bottom rows are the poles, so y
+ * stays clamped throughout.
+ */
+function wrapDeltaX(dx, width) {
+  const wrapped = ((dx % width) + width) % width
+  return wrapped > width / 2 ? wrapped - width : wrapped
+}
+
+/** Wraps a column index into [0, width). */
+function wrapColumn(x, width) {
+  return ((x % width) + width) % width
+}
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value))
@@ -36,10 +59,9 @@ export function smoothHeightMap(heightMap, width, height, passes, strength) {
         let count = 0
         for (let offsetY = -1; offsetY <= 1; offsetY++) {
           for (let offsetX = -1; offsetX <= 1; offsetX++) {
-            const neighborX = x + offsetX
             const neighborY = y + offsetY
-            if (neighborX < 0 || neighborX >= width || neighborY < 0 || neighborY >= height) continue
-            total += current[neighborY * width + neighborX]
+            if (neighborY < 0 || neighborY >= height) continue
+            total += current[neighborY * width + wrapColumn(x + offsetX, width)]
             count++
           }
         }
@@ -65,14 +87,20 @@ function thermalErosion(heightMap, width, height, iterations, strength, slopeThr
   for (let iter = 0; iter < iterations; iter++) {
     const next = new Float64Array(current)
     for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
+      for (let x = 0; x < width; x++) {
         const idx = y * width + x
         const h = current[idx]
 
-        // Find steepest downhill cardinal neighbor.
+        // Find steepest downhill cardinal neighbor. East/west wrap around
+        // the seam; north/south don't, hence the polar rows sitting out.
         let maxSlope = 0
         let steepestIdx = -1
-        const neighborIndices = [idx + 1, idx - 1, idx + width, idx - width]
+        const neighborIndices = [
+          y * width + wrapColumn(x + 1, width),
+          y * width + wrapColumn(x - 1, width),
+          idx + width,
+          idx - width,
+        ]
         for (const nIdx of neighborIndices) {
           const slope = h - current[nIdx]
           if (slope > maxSlope) {
@@ -91,6 +119,64 @@ function thermalErosion(heightMap, width, height, iterations, strength, slopeThr
     current = next
   }
   return current
+}
+
+/**
+ * Number of standard deviations out at which a Gaussian peak stops being
+ * evaluated. At 4σ the remaining contribution is exp(-8) ≈ 3.4e-4 of the
+ * peak's amplitude — orders of magnitude below what survives quantization
+ * into the Float32 vertex buffer, let alone what an eye can see.
+ *
+ * This matters because passes 2 and 3 are O(cells × peaks): on the
+ * 512 × 256 grid with a full subsection tree that is ~33M exp() calls if
+ * every peak is tested against every cell. Bounding each peak to its own
+ * 4σ box is what keeps the wider grid from costing anything.
+ */
+const GAUSSIAN_CUTOFF_SIGMAS = 4
+
+/**
+ * Writes max_i(amplitude_i * exp(-d²/(2σ_i²))) into `out` for every cell,
+ * visiting each peak only within its own bounding box.
+ *
+ * Loop order is inverted relative to the naive version — peaks outside,
+ * cells inside — so total work is the sum of the peaks' footprints rather
+ * than the product of cells and peaks. The MAX blend is order-independent,
+ * so the result matches testing every peak against every cell (modulo the
+ * 4σ truncation above).
+ *
+ * Columns are visited unwrapped and folded back with wrapColumn, so a peak
+ * near the seam spills onto the far edge instead of being cut off by it.
+ *
+ * @param {Float64Array} out per-cell accumulator, zero-initialized
+ * @param {{ x: number, y: number, amplitude: number }[]} peaks
+ * @param {number[]} sigmaSqValues per-peak 2σ² (the exp() denominator)
+ */
+function accumulateGaussianMax(out, peaks, sigmaSqValues, width, height) {
+  for (let i = 0; i < peaks.length; i++) {
+    const peak = peaks[i]
+    const sigmaSq = sigmaSqValues[i]
+    // sigmaSqValues holds 2σ², so σ = sqrt(sigmaSq / 2).
+    const reach = GAUSSIAN_CUTOFF_SIGMAS * Math.sqrt(sigmaSq / 2)
+    const startX = Math.floor(peak.x - reach)
+    // Capped at `width` so a peak reaching more than half the world
+    // doesn't visit the same cell twice.
+    const columnCount = Math.min(Math.ceil(2 * reach) + 1, width)
+    const minY = Math.max(0, Math.floor(peak.y - reach))
+    const maxY = Math.min(height - 1, Math.ceil(peak.y + reach))
+
+    for (let y = minY; y <= maxY; y++) {
+      const dy = y - peak.y
+      const dySq = dy * dy
+      const rowOffset = y * width
+      for (let i2 = 0; i2 < columnCount; i2++) {
+        const x = startX + i2
+        const dx = wrapDeltaX(x - peak.x, width)
+        const contribution = peak.amplitude * Math.exp(-(dx * dx + dySq) / sigmaSq)
+        const index = rowOffset + wrapColumn(x, width)
+        if (contribution > out[index]) out[index] = contribution
+      }
+    }
+  }
 }
 
 /**
@@ -258,7 +344,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
       let maxContrib = 0
       let dominantIdx = -1
       for (let i = 0; i < sections.length; i++) {
-        const dx = x - sections[i].x
+        const dx = wrapDeltaX(x - sections[i].x, width)
         const dy = y - sections[i].y
         const contrib = Math.exp(-(dx * dx + dy * dy) / sectionSigmaSq[i])
         if (contrib > maxContrib) {
@@ -275,47 +361,29 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // MAX blend, not SUM: overlapping ranges must preserve saddles between
   // their summits, not fuse into a single plateau. SUM'ing here would
   // literally put the midpoint above both peaks.
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x
-      const base = heightMap[idx]
-      const gate = smoothstep(cfg.ranges.landGateMin, cfg.ranges.landGateMin + cfg.ranges.landGateWidth, base)
-      if (gate <= 0) continue
-
-      let rangeMax = 0
-      for (let i = 0; i < sections.length; i++) {
-        const dx = x - sections[i].x
-        const dy = y - sections[i].y
-        const contrib = sections[i].amplitude * Math.exp(-(dx * dx + dy * dy) / rangeSigmaSq[i])
-        if (contrib > rangeMax) rangeMax = contrib
-      }
-      heightMap[idx] = base + rangeMax * cfg.ranges.heightMultiplier * gate
-    }
+  const rangeContribution = new Float64Array(cellCount)
+  accumulateGaussianMax(rangeContribution, sections, rangeSigmaSq, width, height)
+  for (let idx = 0; idx < cellCount; idx++) {
+    const base = heightMap[idx]
+    const gate = smoothstep(cfg.ranges.landGateMin, cfg.ranges.landGateMin + cfg.ranges.landGateWidth, base)
+    if (gate <= 0) continue
+    heightMap[idx] = base + rangeContribution[idx] * cfg.ranges.heightMultiplier * gate
   }
 
   // === PASS 3: Subsection peaks (gated by range) ===
   // Also MAX — see PASS 2. Sub-peaks close together should each show as a
   // summit with a low col between, not additively pile up.
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x
-      const current = heightMap[idx]
-      const gate = smoothstep(cfg.peaks.rangeGateMin, cfg.peaks.rangeGateMin + cfg.peaks.rangeGateWidth, current)
-      if (gate <= 0) continue
-
-      let peakMax = 0
-      for (let i = 0; i < subsections.length; i++) {
-        const dx = x - subsections[i].x
-        const dy = y - subsections[i].y
-        const contrib = subsections[i].amplitude * Math.exp(-(dx * dx + dy * dy) / peakSigmaSq[i])
-        if (contrib > peakMax) peakMax = contrib
-      }
-      heightMap[idx] = current + peakMax * cfg.peaks.heightMultiplier * gate
-    }
+  const peakContribution = new Float64Array(cellCount)
+  accumulateGaussianMax(peakContribution, subsections, peakSigmaSq, width, height)
+  for (let idx = 0; idx < cellCount; idx++) {
+    const current = heightMap[idx]
+    const gate = smoothstep(cfg.peaks.rangeGateMin, cfg.peaks.rangeGateMin + cfg.peaks.rangeGateWidth, current)
+    if (gate <= 0) continue
+    heightMap[idx] = current + peakContribution[idx] * cfg.peaks.heightMultiplier * gate
   }
 
   // === PASS 4: Fractal noise (land-gated) ===
-  const heightNoise = createNoise2D(rng)
+  const heightNoise = createNoise3D(rng)
   const detailParams = {
     octaves: TERRAIN_DETAIL.noiseOctaves,
     persistence: TERRAIN_DETAIL.noisePersistence,
@@ -327,7 +395,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
       const current = heightMap[idx]
       const gate = smoothstep(cfg.noise.landGateMin, cfg.noise.landGateMin + cfg.noise.landGateWidth, current)
       if (gate <= 0) continue
-      const detail = sampleFractalNoise(heightNoise, x, y, detailParams)
+      const detail = sampleFractalNoiseWrapped(heightNoise, x, y, width, detailParams)
       heightMap[idx] = clamp01(current + (detail - 0.5) * cfg.noise.weight * gate)
     }
   }
