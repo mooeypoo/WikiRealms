@@ -146,7 +146,24 @@ DESKTOP (lg/xl)                            PHONE PORTRAIT (xs/sm)
 └─────┴──────────────┴───┴────────┴──┘     └──────────────────┘
 ```
 
-### 4.2 Breakpoint ladder
+### 4.2 Dismissal: minimize, never vanish
+
+A **summon** (settings, the field guide, the command palette, the journey menu) is dismissed and
+gone; the viewer asked for it and can ask again from the top scrim. A **persistent surface** — the
+Ledger, later the Trail — must never fully disappear on dismissal, because nothing on screen would
+then explain how to get it back, and its own affordance went with it.
+
+So for non-modal surfaces, "close" means **collapse to a compact trigger that reopens it**: a
+header-only bar carrying the realm name, sitting where the surface was. That bar is both the state
+and the way out of it. On touch the bottom sheet's lowest snap already is this; the desktop `panel`
+needs the same idea, which is the one state `Sheet` does not yet have.
+
+The rule that follows: *every persistent surface is reachable from something visible at all times* —
+its own collapsed bar, or a control in the top scrim if it is hidden outright. `Sheet` gains a
+`collapsed` state alongside its presentations when the Ledger is built, since the collapsed content
+is the Ledger's to design and guessing at it in the abstract would be inventing an API.
+
+### 4.3 Breakpoint ladder
 
 One ladder, used everywhere, written as literals in media queries (never as custom properties):
 
@@ -295,7 +312,7 @@ browser.
    `canvas.json`; the 2.5 MB seeded payload is gitignored and re-seeded on demand.
 2. **`Storybook workbench: real widgets at all six breakpoints`** — delete the scaffold's
    `src/stories/` examples, add a mirrored `stories/` tree (matching the existing `tests/`
-   convention rather than co-locating), viewport presets for the §4.2 ladder, a11y defaults, a
+   convention rather than co-locating), viewport presets for the §4.3 ladder, a11y defaults, a
    global token decorator, `stories/fixtures/`, and a `netlify.toml` that restates the current
    defaults and adds `/storybook` to deploy previews only.
 3. **`Design tokens: retire the cosmic glass for the instrument palette`** —
@@ -359,7 +376,7 @@ which is what this overhaul needs to be reviewable rather than guessed at.
 
 **What it buys us**
 
-- **The breakpoint ladder becomes executable.** The viewport addon carries §4.2 as presets — `xs`
+- **The breakpoint ladder becomes executable.** The viewport addon carries §4.3 as presets — `xs`
   390×844, `sm` 480, `md` 768, `lg` 1024, `xl` 1440×900, `short` 844×390 — so every story is
   checkable at all six instead of by hand-resizing a browser.
 - **States become enumerable.** `Ledger` gets `hidden / peek / open / full` × the ladder; `Sheet`

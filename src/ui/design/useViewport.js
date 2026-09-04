@@ -1,7 +1,7 @@
 import { computed, onUnmounted, readonly, ref } from 'vue'
 
 /**
- * The breakpoint ladder from docs/ux-vision.md §4.2, as the one place
+ * The breakpoint ladder from docs/ux-vision.md §4.3, as the one place
  * JavaScript states it. CSS states it independently in media queries — the
  * two cannot share a value, since media queries cannot read custom
  * properties, which is exactly why the old --breakpoint-* tokens were

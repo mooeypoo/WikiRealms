@@ -162,7 +162,7 @@
  * time the old shell is deleted (docs/ux-vision.md §8, commit 9).
  * Anything unreferenced was deleted here rather than aliased — including
  * --breakpoint-*, which could never work: media queries cannot read
- * custom properties, which is why the real ladder lives in §4.2 as
+ * custom properties, which is why the real ladder lives in §4.3 as
  * literals.
  */
 :root {
