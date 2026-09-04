@@ -13,6 +13,11 @@ export const useUIState = () => {
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';
   const preferences = reactive({
+    // How the 3D view presents the world: 'sphere' (a planet you orbit) or
+    // 'flat' (the same world as a map you fly over). Purely a rendering
+    // choice — both views show the identical generated world, so
+    // switching never regenerates terrain.
+    worldShape: 'sphere',
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
@@ -38,6 +43,10 @@ export const useUIState = () => {
         // through the biome greenery instead. Drop the stored toggle so
         // it doesn't linger in the persisted preferences forever.
         delete parsed.showFaeries;
+        // Guard against an unrecognized persisted view mode (a value from
+        // a future build, or hand-edited storage) silently disabling the
+        // 3D view — fall back to the flat map.
+        if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

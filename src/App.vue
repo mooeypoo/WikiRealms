@@ -289,6 +289,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
         :show-portals="preferences.showPortals"
         :show-sections="preferences.showSections"
         :show-foliage="preferences.showFoliage"
+        :world-shape="preferences.worldShape"
         class="cosmos__world"
         @portal-click="onPortalClick"
         @section-click="onSectionClick"
