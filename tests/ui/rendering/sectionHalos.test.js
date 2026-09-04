@@ -5,6 +5,7 @@ import {
   computeRingRadii,
   computeWallHeight,
   computeWallRadius,
+  ringMarginFor,
   pickHaloOpacity,
   pickWallHeightScale,
   relationshipToHover,
@@ -29,27 +30,43 @@ describe('computeWallHeight', () => {
   })
 })
 
+// These are MARGINS outside whatever footprint haloGeometry traces, not
+// radii — the footprint of a section is the envelope of its subsections.
 describe('computeRingRadii', () => {
-  it('outer radius is slightly larger than the peak radius', () => {
-    const { outer } = computeRingRadii(20)
-    expect(outer).toBeGreaterThan(20)
-    expect(outer).toBeCloseTo(20 * SECTION_MARKERS.ring.radiusMultiplier)
+  it('puts the ribbon\'s outer edge at the configured margin', () => {
+    expect(computeRingRadii().outer).toBeCloseTo(SECTION_MARKERS.ring.margin)
   })
 
-  it('inner radius is exactly outer minus the configured thickness', () => {
-    const { inner, outer } = computeRingRadii(20)
+  it('inner edge is exactly outer minus the configured thickness', () => {
+    const { inner, outer } = computeRingRadii()
     expect(outer - inner).toBeCloseTo(SECTION_MARKERS.ring.thickness)
   })
 
-  it('never lets the inner radius collapse to zero for very small peaks', () => {
-    const { inner } = computeRingRadii(0.5)
-    expect(inner).toBeGreaterThan(0)
+  it('never lets the inner edge collapse through the footprint', () => {
+    expect(computeRingRadii().inner).toBeGreaterThan(0)
   })
 })
 
 describe('computeWallRadius', () => {
-  it('scales the peak radius by the configured wall multiplier', () => {
-    expect(computeWallRadius(20)).toBeCloseTo(20 * SECTION_MARKERS.wall.radiusMultiplier)
+  it('stands the curtain just inside the ring', () => {
+    const margin = SECTION_MARKERS.ring.margin
+    expect(computeWallRadius(margin)).toBeCloseTo(margin - SECTION_MARKERS.wall.inset)
+    expect(computeWallRadius(margin)).toBeLessThan(computeRingRadii(margin).outer)
+  })
+
+  // A subsection's margin is small, so the inset must not drive the
+  // curtain inside the footprint it is supposed to stand on.
+  it('never collapses through the footprint at a tight margin', () => {
+    expect(computeWallRadius(SECTION_MARKERS.ring.subsectionMargin)).toBeGreaterThan(0)
+    expect(computeWallRadius(0.1)).toBeGreaterThan(0)
+  })
+})
+
+describe('ringMarginFor', () => {
+  it('holds subsections at arm\'s length from their section, but not from each other', () => {
+    expect(ringMarginFor(true)).toBe(SECTION_MARKERS.ring.margin)
+    expect(ringMarginFor(false)).toBe(SECTION_MARKERS.ring.subsectionMargin)
+    expect(ringMarginFor(false)).toBeLessThan(ringMarginFor(true))
   })
 })
 

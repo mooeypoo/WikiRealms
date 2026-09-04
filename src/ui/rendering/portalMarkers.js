@@ -15,6 +15,14 @@ export const PORTAL_MARKERS = Object.freeze({
   // Sprite world-units at rest. The section wall markers are ~6-8 units
   // tall, so this reads as a comparable landmark rather than a speck.
   baseScale: 9,
+  // How far the sprite floats above the surface (or above sea level, for
+  // a portal over water). Proportional to baseScale rather than to the
+  // terrain's vertical exaggeration: the sprite is centred on this point
+  // and extends baseScale/2 below it, so too small a lift buries the
+  // lower half of the whirlpool in the ground. Being size-relative, it
+  // carries over to the planet view unchanged — one grid cell is one
+  // world unit of arc in both projections (see projection.js).
+  hoverOffset: 6,
   texture: Object.freeze({
     size: 128, // px; the aura needs room around the glyph to fade out
     glyphRatio: 0.5, // emoji size as a fraction of the canvas

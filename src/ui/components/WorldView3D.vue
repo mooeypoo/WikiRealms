@@ -3,19 +3,25 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
-  computeGridCellFromLocalPosition,
-  computeHeightScale,
   computePeakFlagPosition,
   computePortalLocalPosition,
   computeVertexColors,
-  computeWaterSurfaceHeight,
 } from '../rendering/terrainMesh.js'
+import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
+import {
+  buildHaloFillArrays,
+  buildHaloRingArrays,
+  buildHaloWallArrays,
+  computeMarkerRadii,
+  updateHaloWallHeights,
+} from '../rendering/haloGeometry.js'
 import {
   SECTION_MARKERS,
   computeBreathingPulse,
   computeRingRadii,
   computeWallHeight,
   computeWallRadius,
+  ringMarginFor,
   pickHaloOpacity,
   pickWallHeightScale,
   relationshipToHover,
@@ -46,6 +52,9 @@ const props = defineProps({
   showPortals: { type: Boolean, default: true },
   showSections: { type: Boolean, default: true },
   showFoliage: { type: Boolean, default: true },
+  // 'flat' | 'sphere' — a pure presentation choice over the SAME generated
+  // world. Switching rebuilds the scene; it never regenerates terrain.
+  worldShape: { type: String, default: 'flat' },
 })
 
 const emit = defineEmits(['portal-click', 'section-click'])
@@ -83,6 +92,19 @@ let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
+let ambientLight = null
+
+// Active grid → 3D mapping, re-resolved on every rebuildScene from the
+// worldShape prop. Every position in this component goes through it, so
+// the flat map and the planet share one code path.
+let projection = getProjection('flat')
+
+// Marker geometry is authored in the mesh's local frame with +Z as "up".
+// On the planet each marker rotates that axis onto its own surface
+// normal; on the flat map the normal IS +Z, so the rotation is identity
+// and behavior is unchanged.
+/** Foliage sprites sit this far off the surface, in flat-view units. */
+const FOLIAGE_LIFT = 0.8
 
 // Where the last press started, so a camera drag that happens to end over
 // a marker doesn't read as a click on it. OrbitControls captures the
@@ -202,15 +224,18 @@ function makeFoliageTexture(kind) {
 }
 
 function buildTerrainMesh(world) {
-  const { width, height, heightMap } = world.terrain
-  const heightScale = computeHeightScale(width, height)
+  const terrain = world.terrain
+  const { width, height, heightMap } = terrain
+  const heightScale = projection.heightScale(terrain)
 
-  const geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1)
-  const position = geometry.attributes.position
-  for (let i = 0; i < position.count; i++) {
-    position.setZ(i, heightMap[i] * heightScale)
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(computeVertexColors(world.terrain), 3))
+  // Vertices are laid out row-major in the SAME index space as heightMap
+  // and biomeMap, so per-vertex colors need no remapping regardless of
+  // which projection placed the positions.
+  const { positions, indices } = projection.buildSurfaceArrays(terrain, heightScale)
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1))
+  geometry.setAttribute('color', new THREE.BufferAttribute(computeVertexColors(terrain), 3))
   geometry.computeVertexNormals()
 
   // Smooth normals soften the grid's artificial triangular facets while the
@@ -218,22 +243,32 @@ function buildTerrainMesh(world) {
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
   const mesh = new THREE.Mesh(geometry, material)
 
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(width, height),
-    new THREE.MeshStandardMaterial({
-      color: 0x1e5fae,
-      transparent: true,
-      opacity: 0.55,
-      roughness: 0.15,
-      metalness: 0.1,
-    }),
-  )
-  water.position.z = computeWaterSurfaceHeight(heightScale)
+  const waterMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1e5fae,
+    transparent: true,
+    opacity: 0.55,
+    roughness: 0.15,
+    metalness: 0.1,
+  })
+
+  let water
+  if (projection.isSpherical) {
+    // Segment counts are independent of the grid — a sea-level sphere has
+    // no detail to resolve, it only has to read as round at the horizon.
+    // Backfaces are culled by default, so only the near hemisphere
+    // blends over the terrain beneath it.
+    water = new THREE.Mesh(new THREE.SphereGeometry(projection.waterSurface(terrain, heightScale), 96, 48), waterMaterial)
+  } else {
+    // width-1 / height-1: the surface spans integer cell spacing, so the
+    // water plane has to match its footprint exactly.
+    water = new THREE.Mesh(new THREE.PlaneGeometry(width - 1, height - 1), waterMaterial)
+    water.position.z = projection.waterSurface(terrain, heightScale)
+  }
 
   const portals = new THREE.Group()
   if (props.showPortals) {
     world.portals.forEach((portal, index) => {
-      const local = computePortalLocalPosition(portal, world.terrain, heightScale)
+      const local = computePortalLocalPosition(portal, terrain, heightScale, PORTAL_MARKERS.hoverOffset, projection)
       const sprite = makePortalSprite()
       const baseScale = PORTAL_MARKERS.baseScale
       sprite.scale.set(baseScale, baseScale, 1)
@@ -254,19 +289,19 @@ function buildTerrainMesh(world) {
 
   const foliage = new THREE.Group()
   const foliagePositions = new Map()
-  const articleAvgCps = computeArticleAverageCps(world.terrain.peaks ?? [])
+  const articleAvgCps = computeArticleAverageCps(terrain.peaks ?? [])
   for (let gridY = 2; gridY < height - 2; gridY += 4) {
     for (let gridX = 2; gridX < width - 2; gridX += 4) {
       const index = gridY * width + gridX
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed)
-      const variant = pickFoliageVariant(world.terrain.biomeMap[index], variantRoll)
+      const variant = pickFoliageVariant(terrain.biomeMap[index], variantRoll)
       if (!variant) continue
-      const densityScale = computeFoliageDensityScale(world.terrain.moistureMap[index], articleAvgCps)
+      const densityScale = computeFoliageDensityScale(terrain.moistureMap[index], articleAvgCps)
       if (densityRoll >= variant.density * densityScale) continue
 
       const positions = foliagePositions.get(variant) ?? []
-      // Y is flipped to match three.js PlaneGeometry vertex layout (see terrainMesh.js).
-      positions.push(gridX - width / 2, height / 2 - gridY, heightMap[index] * heightScale + 0.8)
+      const local = projection.toLocal(gridX, gridY, heightMap[index], terrain, heightScale, FOLIAGE_LIFT)
+      positions.push(local.x, local.y, local.z)
       foliagePositions.set(variant, positions)
     }
   }
@@ -301,21 +336,38 @@ function buildTerrainMesh(world) {
  */
 function buildSectionHalos(world, heightScale) {
   const group = new THREE.Group()
-  const peaks = world.terrain.peaks ?? []
+  const terrain = world.terrain
+  const peaks = terrain.peaks ?? []
   const hidden = !props.showSections
 
+  // Subsection markers are shrunk to fit the gaps between their siblings,
+  // and a section's boundary is then traced around the outside of those
+  // discs — so the markers are sized before any geometry is built.
+  const markerRadii = computeMarkerRadii(peaks, terrain.width, SECTION_MARKERS.ring.subsectionMargin)
+  const sized = peaks.map((peak, index) => ({ ...peak, markerRadius: markerRadii[index] }))
+  const outlineContext = {
+    width: terrain.width,
+    smoothing: SECTION_MARKERS.ring.outlineSmoothing,
+    childrenOf: (peak) => sized.filter((other) => (other.depth ?? 0) > 1 && other.sectionIndex === peak.peakIndex),
+  }
+
   for (let i = 0; i < peaks.length; i++) {
-    const peak = peaks[i]
+    const peak = { ...sized[i], peakIndex: i }
     const isTopLevel = (peak.depth ?? 0) <= 1
 
-    const local = computePeakFlagPosition(peak, world.terrain, heightScale, 0)
-    const ringRadii = computeRingRadii(peak.radius)
-    const wallRadiusGrid = computeWallRadius(peak.radius)
+    const local = computePeakFlagPosition(peak, terrain, heightScale, 0, projection)
+    // Sections hold their subsections at arm's length; a subsection's own
+    // boundary hugs it, or neighbouring markers merge on a dense ridge.
+    const ringMargin = ringMarginFor(isTopLevel)
+    const ringRadii = computeRingRadii(ringMargin)
+    const wallRadiusGrid = computeWallRadius(ringMargin)
     const wallHeightGrid = computeWallHeight(peak.amplitude)
 
-    // The wall's world Z-height is grid-height units, matched to the
+    // The wall's world height is grid-height units, matched to the
     // terrain's own heightScale so visual proportions stay consistent
-    // regardless of grid size.
+    // regardless of grid size — and, because the planet's height scale is
+    // a fraction of its radius, so the wall keeps the same ratio to the
+    // mountain it marks in both projections.
     const wallHeightWorld = wallHeightGrid * (heightScale / 40)
 
     // Initial opacity/height match this peak's idle state (0 for
@@ -324,7 +376,23 @@ function buildSectionHalos(world, heightScale) {
     const initialOpacity = pickHaloOpacity(null, !isTopLevel)
     const initialHeightScale = pickWallHeightScale(null, !isTopLevel)
 
-    const ringGeo = new THREE.RingGeometry(ringRadii.inner, ringRadii.outer, 48)
+    // Both markers are built in grid space and draped over the terrain by
+    // the projection, so they follow the ground and the planet's
+    // curvature instead of being flat primitives parked at the summit.
+    // See haloGeometry.js for why that matters.
+    const ringArrays = buildHaloRingArrays(
+      peak,
+      terrain,
+      heightScale,
+      projection,
+      ringRadii,
+      SECTION_MARKERS.ring.hoverOffset,
+      outlineContext,
+    )
+    const ringGeo = new THREE.BufferGeometry()
+    ringGeo.setAttribute('position', new THREE.BufferAttribute(ringArrays.positions, 3))
+    ringGeo.setIndex(new THREE.BufferAttribute(ringArrays.indices, 1))
+
     const ringMat = new THREE.MeshBasicMaterial({
       color: accentColor,
       transparent: true,
@@ -334,17 +402,22 @@ function buildSectionHalos(world, heightScale) {
       blending: THREE.AdditiveBlending,
     })
     const ring = new THREE.Mesh(ringGeo, ringMat)
-    ring.position.set(local.x, local.y, local.z + SECTION_MARKERS.ring.hoverOffset)
 
-    // Open cylinder (lateral surface only) — the "energy wall".
-    const wallGeo = new THREE.CylinderGeometry(
-      wallRadiusGrid,
+    const wallArrays = buildHaloWallArrays(
+      peak,
+      terrain,
+      heightScale,
+      projection,
       wallRadiusGrid,
       wallHeightWorld,
-      SECTION_MARKERS.wall.radialSegments,
-      1,
-      true,
+      SECTION_MARKERS.ring.hoverOffset,
+      initialHeightScale,
+      outlineContext,
     )
+    const wallGeo = new THREE.BufferGeometry()
+    wallGeo.setAttribute('position', new THREE.BufferAttribute(wallArrays.positions, 3))
+    wallGeo.setIndex(new THREE.BufferAttribute(wallArrays.indices, 1))
+
     const wallMat = new THREE.MeshBasicMaterial({
       color: accentColor,
       transparent: true,
@@ -354,17 +427,31 @@ function buildSectionHalos(world, heightScale) {
       blending: THREE.AdditiveBlending,
     })
     const wall = new THREE.Mesh(wallGeo, wallMat)
-    // three.js CylinderGeometry is Y-axis-aligned; we want its axis to be
-    // the world-up axis, which is Z BEFORE worldGroup rotation, so rotate π/2 on X.
-    wall.rotation.x = Math.PI / 2
-    // Scaling happens along the cylinder's own axis (its local Y). The
-    // mesh's position is its CENTER, so the base only stays pinned to the
-    // terrain if the center moves with the height — see updateHalos.
-    wall.scale.y = initialHeightScale
-    wall.position.set(local.x, local.y, local.z + (wallHeightWorld * initialHeightScale) / 2)
 
+    // Invisible hit area over the whole footprint, so pointing anywhere
+    // inside a marker selects it rather than only its outline. Never
+    // rendered — three.js's raycaster tests layers, not visibility, which
+    // is what makes this work (and keeps it out of the draw call list).
+    const fillArrays = buildHaloFillArrays(
+      peak,
+      terrain,
+      heightScale,
+      projection,
+      ringRadii.outer,
+      SECTION_MARKERS.ring.hoverOffset,
+      outlineContext,
+    )
+    const fillGeo = new THREE.BufferGeometry()
+    fillGeo.setAttribute('position', new THREE.BufferAttribute(fillArrays.positions, 3))
+    fillGeo.setIndex(new THREE.BufferAttribute(fillArrays.indices, 1))
+    const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+    fill.visible = false
+
+    // Vertices are already in the mesh's local frame, so the group is a
+    // plain container at the origin; the summit is carried in userData
+    // for the tooltip to project.
     const peakGroup = new THREE.Group()
-    peakGroup.add(ring, wall)
+    peakGroup.add(ring, wall, fill)
     peakGroup.userData.peakIndex = i
     peakGroup.userData.peak = peak
     peakGroup.userData.isTopLevel = isTopLevel
@@ -375,8 +462,15 @@ function buildSectionHalos(world, heightScale) {
     // Wall mesh + the geometry it was built from, so the per-frame height
     // animation can rescale it about its base instead of its center.
     peakGroup.userData.wallMesh = wall
-    peakGroup.userData.wallBaseZ = local.z
+    // The curtain's base ring and up vectors, so the height animation can
+    // move only its top edge (see updateHaloWallHeights).
+    peakGroup.userData.wallArrays = wallArrays
     peakGroup.userData.wallHeight = wallHeightWorld
+    peakGroup.userData.wallScale = initialHeightScale
+    // Summit in mesh-local space. The group itself is at the origin now
+    // that its children carry absolute positions, so the tooltip can't
+    // just read the group's world position.
+    peakGroup.userData.summitLocal = new THREE.Vector3(local.x, local.y, local.z)
     // Every halo is scene-graph visible; opacity does the LOD work.
     // Subsections idle at 0 opacity so they hide until their parent is
     // hovered (see pickHaloOpacity/relationshipToHover). 'none' hides
@@ -420,25 +514,32 @@ function updateHalos(nowSeconds) {
 
     // Height animation: the hovered section's wall rises to full height
     // while its parent/siblings/unrelated neighbors sit lower, so the
-    // focus reads as a silhouette and not just as brightness. Recentering
-    // by half the scaled height keeps the wall's base on the terrain.
-    const wall = peakGroup.userData.wallMesh
+    // focus reads as a silhouette and not just as brightness.
+    //
+    // The curtain follows the ground, so this can't be a mesh scale — it
+    // rewrites the top edge, leaving the base pinned to the terrain.
+    // Skipped once a wall has settled, so only the few mid-animation
+    // actually touch their vertex buffers.
     const targetScale = pickWallHeightScale(rel, isSubsection)
-    const scale = wall.scale.y + (targetScale - wall.scale.y) * alpha
-    wall.scale.y = scale
-    wall.position.z = peakGroup.userData.wallBaseZ + (peakGroup.userData.wallHeight * scale) / 2
+    const previousScale = peakGroup.userData.wallScale
+    const scale = previousScale + (targetScale - previousScale) * alpha
+    if (Math.abs(scale - previousScale) > 1e-4) {
+      peakGroup.userData.wallScale = scale
+      updateHaloWallHeights(peakGroup.userData.wallArrays, peakGroup.userData.wallHeight, scale)
+      peakGroup.userData.wallMesh.geometry.attributes.position.needsUpdate = true
+    }
   }
 }
 
 /**
  * Per-frame section tooltip position + content update. Projects the
- * hovered top-level peak's summit position (via its halo group's ring
- * mesh, which sits ON the terrain summit) into DOM pixel coords and
- * pushes into the reactive refs the <SectionTooltip> template reads.
+ * hovered peak's summit into DOM pixel coords and pushes into the
+ * reactive refs the <SectionTooltip> template reads.
  *
- * We use the halo ring's world position rather than recomputing the
- * summit from the heightMap because the ring already accounts for the
- * Y-flip and worldGroup rotation via its scene-graph parent chain.
+ * The summit is stored in mesh-local space and carried into world space
+ * through worldGroup, rather than read off a marker mesh: the halo
+ * children are draped over the terrain, so none of them sits at the
+ * summit any more.
  */
 function updateSectionTooltip() {
   const hoveredIdx = hoverState.sectionIndex.value
@@ -454,9 +555,9 @@ function updateSectionTooltip() {
     return
   }
 
-  // Ring's world position is the summit. Project to NDC via the camera.
-  const ring = peakGroup.children[0]
-  ring.getWorldPosition(summitProjectionVec)
+  // Local summit -> world (via worldGroup's rotation) -> NDC.
+  summitProjectionVec.copy(peakGroup.userData.summitLocal)
+  worldGroup.localToWorld(summitProjectionVec)
   summitProjectionVec.project(camera)
 
   const rect = renderer.domElement.getBoundingClientRect()
@@ -509,6 +610,11 @@ function rebuildScene() {
   // the next world rebuild without any three.js code touching styling.
   accentColor = resolveAccentColor()
 
+  // Resolve the projection BEFORE building anything — every position in
+  // the scene goes through it.
+  projection = getProjection(props.worldShape)
+  if (ambientLight) ambientLight.intensity = projection.ambientLightIntensity
+
   const { mesh, water, portals, halos, foliage, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
@@ -521,9 +627,42 @@ function rebuildScene() {
   foliageGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, foliageGroup)
 
-  const { width, height } = props.world.terrain
-  const cameraDistance = Math.max(width, height) * 0.9
-  camera.position.set(0, heightScale * 3, cameraDistance)
+  frameCamera(props.world.terrain, heightScale)
+}
+
+/**
+ * Points the camera at the world and constrains OrbitControls for the
+ * active projection. Both are re-applied on every rebuild, so switching
+ * views resets the constraints the other one set rather than inheriting
+ * them.
+ */
+function frameCamera(terrain, heightScale) {
+  if (projection.isSpherical) {
+    const radius = planetRadius(terrain)
+    const distance = radius * SPHERE_VIEW.cameraDistanceRatio
+    // Slightly above the equatorial plane so the globe reads as a sphere
+    // on arrival rather than as a flat lit disc.
+    camera.position.set(0, distance * 0.35, distance)
+    if (controls) {
+      controls.minDistance = radius * SPHERE_VIEW.minDistanceRatio
+      controls.maxDistance = radius * SPHERE_VIEW.maxDistanceRatio
+      // No polar clamp on a planet — flying over the poles is the point.
+      controls.maxPolarAngle = Math.PI
+      // Panning slides the orbit target off the planet's centre, which
+      // turns "orbit the globe" into "swing around empty space".
+      controls.enablePan = false
+    }
+  } else {
+    const { width, height } = terrain
+    camera.position.set(0, heightScale * 3, Math.max(width, height) * FLAT_VIEW.cameraDistanceRatio)
+    if (controls) {
+      controls.minDistance = 0
+      controls.maxDistance = Infinity
+      controls.maxPolarAngle = FLAT_VIEW.maxPolarAngle
+      controls.enablePan = true
+    }
+  }
+
   camera.lookAt(0, 0, 0)
   controls?.target.set(0, 0, 0)
   controls?.update()
@@ -580,18 +719,7 @@ function pickHaloClickTarget() {
   // being toggled off has to be checked explicitly — otherwise hidden
   // halos would stay clickable with no visual affordance behind them.
   if (!haloGroup?.visible) return null
-  const subMeshes = []
-  const topMeshes = []
-  for (const peakGroup of haloGroup.children) {
-    if (!peakGroup.visible) continue
-    const opacity = peakGroup.userData.ringMaterial?.opacity ?? 0
-    // Lower threshold than hover: idle top-level halos (opacity ~0.08)
-    // are visible enough to be legitimate click targets, even if the
-    // user didn't hover first. Subsections at opacity 0 stay unclickable.
-    if (opacity < 0.03) continue
-    const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
-    for (const child of peakGroup.children) bucket.push(child)
-  }
+  const { subMeshes, topMeshes } = collectHaloTargets()
 
   let hit = null
   if (subMeshes.length > 0) [hit] = raycaster.intersectObjects(subMeshes, false)
@@ -643,31 +771,43 @@ function onPointerMove(event) {
 }
 
 /**
- * Raycasts the halo group's meshes and, if a hit lands on a peakGroup
- * whose ring material is currently visible enough to read, sets that
- * peak as the hovered index. Returns true if a halo was hovered so the
- * caller knows to skip the terrain fallback.
+ * Splits every visible halo's meshes into subsection-level and
+ * top-level buckets, for a two-pass raycast.
  *
- * Subsection halos get first-pass priority so a user aiming at a
- * specific subsection ring doesn't get caught by their parent's much
- * larger outer ring. Only when nothing subsection-level is hit do we
- * check top-level halos.
+ * Each marker contributes an invisible fill covering its whole footprint
+ * as well as its ring and wall, so "inside the marker" is a hit and not
+ * just "on its outline".
  *
- * Opacity threshold (0.1) prevents accidentally hovering a subsection
- * halo whose parent isn't hovered yet (its opacity is still ~0).
+ * There is deliberately no opacity gate. It used to keep idle subsection
+ * halos (opacity 0) from being hovered, which meant pointing at a
+ * subsection fell through to the terrain and selected its SECTION — you
+ * could only reach a subsection by first hovering its parent to reveal
+ * it, then landing exactly on its ring. A subsection now reveals itself
+ * by being pointed at.
  */
-function tryHoverHalo() {
-  if (!haloGroup || !raycaster) return false
-
+function collectHaloTargets() {
   const subMeshes = []
   const topMeshes = []
   for (const peakGroup of haloGroup.children) {
     if (!peakGroup.visible) continue
-    const opacity = peakGroup.userData.ringMaterial?.opacity ?? 0
-    if (opacity < 0.1) continue
     const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
     for (const child of peakGroup.children) bucket.push(child)
   }
+  return { subMeshes, topMeshes }
+}
+
+/**
+ * Raycasts the halo meshes and sets the hovered peak. Returns true if a
+ * halo was hovered, so the caller knows to skip the terrain fallback.
+ *
+ * Subsections are tested first: inside a section, its subsections' fills
+ * win, and the section itself is left to the gaps between them and to
+ * its own boundary — which is how pointing at a map is expected to work.
+ */
+function tryHoverHalo() {
+  if (!haloGroup || !raycaster) return false
+
+  const { subMeshes, topMeshes } = collectHaloTargets()
 
   let hit = null
   if (subMeshes.length > 0) [hit] = raycaster.intersectObjects(subMeshes, false)
@@ -700,7 +840,7 @@ function updateSectionHoverFromTerrain() {
   localHitPoint.copy(terrainHit.point)
   terrainMesh.worldToLocal(localHitPoint)
 
-  const cell = computeGridCellFromLocalPosition(localHitPoint.x, localHitPoint.y, props.world.terrain)
+  const cell = projection.fromLocal(localHitPoint.x, localHitPoint.y, localHitPoint.z, props.world.terrain)
   if (!cell) {
     hoverState.clear()
     return
@@ -799,14 +939,17 @@ onMounted(() => {
   worldGroup.rotation.x = -Math.PI / 2
   scene.add(worldGroup)
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+  // Intensity is set per projection in rebuildScene: on a globe the
+  // directional sun produces a real day/night terminator, and the flat
+  // view's ambient level leaves the night side unreadably black.
+  ambientLight = new THREE.AmbientLight(0xffffff, FLAT_VIEW.ambientLightIntensity)
+  scene.add(ambientLight)
   const sun = new THREE.DirectionalLight(0xffffff, 0.9)
   sun.position.set(60, 120, 40)
   scene.add(sun)
 
   controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true
-  controls.maxPolarAngle = Math.PI / 2.1
 
   raycaster = new THREE.Raycaster()
   pointer = new THREE.Vector2()
@@ -834,10 +977,12 @@ onBeforeUnmount(() => {
   renderer?.dispose()
 })
 
-// Rebuild when the world or portal-inclusion changes (portals are
-// generated at build-time from world data). Other layer toggles just
-// flip .visible on their existing groups — no rebuild needed.
-watch(() => [props.world, props.showPortals], rebuildScene)
+// Rebuild when the world, the portal-inclusion, or the projection
+// changes. Portals are generated at build-time from world data, and every
+// vertex position depends on the projection — but a view-mode switch only
+// re-renders the SAME world, it never regenerates terrain. Other layer
+// toggles just flip .visible on their existing groups — no rebuild needed.
+watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
 
 watch(
   () => [props.showSections, props.showFoliage],
