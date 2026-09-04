@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeRidgeLayout, computeSpiralLayout } from '../../../src/engine/generation/layout.js'
+import { computeRidgeLayout, computeSpiralLayout, relaxPlacements } from '../../../src/engine/generation/layout.js'
 
 const bounds = { centerX: 64, centerY: 64, maxRadius: 50 }
 
@@ -165,3 +165,105 @@ describe('computeRidgeLayout', () => {
   })
 })
 
+describe('relaxPlacements', () => {
+  const width = 512
+  const wrapD = (a, b) => {
+    const d = Math.abs(a - b)
+    return Math.min(d, width - d)
+  }
+  const gapBetween = (a, b, placements) =>
+    Math.hypot(wrapD(a.x, b.x), a.y - b.y) - placements[0].extent - placements[1].extent
+
+  it('leaves placements that already clear each other alone', () => {
+    const placements = [
+      { x: 100, y: 128, extent: 20 },
+      { x: 300, y: 128, extent: 20 },
+    ]
+
+    expect(relaxPlacements(placements, { width, gap: 10 })).toEqual([
+      { x: 100, y: 128 },
+      { x: 300, y: 128 },
+    ])
+  })
+
+  // The case this exists for: a big section swallowing a small one.
+  it('pushes a contained placement out of its larger neighbour', () => {
+    const placements = [
+      { x: 200, y: 128, extent: 90 },
+      { x: 210, y: 130, extent: 15 },
+    ]
+    const [big, small] = relaxPlacements(placements, { width, gap: 10 })
+    const distance = Math.hypot(wrapD(big.x, small.x), big.y - small.y)
+
+    expect(distance).toBeGreaterThanOrEqual(90 + 15 + 10 - 1e-6)
+  })
+
+  it('separates across the seam rather than through the whole map', () => {
+    // Five cells apart the short way; 507 the long way.
+    const placements = [
+      { x: 2, y: 128, extent: 30 },
+      { x: 507, y: 128, extent: 30 },
+    ]
+    const [a, b] = relaxPlacements(placements, { width, gap: 8 })
+
+    expect(gapBetween(a, b, placements)).toBeGreaterThanOrEqual(8 - 1e-6)
+    // Both stay in range after wrapping.
+    for (const p of [a, b]) expect(p.x).toBeGreaterThanOrEqual(0)
+    for (const p of [a, b]) expect(p.x).toBeLessThan(width)
+  })
+
+  it('keeps a placement inside the band by its whole extent, not its centre', () => {
+    const placements = [
+      { x: 100, y: 40, extent: 25 },
+      { x: 108, y: 45, extent: 25 },
+    ]
+
+    for (const p of relaxPlacements(placements, { width, minY: 30, maxY: 226, gap: 5 })) {
+      expect(p.y).toBeGreaterThanOrEqual(30 + 25 - 1e-6)
+      expect(p.y).toBeLessThanOrEqual(226 - 25 + 1e-6)
+    }
+  })
+
+  it('honours bandExtent when terrain reaches further than the marker', () => {
+    const placements = [
+      { x: 100, y: 40, extent: 20, bandExtent: 60 },
+      { x: 300, y: 40, extent: 20, bandExtent: 60 },
+    ]
+
+    for (const p of relaxPlacements(placements, { width, minY: 30, maxY: 226 })) {
+      expect(p.y).toBeGreaterThanOrEqual(30 + 60 - 1e-6)
+    }
+  })
+
+  it('centres a placement too wide to fit the band at all', () => {
+    const [only] = relaxPlacements([{ x: 100, y: 40, extent: 200 }, { x: 400, y: 40, extent: 5 }], {
+      width,
+      minY: 30,
+      maxY: 226,
+    })
+
+    expect(only.y).toBeCloseTo((30 + 226) / 2)
+  })
+
+  it('separates coincident placements instead of dividing by zero', () => {
+    const [a, b] = relaxPlacements(
+      [{ x: 100, y: 100, extent: 20 }, { x: 100, y: 100, extent: 20 }],
+      { width, gap: 5 },
+    )
+
+    expect(Number.isFinite(a.x)).toBe(true)
+    expect(Math.hypot(wrapD(a.x, b.x), a.y - b.y)).toBeGreaterThan(0)
+  })
+
+  it('is deterministic', () => {
+    const placements = [
+      { x: 200, y: 128, extent: 90 },
+      { x: 210, y: 130, extent: 15 },
+      { x: 240, y: 100, extent: 40 },
+    ]
+
+    expect(relaxPlacements(placements, { width, gap: 10 })).toEqual(
+      relaxPlacements(placements, { width, gap: 10 }),
+    )
+  })
+})

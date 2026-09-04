@@ -1,7 +1,7 @@
 import { createNoise3D } from 'simplex-noise'
 import { BIOME_THRESHOLDS, GRID, PEAK_LAYOUT, POLAR_CAPS, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
 import { BIOME, classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
-import { computeRidgeLayout, computeSpiralLayout } from './layout.js'
+import { computeRidgeLayout, computeSpiralLayout, relaxPlacements } from './layout.js'
 
 /**
  * The grid is an equirectangular map: column 0 and column width-1 are
@@ -533,6 +533,74 @@ export function annotateSectionIndices(peaks) {
     if ((peaks[i].depth ?? 0) <= 1) currentTopLevel = i
     peaks[i].sectionIndex = currentTopLevel
   }
+  return peaks
+}
+
+/**
+ * Spreads top-level sections apart so no section's footprint swallows
+ * another's, moving each section and its subsections together.
+ *
+ * A section's footprint is the envelope of its subsections (that's what
+ * the halo traces), so its size is driven by how many it has — and the
+ * spiral that placed them knows nothing about that. Left alone, a
+ * thirteen-subsection range simply contains its smaller neighbours.
+ *
+ * Extents here are measured from peak radii rather than the render
+ * layer's marker radii, which are only ever smaller; `gap` covers that
+ * difference plus the marker margin on both sides.
+ *
+ * Mutates `peaks` in place and returns it, for chaining.
+ *
+ * @param {object[]} peaks flattened peaks, already annotated with sectionIndex
+ * @param {{ width: number, minY?: number, maxY?: number, gap?: number }} options
+ */
+export function separateSections(peaks, { width, minY = -Infinity, maxY = Infinity, gap = 0 }) {
+  const members = new Map()
+  for (let i = 0; i < peaks.length; i++) {
+    const owner = (peaks[i].depth ?? 0) <= 1 ? i : peaks[i].sectionIndex
+    if (owner === undefined || owner < 0) continue
+    if (!members.has(owner)) members.set(owner, [])
+    members.get(owner).push(i)
+  }
+  if (members.size < 2) return peaks
+
+  const owners = [...members.keys()]
+  const placements = owners.map((owner) => {
+    const section = peaks[owner]
+    // Bounding radius of the section's envelope: the farthest any of its
+    // discs reaches from the summit the boundary is swept around.
+    let extent = section.radius
+    for (const index of members.get(owner)) {
+      const peak = peaks[index]
+      const dx = wrapDeltaX(peak.x - section.x, width)
+      const dy = peak.y - section.y
+      extent = Math.max(extent, Math.hypot(dx, dy) + peak.radius)
+    }
+    // Terrain reaches further than the marker: a peak's continental
+    // Gaussian has sigma = radius x sigmaMultiplier x elongation, while
+    // `extent` only counts the radius. The difference is what has to stay
+    // inside the band, or a section clamped by its marker still pushes
+    // land into a polar cap.
+    const skirt = TERRAIN_GENERATION.continent.sigmaMultiplier * PEAK_LAYOUT.minSectionElongation - 1
+    return { x: section.x, y: section.y, extent, bandExtent: extent + section.radius * Math.max(skirt, 0) }
+  })
+
+  const relaxed = relaxPlacements(placements, { width, minY, maxY, gap })
+
+  for (let g = 0; g < owners.length; g++) {
+    const section = peaks[owners[g]]
+    const shiftX = wrapDeltaX(relaxed[g].x - section.x, width)
+    const shiftY = relaxed[g].y - section.y
+    if (shiftX === 0 && shiftY === 0) continue
+    for (const index of members.get(owners[g])) {
+      const peak = peaks[index]
+      peak.x = ((peak.x + shiftX) % width + width) % width
+      // Subsections move with their parent, so they need the same clamp —
+      // a shifted ridge could otherwise poke back over a pole.
+      peak.y = Math.min(Math.max(peak.y + shiftY, minY), maxY)
+    }
+  }
+
   return peaks
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRng } from '../../../src/engine/generation/rng.js'
-import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
+import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, separateSections, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { GRID, PEAK_LAYOUT } from '../../../src/engine/generation/config.js'
 
@@ -353,3 +353,90 @@ describe('smoothHeightMap', () => {
   })
 })
 
+describe('separateSections', () => {
+  const width = 512
+
+  /** Two sections: a wide one with subsections, and a small one inside it. */
+  function makePeaks() {
+    return [
+      { title: 'Big', depth: 1, x: 200, y: 128, radius: 30, sectionIndex: 0 },
+      { title: 'Big a', depth: 2, x: 260, y: 128, radius: 10, sectionIndex: 0 },
+      { title: 'Big b', depth: 2, x: 140, y: 128, radius: 10, sectionIndex: 0 },
+      { title: 'Small', depth: 1, x: 215, y: 132, radius: 12, sectionIndex: 3 },
+    ]
+  }
+
+  const wrapD = (a, b) => {
+    const d = Math.abs(a - b)
+    return Math.min(d, width - d)
+  }
+  /** Bounding radius of a section's footprint, as separateSections measures it. */
+  const extentOf = (peaks, index) => {
+    const section = peaks[index]
+    let extent = section.radius
+    for (const peak of peaks) {
+      if (peak.sectionIndex !== index) continue
+      extent = Math.max(extent, Math.hypot(wrapD(peak.x, section.x), peak.y - section.y) + peak.radius)
+    }
+    return extent
+  }
+
+  it('pushes a section out of a neighbour whose footprint contained it', () => {
+    const peaks = makePeaks()
+    const before = Math.hypot(wrapD(peaks[3].x, peaks[0].x), peaks[3].y - peaks[0].y)
+    expect(before).toBeLessThan(extentOf(peaks, 0)) // starts inside
+
+    separateSections(peaks, { width, gap: 10 })
+
+    const after = Math.hypot(wrapD(peaks[3].x, peaks[0].x), peaks[3].y - peaks[0].y)
+    expect(after).toBeGreaterThanOrEqual(extentOf(peaks, 0) + extentOf(peaks, 3) + 10 - 1e-6)
+  })
+
+  // A section is a rigid body: its ridge has already been laid out, and
+  // shifting summits independently would scramble it.
+  it('moves each section\'s subsections with it, preserving their offsets', () => {
+    const peaks = makePeaks()
+    const before = peaks.map((p) => ({ x: p.x, y: p.y }))
+
+    separateSections(peaks, { width, gap: 10 })
+
+    for (const child of [1, 2]) {
+      expect(wrapD(peaks[child].x, peaks[0].x)).toBeCloseTo(wrapD(before[child].x, before[0].x), 6)
+      expect(peaks[child].y - peaks[0].y).toBeCloseTo(before[child].y - before[0].y, 6)
+    }
+  })
+
+  it('keeps every peak inside the latitude band', () => {
+    const peaks = makePeaks()
+
+    separateSections(peaks, { width, minY: 60, maxY: 196, gap: 10 })
+
+    for (const peak of peaks) {
+      expect(peak.y).toBeGreaterThanOrEqual(60)
+      expect(peak.y).toBeLessThanOrEqual(196)
+    }
+  })
+
+  it('wraps longitude rather than running off the edge', () => {
+    const peaks = makePeaks()
+
+    separateSections(peaks, { width, gap: 10 })
+
+    for (const peak of peaks) {
+      expect(peak.x).toBeGreaterThanOrEqual(0)
+      expect(peak.x).toBeLessThan(width)
+    }
+  })
+
+  it('leaves a lone section untouched', () => {
+    const peaks = [
+      { title: 'Only', depth: 1, x: 200, y: 128, radius: 30, sectionIndex: 0 },
+      { title: 'Only a', depth: 2, x: 240, y: 128, radius: 10, sectionIndex: 0 },
+    ]
+
+    separateSections(peaks, { width, gap: 10 })
+
+    expect(peaks[0].x).toBe(200)
+    expect(peaks[1].x).toBe(240)
+  })
+})

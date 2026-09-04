@@ -11,6 +11,100 @@
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)) // ~2.399963 radians
 
+/** Shortest signed x-distance on a grid whose left and right edges meet. */
+function wrapDelta(dx, width) {
+  const wrapped = ((dx % width) + width) % width
+  return wrapped > width / 2 ? wrapped - width : wrapped
+}
+
+/**
+ * Pushes overlapping placements apart until each one's `extent` clears its
+ * neighbours', or the iteration budget runs out.
+ *
+ * The spiral spaces sections evenly, which was right when every section
+ * was a disc of roughly the same size. It stopped being right once a
+ * section's footprint became the envelope of its subsections: a section
+ * with thirteen of them is several times the radius of one with none, so
+ * evenly-spaced centres leave the small sections sitting *inside* the big
+ * one's boundary.
+ *
+ * Relaxation rather than a cleverer initial placement, because the
+ * constraint is pairwise and the extents are only known after layout. It
+ * degrades gracefully too: when the sections genuinely cannot all fit,
+ * everything just ends up as spread as the room allows instead of failing.
+ *
+ * Deterministic — no RNG. Coincident placements separate along a
+ * golden-angle direction chosen by index.
+ *
+ * @param {{ x: number, y: number, extent: number, bandExtent?: number }[]} placements
+ *   `extent` is what must clear the neighbours; `bandExtent` (defaulting
+ *   to it) is what must stay inside the latitude band — larger, because
+ *   terrain spreads further than the marker drawn on it.
+ * @param {{ width: number, minY?: number, maxY?: number, gap?: number, iterations?: number, strength?: number }} options
+ *   `gap` is clear space required BETWEEN two extents; `minY`/`maxY` bound
+ *   the safe latitude band, and each placement is kept inside it by its
+ *   own extent rather than just by its centre. Longitude wraps instead.
+ * @returns {{ x: number, y: number }[]} relaxed positions, in input order
+ */
+export function relaxPlacements(
+  placements,
+  { width, minY = -Infinity, maxY = Infinity, gap = 0, iterations = 120, strength = 0.55 },
+) {
+  const count = placements.length
+  const xs = placements.map((p) => p.x)
+  const ys = placements.map((p) => p.y)
+
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    let moved = false
+
+    for (let i = 0; i < count; i++) {
+      for (let j = i + 1; j < count; j++) {
+        const dx = wrapDelta(xs[j] - xs[i], width)
+        const dy = ys[j] - ys[i]
+        let distance = Math.hypot(dx, dy)
+        const required = placements[i].extent + placements[j].extent + gap
+        if (distance >= required) continue
+
+        let unitX
+        let unitY
+        if (distance < 1e-6) {
+          // Exactly coincident: pick a repeatable direction rather than
+          // dividing by zero.
+          const angle = i * GOLDEN_ANGLE
+          unitX = Math.cos(angle)
+          unitY = Math.sin(angle)
+          distance = 1e-6
+        } else {
+          unitX = dx / distance
+          unitY = dy / distance
+        }
+
+        // Split the correction between the pair so neither is privileged.
+        const push = (required - distance) * 0.5 * strength
+        xs[i] -= unitX * push
+        ys[i] -= unitY * push
+        xs[j] += unitX * push
+        ys[j] += unitY * push
+        moved = true
+      }
+    }
+
+    // The band has to hold each placement's whole EXTENT, not just its
+    // centre: clamping centres alone lets a wide section's footprint hang
+    // out past the band — which here means land pushed into a polar cap.
+    for (let i = 0; i < count; i++) {
+      const reach = placements[i].bandExtent ?? placements[i].extent
+      const low = minY + reach
+      const high = maxY - reach
+      // Too wide to fit the band at all: centre it and accept the overrun.
+      ys[i] = low > high ? (minY + maxY) / 2 : Math.min(Math.max(ys[i], low), high)
+    }
+    if (!moved) break
+  }
+
+  return placements.map((_, i) => ({ x: ((xs[i] % width) + width) % width, y: ys[i] }))
+}
+
 /**
  * Lays subsections out along a wandering RIDGE PATH.
  *

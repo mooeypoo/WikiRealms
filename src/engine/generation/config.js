@@ -167,6 +167,10 @@ export const PEAK_LAYOUT = Object.freeze({
   // because a wandering path is longer than the straight line between its
   // ends, it also buys adjacent summits more separation for free.
   ridgeWander: 0.34,
+  // Clear grid cells required between two sections' footprints once
+  // they've been pushed apart (see separateSections). Sized to cover the
+  // halo margin drawn on either side plus visible water between them.
+  sectionSeparationGap: 16,
   // Rows of open water to keep between a subsection ridge and the polar
   // icecaps. Subsections build land (see TERRAIN_GENERATION.continent),
   // so without this a long north-south spine welds a continent to a cap.

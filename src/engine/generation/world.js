@@ -1,7 +1,7 @@
 import { CURRENT_ENGINE_VERSION } from './engineVersion.js'
 import { deriveSeed, createRng } from './rng.js'
 import { applyPeakLimits } from './sectionPeakLimits.js'
-import { annotateSectionIndices, flattenPeaks, generateSectionTerrain } from './sectionTerrain.js'
+import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, separateSections } from './sectionTerrain.js'
 import { generateSectionPortals } from './sectionPortals.js'
 import { GRID, PEAK_LAYOUT, POLAR_CAPS } from './config.js'
 
@@ -52,7 +52,15 @@ export function generateWorld(
       max: height - 1 - POLAR_CAPS.reachRows - PEAK_LAYOUT.polarClearanceRows,
     },
   }
-  const peaks = annotateSectionIndices(flattenPeaks(cappedSections, layoutBounds))
+  // Spread sections apart AFTER layout: how much room each one needs
+  // depends on the subsection ridge it ended up with, which the spiral
+  // that placed it cannot know.
+  const peaks = separateSections(annotateSectionIndices(flattenPeaks(cappedSections, layoutBounds)), {
+    width,
+    minY: layoutBounds.latitudeBand.min,
+    maxY: layoutBounds.latitudeBand.max,
+    gap: PEAK_LAYOUT.sectionSeparationGap,
+  })
 
   const terrain = generateSectionTerrain({
     width,
