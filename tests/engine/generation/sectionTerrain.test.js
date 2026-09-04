@@ -26,6 +26,17 @@ describe('flattenPeaks', () => {
     expect(peaks[0].y).toBeCloseTo(64)
   })
 
+  it('carries each node\'s heading anchor onto its peak, null when it has none', () => {
+    const child = makeNode('Child', 10)
+    child.depth = 2
+    const anchorless = makeNode('Miscellaneous', 20)
+    anchorless.anchor = undefined
+
+    const peaks = flattenPeaks([makeNode('History', 80, [child]), anchorless], bounds)
+
+    expect(peaks.map((peak) => peak.anchor)).toEqual(['History', 'Child', null])
+  })
+
   it('gives a larger share a bigger amplitude and radius', () => {
     const nodes = [makeNode('Small', 10), makeNode('Big', 90)]
     const [small, big] = flattenPeaks(nodes, bounds)

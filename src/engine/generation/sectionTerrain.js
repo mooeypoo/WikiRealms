@@ -102,7 +102,7 @@ function thermalErosion(heightMap, width, height, iterations, strength, slopeThr
  *
  * @param {object[]} nodes section tree nodes (title, subtreeSize, children, ...)
  * @param {{ centerX: number, centerY: number, maxRadius: number, minRadius?: number }} bounds
- * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, depth: number, citationsPerSentence: number, subtreeCitationsPerSentence: number }[]}
+ * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, anchor: string | null, depth: number, citationsPerSentence: number, subtreeCitationsPerSentence: number }[]}
  */
 export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0 }) {
   if (!nodes || nodes.length === 0) return []
@@ -126,6 +126,7 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
       radius,
       amplitude: nodeAmplitude,
       title: node.title,
+      anchor: node.anchor ?? null,
       depth: node.depth,
       ownSize: node.ownSize ?? 0,
       subtreeSize: node.subtreeSize ?? node.ownSize ?? 0,

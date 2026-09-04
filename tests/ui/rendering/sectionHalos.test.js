@@ -8,6 +8,7 @@ import {
   pickHaloOpacity,
   relationshipToHover,
   resolveHoveredTopLevel,
+  resolveSectionAnchor,
 } from '../../../src/ui/rendering/sectionHalos.js'
 
 describe('computeWallHeight', () => {
@@ -195,5 +196,37 @@ describe('resolveHoveredTopLevel', () => {
   it('returns -1 when peaks array is missing or the index is out of range', () => {
     expect(resolveHoveredTopLevel(0, null)).toBe(-1)
     expect(resolveHoveredTopLevel(99, peaks)).toBe(-1)
+  })
+})
+
+describe('resolveSectionAnchor', () => {
+  const peaks = [
+    { depth: 1, sectionIndex: 0, anchor: 'Early_life' },
+    { depth: 2, sectionIndex: 0, anchor: 'Childhood' },
+    { depth: 1, sectionIndex: 2, anchor: 'Career' },
+    { depth: 2, sectionIndex: 2, anchor: null },
+    // The synthetic folded range (see sectionPeakLimits.js) — no heading.
+    { depth: 1, sectionIndex: 4, anchor: null },
+  ]
+
+  it('returns a top-level peak\'s own anchor', () => {
+    expect(resolveSectionAnchor(0, peaks)).toBe('Early_life')
+    expect(resolveSectionAnchor(2, peaks)).toBe('Career')
+  })
+
+  it('resolves a subsection to its owning top-level anchor', () => {
+    expect(resolveSectionAnchor(1, peaks)).toBe('Early_life')
+    // Even when the subsection itself has no anchor of its own.
+    expect(resolveSectionAnchor(3, peaks)).toBe('Career')
+  })
+
+  it('returns null for a peak with no anchor (folded "Miscellaneous" range)', () => {
+    expect(resolveSectionAnchor(4, peaks)).toBeNull()
+  })
+
+  it('returns null for an unknown peak or a missing peaks array', () => {
+    expect(resolveSectionAnchor(99, peaks)).toBeNull()
+    expect(resolveSectionAnchor(null, peaks)).toBeNull()
+    expect(resolveSectionAnchor(0, null)).toBeNull()
   })
 })

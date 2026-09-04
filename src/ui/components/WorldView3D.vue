@@ -19,6 +19,7 @@ import {
   pickHaloOpacity,
   relationshipToHover,
   resolveHoveredTopLevel,
+  resolveSectionAnchor,
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
 import SectionTooltip from './SectionTooltip.vue'
@@ -40,7 +41,7 @@ const props = defineProps({
   showFoliage: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['portal-click'])
+const emit = defineEmits(['portal-click', 'section-click'])
 
 const containerRef = ref(null)
 const isWebGLSupported = ref(true)
@@ -76,6 +77,13 @@ let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
+
+// Where the last press started, so a camera drag that happens to end over
+// a marker doesn't read as a click on it. OrbitControls captures the
+// pointer on the canvas, so every orbit/pan still ends in a `click` event.
+let pointerDownPosition = null
+// Movement (CSS px) below which a press/release pair still counts as a click.
+const CLICK_DRAG_TOLERANCE = 5
 
 // Cached accent color for section halos — sourced from the app's --accent
 // CSS variable at rebuildScene time so a theme swap picks up automatically.
@@ -498,14 +506,82 @@ function pointerToNdc(event) {
   return rect
 }
 
+function onPointerDown(event) {
+  pointerDownPosition = { x: event.clientX, y: event.clientY }
+}
+
 function onPointerClick(event) {
-  if (!portalGroup || !raycaster) return
+  if (!raycaster) return
+
+  // Suppress the click that closes a camera drag — section halos cover
+  // most of the map, so without this every orbit would focus a section.
+  const downAt = pointerDownPosition
+  pointerDownPosition = null
+  if (downAt && Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y) > CLICK_DRAG_TOLERANCE) return
 
   pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const [hit] = raycaster.intersectObjects(portalGroup.children)
-  if (hit?.object?.userData?.portal) {
-    emit('portal-click', hit.object.userData.portal)
+
+  // Portal hit takes priority — a portal sprite in front of a halo
+  // still reads as "I meant to travel", not "I meant to focus".
+  if (portalGroup) {
+    const [portalHit] = raycaster.intersectObjects(portalGroup.children)
+    if (portalHit?.object?.userData?.portal) {
+      emit('portal-click', portalHit.object.userData.portal)
+      return
+    }
+  }
+
+  // Otherwise: same halo-priority raycast the hover logic uses — a click
+  // resolves to the same section the user was already visually focusing on.
+  const clickTarget = pickHaloClickTarget()
+  if (clickTarget) emit('section-click', clickTarget)
+}
+
+/**
+ * Same subsection-first raycast prioritization as tryHoverHalo, but
+ * returns the peak metadata a click consumer needs (index, title,
+ * anchor) instead of pushing into hoverState. The anchor is the source
+ * Wikipedia section heading id, used both as a scroll target in the
+ * article panel and as the URL fragment on the "View on Wikipedia" link.
+ */
+function pickHaloClickTarget() {
+  // three.js's raycaster ignores Object3D.visible, so the Sections layer
+  // being toggled off has to be checked explicitly — otherwise hidden
+  // halos would stay clickable with no visual affordance behind them.
+  if (!haloGroup?.visible) return null
+  const subMeshes = []
+  const topMeshes = []
+  for (const peakGroup of haloGroup.children) {
+    if (!peakGroup.visible) continue
+    const opacity = peakGroup.userData.ringMaterial?.opacity ?? 0
+    // Lower threshold than hover: idle top-level halos (opacity ~0.08)
+    // are visible enough to be legitimate click targets, even if the
+    // user didn't hover first. Subsections at opacity 0 stay unclickable.
+    if (opacity < 0.03) continue
+    const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
+    for (const child of peakGroup.children) bucket.push(child)
+  }
+
+  let hit = null
+  if (subMeshes.length > 0) [hit] = raycaster.intersectObjects(subMeshes, false)
+  if (!hit && topMeshes.length > 0) [hit] = raycaster.intersectObjects(topMeshes, false)
+  if (!hit) return null
+
+  let node = hit.object
+  while (node && node.userData.peakIndex === undefined) node = node.parent
+  if (!node) return null
+
+  const peak = node.userData.peak
+  return {
+    peakIndex: node.userData.peakIndex,
+    title: peak?.title ?? null,
+    anchor: peak?.anchor ?? null,
+    depth: peak?.depth ?? null,
+    sectionIndex: peak?.sectionIndex ?? -1,
+    // Owning top-level's anchor — the granularity the article panel
+    // lists, so a subsection click resolves to its parent's card.
+    sectionAnchor: resolveSectionAnchor(node.userData.peakIndex, props.world?.terrain?.peaks),
   }
 }
 
@@ -725,6 +801,7 @@ onMounted(() => {
   rebuildScene()
   animate()
 
+  renderer.domElement.addEventListener('pointerdown', onPointerDown)
   renderer.domElement.addEventListener('click', onPointerClick)
   renderer.domElement.addEventListener('pointermove', onPointerMove)
   renderer.domElement.addEventListener('pointerleave', onPointerLeave)
@@ -734,6 +811,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeToContainer)
   if (animationFrameId) cancelAnimationFrame(animationFrameId)
+  renderer?.domElement.removeEventListener('pointerdown', onPointerDown)
   renderer?.domElement.removeEventListener('click', onPointerClick)
   renderer?.domElement.removeEventListener('pointermove', onPointerMove)
   renderer?.domElement.removeEventListener('pointerleave', onPointerLeave)

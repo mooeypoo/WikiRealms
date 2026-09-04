@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
@@ -41,6 +41,9 @@ const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showNavigationTools = ref(false)
 const isArticlePanelCollapsed = ref(false)
+// Section anchor id currently focused via a map click (or null). Used to
+// scroll the article panel's section list into view + flash the card.
+const focusedSectionAnchor = ref(null)
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
 function toggleViewMode() {
@@ -71,6 +74,22 @@ function onSelect(result) {
 function onPortalClick(portal) {
   // First click shows confirmation, second click navigates
   portalConfirmation.value = { targetArticleId: portal.targetArticleId, targetTitle: portal.targetTitle }
+}
+
+function onSectionClick(target) {
+  // sectionAnchor is already resolved to the owning top-level section —
+  // the granularity the panel's section list renders. It's null for a
+  // peak with no heading of its own (the folded "Miscellaneous" range),
+  // in which case there's nothing to scroll to.
+  const anchor = target?.sectionAnchor ?? target?.anchor
+  if (!anchor) return
+  isArticlePanelCollapsed.value = false
+  focusedSectionAnchor.value = null
+  // Force a change even if the same anchor is clicked twice — the watcher
+  // that scrolls + highlights fires only on change.
+  nextTick(() => {
+    focusedSectionAnchor.value = anchor
+  })
 }
 
 function confirmPortal() {
@@ -170,6 +189,40 @@ watch(current, (title) => {
   if (title) loadArticle(title)
 })
 
+watch(focusedSectionAnchor, async (anchor) => {
+  if (!anchor) return
+  // The panel un-collapses (v-show) in the flush before this one, so by
+  // now the section cards are in the document and can be scrolled to.
+  await nextTick()
+  const el = document.getElementById(`app-section-${anchor}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  flashSectionCard(el)
+})
+
+// Highlight lifecycle for the focused section card. Kept as one owner of
+// the class + timer so a rapid re-click restarts the flash instead of
+// inheriting the previous click's pending removal.
+const SECTION_FLASH_CLASS = 'app__section-card--flash'
+let flashedSectionEl = null
+let flashTimeoutId = null
+
+function flashSectionCard(el) {
+  if (flashTimeoutId) clearTimeout(flashTimeoutId)
+  flashedSectionEl?.classList.remove(SECTION_FLASH_CLASS)
+
+  el.classList.remove(SECTION_FLASH_CLASS)
+  void el.offsetWidth // reflow — restarts the CSS animation on a re-click
+  el.classList.add(SECTION_FLASH_CLASS)
+  flashedSectionEl = el
+
+  flashTimeoutId = setTimeout(() => {
+    el.classList.remove(SECTION_FLASH_CLASS)
+    flashedSectionEl = null
+    flashTimeoutId = null
+  }, 1500)
+}
+
 watch(article, (newArticle) => {
   if (newArticle) {
     const previous = articleCache.value[newArticle.title]
@@ -239,6 +292,7 @@ watch([current, backstack, forwardstack, articleCache], () => {
         :show-foliage="preferences.showFoliage"
         class="cosmos__world"
         @portal-click="onPortalClick"
+        @section-click="onSectionClick"
       />
       <WorldView
         v-else-if="worldStatus === 'success' && world"
@@ -339,6 +393,43 @@ watch([current, backstack, forwardstack, articleCache], () => {
             View on Wikipedia ↗
           </a>
           <button type="button" class="app__share-button" @click="onShareClick">Share article</button>
+
+          <section
+            v-if="article.sections?.sections?.length"
+            class="app__section-list"
+            aria-label="Sections"
+          >
+            <h3 class="app__section-list-heading">Sections</h3>
+            <article
+              v-for="section in article.sections.sections"
+              :id="section.anchor ? `app-section-${section.anchor}` : undefined"
+              :key="section.anchor || section.title"
+              class="app__section-card"
+            >
+              <header class="app__section-card__header">
+                <h4>{{ section.title }}</h4>
+                <a
+                  v-if="article.url && section.anchor"
+                  :href="`${article.url}#${section.anchor}`"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="app__section-card__link"
+                  :aria-label="`View “${section.title}” on Wikipedia`"
+                >↗</a>
+              </header>
+              <ul class="app__section-card__chips">
+                <li v-if="section.children?.length" class="app__section-card__chip">
+                  {{ section.children.length }} subsection<span v-if="section.children.length !== 1">s</span>
+                </li>
+                <li class="app__section-card__chip">
+                  {{ Math.round((section.subtreeSize || section.ownSize || 0) / 5.5).toLocaleString('en-US') }} words
+                </li>
+                <li v-if="(section.subtreeCitationCount ?? section.citationCount ?? 0) > 0" class="app__section-card__chip">
+                  {{ section.subtreeCitationCount ?? section.citationCount }} cite<span v-if="(section.subtreeCitationCount ?? section.citationCount) !== 1">s</span>
+                </li>
+              </ul>
+            </article>
+          </section>
         </div>
       </section>
     </Transition>
@@ -689,6 +780,92 @@ watch([current, backstack, forwardstack, articleCache], () => {
 .app__share-button:active {
   background: rgba(255, 210, 127, 0.25);
   filter: none;
+}
+
+.app__section-list {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--panel-border);
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.app__section-list-heading {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.app__section-card {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid rgba(var(--panel-border-rgb), 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(var(--panel-bg-rgb), 0.4);
+  transition: border-color var(--duration-fast) ease-out, box-shadow var(--duration-fast) ease-out, background var(--duration-fast) ease-out;
+}
+
+/* Applied briefly after a map click scrolls this card into view. */
+.app__section-card--flash {
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow: 0 0 0 1px var(--accent), 0 6px 24px rgba(var(--accent-rgb), 0.25);
+  animation: sectionCardFlash 1.5s ease-out;
+}
+
+@keyframes sectionCardFlash {
+  0% { box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.35), 0 6px 24px rgba(var(--accent-rgb), 0.3); }
+  100% { box-shadow: 0 0 0 1px var(--accent), 0 6px 24px rgba(var(--accent-rgb), 0.25); }
+}
+
+.app__section-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.app__section-card__header h4 {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.app__section-card__link {
+  text-decoration: none;
+  color: var(--text-link);
+  font-size: 0.9rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  opacity: 0.7;
+}
+
+.app__section-card__link:hover {
+  opacity: 1;
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.app__section-card__chips {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.app__section-card__chip {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: rgba(var(--panel-border-rgb), 0.12);
+  border: 1px solid rgba(var(--panel-border-rgb), 0.25);
+  border-radius: var(--radius-sm);
+  padding: 0.12rem 0.4rem;
 }
 
 .app__summary {

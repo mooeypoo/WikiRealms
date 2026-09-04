@@ -270,3 +270,171 @@ describe('App', () => {
     expect(wrapper.find('.app__badge--stale').exists()).toBe(true)
   })
 })
+
+describe('App section focus', () => {
+  const articleWithSections = {
+    articleId: 'en:736',
+    title: 'Albert Einstein',
+    summary: 'German-born theoretical physicist.',
+    url: 'https://en.wikipedia.org/wiki/Albert_Einstein',
+    latestRevisionId: 1234,
+    categories: [],
+    links: [],
+    images: [],
+    sections: {
+      lead: { ownSize: 100, links: [], citationCount: 0 },
+      totalSize: 900,
+      citationCount: 7,
+      sections: [
+        {
+          title: 'Early life',
+          depth: 1,
+          anchor: 'Early_life',
+          ownSize: 300,
+          subtreeSize: 500,
+          citationCount: 2,
+          subtreeCitationCount: 4,
+          children: [
+            {
+              title: 'Childhood',
+              depth: 2,
+              anchor: 'Childhood',
+              ownSize: 200,
+              subtreeSize: 200,
+              citationCount: 2,
+              subtreeCitationCount: 2,
+              children: [],
+            },
+          ],
+        },
+        {
+          title: 'Career',
+          depth: 1,
+          anchor: 'Career',
+          ownSize: 400,
+          subtreeSize: 400,
+          citationCount: 3,
+          subtreeCitationCount: 3,
+          children: [],
+        },
+      ],
+    },
+  }
+
+  // jsdom implements neither scrollIntoView nor layout; the focus path
+  // calls the former, so stub it and assert on the target element instead.
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue(articleWithSections)
+  })
+
+  // The focus path resolves its scroll target with document.getElementById,
+  // so a leftover App from a previous test would shadow the current one.
+  let mounted = null
+  afterEach(() => {
+    mounted?.unmount()
+    mounted = null
+  })
+
+  async function mountWithArticle() {
+    mounted = mount(App, { attachTo: document.body })
+    await mounted.find('input').setValue('Ein')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    await mounted.find('.search-bar__results button').trigger('click')
+    await flushPromises()
+    return mounted
+  }
+
+  async function clickSectionMarker(wrapper, target) {
+    wrapper.findComponent({ name: 'WorldView3D' }).vm.$emit('section-click', target)
+    await flushPromises()
+    await flushPromises()
+  }
+
+  it('renders a card per top-level section, with subsection/word/citation chips', async () => {
+    const wrapper = await mountWithArticle()
+
+    const cards = wrapper.findAll('.app__section-card')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].attributes('id')).toBe('app-section-Early_life')
+    expect(cards[0].find('h4').text()).toBe('Early life')
+    expect(cards[0].text()).toContain('1 subsection')
+    expect(cards[0].text()).toContain('4 cites')
+    expect(cards[1].attributes('id')).toBe('app-section-Career')
+    // Subsections aren't listed as cards of their own.
+    expect(wrapper.find('#app-section-Childhood').exists()).toBe(false)
+  })
+
+  it('links each card to its section on Wikipedia', async () => {
+    const wrapper = await mountWithArticle()
+
+    expect(wrapper.find('#app-section-Career a').attributes('href')).toBe(
+      'https://en.wikipedia.org/wiki/Albert_Einstein#Career',
+    )
+  })
+
+  it('flashes the clicked section card and scrolls it into view', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+
+    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('focuses the owning top-level card when a subsection marker is clicked', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { anchor: 'Childhood', sectionAnchor: 'Early_life', depth: 2 })
+
+    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+  })
+
+  it('expands a collapsed panel before focusing', async () => {
+    const wrapper = await mountWithArticle()
+    await wrapper.find('.app__article-toggle').trigger('click')
+    expect(wrapper.find('.app__selected-article').classes()).toContain('app__selected-article--collapsed')
+
+    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+
+    expect(wrapper.find('.app__selected-article').classes()).not.toContain('app__selected-article--collapsed')
+    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+  })
+
+  it('re-flashes the same card when it is clicked again', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+    // Halfway through the first flash the card is clicked again — the
+    // highlight restarts rather than expiring on the original timer.
+    await vi.advanceTimersByTimeAsync(800)
+    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+
+    await vi.advanceTimersByTimeAsync(800)
+    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
+  })
+
+  it('moves the highlight when a different section is clicked mid-flash', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+    await clickSectionMarker(wrapper, { anchor: 'Early_life', sectionAnchor: 'Early_life', depth: 1 })
+
+    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
+    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+  })
+
+  it('ignores a click on a peak with no section anchor (the folded range)', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { anchor: null, sectionAnchor: null, depth: 1 })
+
+    expect(wrapper.findAll('.app__section-card--flash')).toHaveLength(0)
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+})
