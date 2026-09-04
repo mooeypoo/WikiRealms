@@ -14,6 +14,7 @@ vi.mock('../src/adapters/snapshotStorage.js', () => ({
   clearSnapshotFromStorage: vi.fn(),
 }))
 
+import { currentTitle } from '../src/core/traversal/visitGraph.js'
 import { resetKeymap } from '../src/ui/design/useKeymap.js'
 import { resetOverlays } from '../src/ui/design/useOverlays.js'
 import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js'
@@ -169,7 +170,7 @@ describe('App', () => {
 
     expect(saveSnapshotToStorage).toHaveBeenCalled()
     const [snapshot] = saveSnapshotToStorage.mock.calls.at(-1)
-    expect(snapshot.navigation.current).toBe('Albert Einstein')
+    expect(currentTitle(snapshot.navigation.graph)).toBe('Albert Einstein')
     expect(snapshot.articleCache['Albert Einstein'].title).toBe('Albert Einstein')
   })
 
@@ -496,5 +497,88 @@ describe('App keyboard', () => {
 
     expect(document.querySelector('.settings__title')).toBeNull()
     wrapper.unmount()
+  })
+})
+
+describe('App URL state', () => {
+  afterEach(() => {
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('opens the realm a shared link points at', async () => {
+    // The whole point of this: every share link ever produced opened an
+    // empty app, because nothing read the parameter they carried.
+    history.replaceState(null, '', '?realm=Saturn')
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'Saturn',
+      summary: 'Sixth planet.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App)
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Saturn')
+  })
+
+  it('prefers a shared link over the session it would otherwise restore', async () => {
+    history.replaceState(null, '', '?realm=Saturn')
+    loadSnapshotFromStorage.mockReturnValue({
+      schemaVersion: '1.0',
+      createdAt: '2026-08-31T00:00:00Z',
+      appVersion: '0.1.0',
+      engineVersion: 'v1',
+      worlds: {},
+      navigation: { current: 'Jazz', backstack: [], forwardstack: [] },
+      articleCache: {},
+      generationCache: {},
+      uiState: {},
+    })
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'Saturn',
+      summary: 'Sixth planet.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App)
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenLastCalledWith('Saturn')
+  })
+
+  it('writes each move into browser history so Back retraces the journey', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:736',
+      title: 'Albert Einstein',
+      summary: 'Physicist.',
+      latestRevisionId: 1234,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    const wrapper = mount(App)
+    await wrapper.find('input').setValue('Ein')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    await wrapper.find('.search-bar__results button').trigger('click')
+    await flushPromises()
+
+    expect(window.location.search).toContain('realm=Albert')
+    expect(history.state).toMatchObject({ title: 'Albert Einstein' })
   })
 })

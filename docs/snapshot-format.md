@@ -21,7 +21,7 @@ WikiRealms should support portable session state so a user can:
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "createdAt": "2026-08-31T12:00:00Z",
   "appVersion": "0.1.0",
   "engineVersion": "gen-v1",
@@ -39,7 +39,32 @@ WikiRealms should support portable session state so a user can:
 Generated world outputs keyed by world identity.
 
 ### `navigation`
-Current article, traversal history, backstack, forwardstack, and visited path state.
+The journey, as a visit graph:
+
+```json
+"navigation": {
+  "graph": {
+    "nodes": {
+      "n1": { "id": "n1", "title": "Saturn", "parentId": null, "lastChildId": "n2" },
+      "n2": { "id": "n2", "title": "Titan", "parentId": "n1", "lastChildId": null }
+    },
+    "rootIds": ["n1"],
+    "currentId": "n2",
+    "nextId": 3
+  }
+}
+```
+
+A node is one ARRIVAL, not one article: reaching the same title by two
+different routes makes two nodes, because they are two different places in
+the journey. `lastChildId` is the branch the viewer last descended, which is
+what "forward" means when a node has several children.
+
+Schema 1.0 stored `current`, `backstack` and `forwardstack` instead. Those
+two flat stacks could not represent a journey that branched — going back and
+taking a different portal discarded the abandoned branch outright. A 1.0
+snapshot is still read, and migrates to a single unbranched journey, which is
+exactly what it recorded.
 
 ### `articleCache`
 Fetched article metadata, revision information, and normalized article records.

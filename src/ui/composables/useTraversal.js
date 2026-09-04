@@ -1,81 +1,79 @@
 import { computed, ref } from 'vue'
+import * as trail from '../../core/traversal/visitGraph.js'
 
 /**
- * Tracks the session's traversal history as a simple stack of article
- * titles (the identity we reload articles by). Decoupled from article
- * fetching/world generation — callers watch `current` and load whatever
- * it points to.
+ * Vue-reactive adapter over the visit graph.
  *
- * Standard browser-style history semantics:
- * - navigating to a new title pushes the current title onto the
- *   backstack and discards the forward stack (a new branch invalidates
- *   the old "forward" path)
- * - going back/forward moves entries between the two stacks
+ * The traversal SEMANTICS moved to core/traversal/visitGraph.js: they are
+ * article-graph domain logic, which docs/architecture.md keeps out of the
+ * presentation layer, and they are far easier to reason about as pure
+ * functions than as a composable holding refs. What is left here is the
+ * binding — a ref, and the projections the UI reads.
+ *
+ * `backstack` and `forwardstack` are kept as flat title lists so the rest of
+ * the app can carry on speaking in those terms while the tree does the
+ * remembering underneath.
  */
 export function useTraversal() {
-  const current = ref(null)
-  const backstack = ref([])
-  const forwardstack = ref([])
+  const graph = ref(trail.createVisitGraph())
 
-  const canGoBack = computed(() => backstack.value.length > 0)
-  const canGoForward = computed(() => forwardstack.value.length > 0)
+  const current = computed(() => trail.currentTitle(graph.value))
+  const currentNodeId = computed(() => graph.value.currentId)
+  const backstack = computed(() => trail.backTitles(graph.value))
+  const forwardstack = computed(() => trail.forwardTitles(graph.value))
+  const canGoBack = computed(() => trail.canGoBack(graph.value))
+  const canGoForward = computed(() => trail.canGoForward(graph.value))
+  const path = computed(() => trail.pathToCurrent(graph.value))
 
+  /** Arriving somewhere from where you are — portal travel. */
   function navigateTo(title) {
-    if (!title || title === current.value) return
+    graph.value = trail.visit(graph.value, title)
+  }
 
-    if (current.value !== null) {
-      backstack.value = [...backstack.value, current.value]
-    }
-    forwardstack.value = []
-    current.value = title
+  /** Starting somewhere unconnected — a search, a shared link, a random realm. */
+  function jumpTo(title) {
+    graph.value = trail.jump(graph.value, title)
+  }
+
+  /** Returning to a node already in the journey, without rewriting it. */
+  function goToNode(nodeId) {
+    graph.value = trail.goTo(graph.value, nodeId)
   }
 
   function goBack() {
-    if (!canGoBack.value) return
-
-    const previous = backstack.value[backstack.value.length - 1]
-    backstack.value = backstack.value.slice(0, -1)
-    if (current.value !== null) {
-      forwardstack.value = [current.value, ...forwardstack.value]
-    }
-    current.value = previous
+    graph.value = trail.goBack(graph.value)
   }
 
   function goForward() {
-    if (!canGoForward.value) return
-
-    const next = forwardstack.value[0]
-    forwardstack.value = forwardstack.value.slice(1)
-    if (current.value !== null) {
-      backstack.value = [...backstack.value, current.value]
-    }
-    current.value = next
+    graph.value = trail.goForward(graph.value)
   }
 
   function reset() {
-    current.value = null
-    backstack.value = []
-    forwardstack.value = []
+    graph.value = trail.createVisitGraph()
   }
 
   /**
-   * Hydrates traversal state directly (e.g. from a restored snapshot),
-   * bypassing navigateTo's push/branch semantics.
-   * @param {{ current?: string|null, backstack?: string[], forwardstack?: string[] }} state
+   * Hydrates from a restored session. Accepts either a graph or the flat
+   * history older snapshots stored.
    */
-  function restore({ current: restoredCurrent = null, backstack: restoredBackstack = [], forwardstack: restoredForwardstack = [] } = {}) {
-    current.value = restoredCurrent
-    backstack.value = [...restoredBackstack]
-    forwardstack.value = [...restoredForwardstack]
+  function restore(state = {}) {
+    graph.value = trail.isVisitGraph(state?.graph)
+      ? state.graph
+      : trail.fromLinearHistory(state)
   }
 
   return {
+    graph,
+    path,
     current,
+    currentNodeId,
     backstack,
     forwardstack,
     canGoBack,
     canGoForward,
     navigateTo,
+    jumpTo,
+    goToNode,
     goBack,
     goForward,
     reset,

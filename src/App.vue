@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
@@ -13,6 +13,7 @@ import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
 import { useKeymap } from './ui/design/useKeymap.js'
+import { onHistoryPop, pushRealm, readRealm } from './adapters/urlState.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 
@@ -27,8 +28,20 @@ const {
   buildWorld,
   clear: clearWorld,
 } = useWorld()
-const { current, backstack, forwardstack, canGoBack, canGoForward, navigateTo, goBack, goForward, restore } =
-  useTraversal()
+const {
+  graph,
+  current,
+  currentNodeId,
+  backstack,
+  canGoBack,
+  canGoForward,
+  navigateTo,
+  jumpTo,
+  goToNode,
+  goBack,
+  goForward,
+  restore,
+} = useTraversal()
 const { errorMessage: snapshotErrorMessage, exportSnapshot, importSnapshot, persist, loadPersisted } = useSnapshot()
 const { showInfoHub, showSettings, currentInfoTab, setInfoTab, preferences, updatePreferences } = useUIState()
 const { shareArticle, toastMessage, toastVisible } = useShare()
@@ -69,7 +82,9 @@ function countSections(sectionTree) {
 function onSelect(result) {
   isSearchOpen.value = false
   showNavigationTools.value = false
-  navigateTo(result.title)
+  // A search is not travel: it starts a journey rather than pretending the
+  // result was reached from wherever the viewer happened to be standing.
+  jumpTo(result.title)
 }
 
 function onPortalClick(portal) {
@@ -106,9 +121,7 @@ function cancelPortal() {
 
 function onExportClick() {
   const snapshot = exportSnapshot({
-    current: current.value,
-    backstack: backstack.value,
-    forwardstack: forwardstack.value,
+    graph: graph.value,
     articleCache: articleCache.value,
     engineVersion: CURRENT_ENGINE_VERSION,
   })
@@ -179,12 +192,40 @@ register({
   run: goForward,
 })
 
+// The URL is the session's address. Set while replaying history so a move
+// the browser initiated is not written straight back to it.
+let replayingHistory = false
+let stopHistoryListener = null
+
 onMounted(() => {
   const restored = loadPersisted()
   if (restored) {
     restore(restored)
     articleCache.value = { ...restored.articleCache }
   }
+
+  // A shared link wins over the restored session: someone following one
+  // means to land where it points, not where they last were.
+  const sharedRealm = readRealm()
+  if (sharedRealm && sharedRealm !== current.value) jumpTo(sharedRealm)
+
+  pushRealm(current.value, currentNodeId.value, { replace: true })
+
+  stopHistoryListener = onHistoryPop((state, realm) => {
+    replayingHistory = true
+    if (state.nodeId && graph.value.nodes[state.nodeId]) goToNode(state.nodeId)
+    else if (realm) jumpTo(realm)
+    replayingHistory = false
+  })
+})
+
+onUnmounted(() => stopHistoryListener?.())
+
+// Every move the viewer makes becomes a history entry, so the browser's own
+// back button retraces the journey instead of leaving the app.
+watch(currentNodeId, (nodeId) => {
+  if (replayingHistory) return
+  pushRealm(current.value, nodeId)
 })
 
 watch(current, (title) => {
@@ -237,12 +278,10 @@ watch(article, (newArticle) => {
   }
 })
 
-watch([current, backstack, forwardstack, articleCache], () => {
+watch([graph, articleCache], () => {
   persist(
     exportSnapshot({
-      current: current.value,
-      backstack: backstack.value,
-      forwardstack: forwardstack.value,
+      graph: graph.value,
       articleCache: articleCache.value,
       engineVersion: CURRENT_ENGINE_VERSION,
     }),
