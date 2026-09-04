@@ -55,7 +55,10 @@ function comboFromEvent(event) {
   if (modPressed) modifiers.push('mod')
   if (event.ctrlKey && !modPressed) modifiers.push('ctrl')
   if (event.altKey) modifiers.push('alt')
-  if (event.shiftKey) modifiers.push('shift')
+  // A printable key already encodes Shift in the character itself: pressing
+  // "?" reports key "?" WITH shiftKey set, so folding shift into the combo
+  // would make it 'shift+?' and no sane declaration would ever match it.
+  if (event.shiftKey && key.length > 1) modifiers.push('shift')
   return [...modifiers, key].join('+')
 }
 

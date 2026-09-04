@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
@@ -12,6 +12,7 @@ import { useTraversal } from './ui/composables/useTraversal.js'
 import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
+import { useKeymap } from './ui/design/useKeymap.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 
@@ -153,26 +154,30 @@ function onShareClick() {
   }
 }
 
-function handleAppKeyboard(event) {
-  if (event.target.matches('input, textarea, select')) return
+// Every shortcut in the app is declared here, in one registry. The Field
+// Guide renders this list rather than restating it, so a binding and its
+// documentation cannot drift apart the way they had.
+const { register } = useKeymap()
 
-  if (event.key === 'h' || event.key === 'H') {
-    event.preventDefault()
-    toggleHideHud()
-  } else if (event.key === 'ArrowLeft' && canGoBack.value) {
-    event.preventDefault()
-    goBack()
-  } else if (event.key === 'ArrowRight' && canGoForward.value) {
-    event.preventDefault()
-    goForward()
-  } else if (event.key === '1') {
-    event.preventDefault()
-    viewMode.value = '2d'
-  } else if (event.key === '3') {
-    event.preventDefault()
-    viewMode.value = '3d'
-  }
-}
+register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
+register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
+register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
+register({ keys: '1', label: 'Flat map view', group: 'View', run: () => (viewMode.value = '2d') })
+register({ keys: '3', label: 'Planet view', group: 'View', run: () => (viewMode.value = '3d') })
+register({
+  keys: 'ArrowLeft',
+  label: 'Back through your trail',
+  group: 'Travel',
+  enabled: () => canGoBack.value,
+  run: goBack,
+})
+register({
+  keys: 'ArrowRight',
+  label: 'Forward through your trail',
+  group: 'Travel',
+  enabled: () => canGoForward.value,
+  run: goForward,
+})
 
 onMounted(() => {
   const restored = loadPersisted()
@@ -180,10 +185,7 @@ onMounted(() => {
     restore(restored)
     articleCache.value = { ...restored.articleCache }
   }
-  window.addEventListener('keydown', handleAppKeyboard)
 })
-
-onUnmounted(() => window.removeEventListener('keydown', handleAppKeyboard))
 
 watch(current, (title) => {
   if (title) loadArticle(title)

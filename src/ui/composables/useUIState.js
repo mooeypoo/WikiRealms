@@ -1,8 +1,11 @@
-import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, ref } from 'vue';
 
 /**
- * useUIState - Centralized UI state management
- * Manages: modals, panels, preferences, keyboard shortcuts, preferences persistence
+ * Which surfaces are showing, and the persisted view preferences.
+ *
+ * Keyboard handling used to live here too, in a second window listener that
+ * could not see App.vue's. Both are gone: bindings are declared through
+ * useKeymap, and dismissal belongs to useOverlays.
  */
 export const useUIState = () => {
   // ===== MODAL / PANEL STATE =====
@@ -77,50 +80,12 @@ export const useUIState = () => {
     showSettings.value = !showSettings.value;
   };
 
-  const closeAllModals = () => {
-    showInfoHub.value = false;
-    showSettings.value = false;
-  };
-
   const setInfoTab = (tab) => {
     currentInfoTab.value = tab;
   };
 
-  // ===== KEYBOARD SHORTCUTS =====
-  const handleKeyDown = (e) => {
-    // Don't trigger shortcuts if typing in an input
-    if (e.target.matches('input, textarea')) {
-      return;
-    }
-
-    // Info Hub toggle: ? or i
-    if (e.key === '?' || e.key === 'i') {
-      e.preventDefault();
-      toggleInfoHub();
-    }
-
-    // Settings toggle: s
-    if (e.key === 's' || e.key === 'S') {
-      e.preventDefault();
-      toggleSettings();
-    }
-
-    // Close modals: Escape
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeAllModals();
-    }
-  };
-
-  // ===== LIFECYCLE =====
-  onMounted(() => {
-    loadPreferences();
-    window.addEventListener('keydown', handleKeyDown);
-  });
-
-  onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeyDown);
-  });
+  // Preferences load once, at module use; there is no listener to attach.
+  loadPreferences();
 
   return {
     // Modals
@@ -129,7 +94,6 @@ export const useUIState = () => {
     currentInfoTab,
     toggleInfoHub,
     toggleSettings,
-    closeAllModals,
     setInfoTab,
 
     // Preferences

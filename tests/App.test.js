@@ -14,6 +14,8 @@ vi.mock('../src/adapters/snapshotStorage.js', () => ({
   clearSnapshotFromStorage: vi.fn(),
 }))
 
+import { resetKeymap } from '../src/ui/design/useKeymap.js'
+import { resetOverlays } from '../src/ui/design/useOverlays.js'
 import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js'
 import { fetchWikipediaArticle } from '../src/adapters/wikipediaArticleAdapter.js'
 import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/snapshotStorage.js'
@@ -436,5 +438,63 @@ describe('App section focus', () => {
 
     expect(wrapper.findAll('.app__section-card--flash')).toHaveLength(0)
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+})
+
+describe('App keyboard', () => {
+  function press(key, target = document.body) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'target', { value: target })
+    window.dispatchEvent(event)
+  }
+
+  afterEach(() => {
+    resetOverlays()
+    resetKeymap()
+    document.body.innerHTML = ''
+  })
+
+  it('opens the guide from the registry and dismisses it from the stack', async () => {
+    // End to end through the two pieces that replaced the app's own two
+    // competing keydown listeners: useKeymap declares it, useOverlays
+    // dismisses it, and neither surface handles Escape itself any more.
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('?')
+    await flushPromises()
+    expect(document.querySelector('.guide__prose')).not.toBeNull()
+
+    press('Escape')
+    await flushPromises()
+    expect(document.querySelector('.guide__prose')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('opens settings, and opening it closes the guide rather than stacking', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('?')
+    await flushPromises()
+    press('s')
+    await flushPromises()
+
+    expect(document.querySelector('.settings__title')).not.toBeNull()
+    expect(document.querySelector('.guide__prose')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('ignores a bare-letter shortcut typed into the search field', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('s', wrapper.find('input').element)
+    await flushPromises()
+
+    expect(document.querySelector('.settings__title')).toBeNull()
+    wrapper.unmount()
   })
 })

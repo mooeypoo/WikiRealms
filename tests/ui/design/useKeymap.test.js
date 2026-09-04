@@ -32,6 +32,30 @@ describe('useKeymap', () => {
     expect(run).toHaveBeenCalledOnce()
   })
 
+  it('matches a shifted printable key by its character', () => {
+    // "?" arrives as key "?" with shiftKey set. Folding shift into the combo
+    // would produce 'shift+?', which no declaration would ever match — and
+    // "?" for help is the most conventional shortcut there is.
+    const run = vi.fn()
+    registerBinding({ keys: '?', run })
+
+    press('?', { shiftKey: true })
+
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('still distinguishes shift on a named key', () => {
+    const plain = vi.fn()
+    const shifted = vi.fn()
+    registerBinding({ keys: 'tab', run: plain })
+    registerBinding({ keys: 'shift+tab', run: shifted })
+
+    press('Tab', { shiftKey: true })
+
+    expect(shifted).toHaveBeenCalledOnce()
+    expect(plain).not.toHaveBeenCalled()
+  })
+
   it('does not fire a bare-letter shortcut while the viewer is typing', () => {
     const run = vi.fn()
     registerBinding({ keys: 'h', run })
