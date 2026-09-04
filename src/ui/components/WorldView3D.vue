@@ -24,7 +24,14 @@ import {
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
 import SectionTooltip from './SectionTooltip.vue'
-import { computeFaerieGridPosition, makeFaerieSprite } from '../rendering/citationFaeries.js'
+import {
+  PORTAL_MARKERS,
+  computePortalPulse,
+  computePortalScale,
+  isPortalRelated,
+  pickPortalHoverScale,
+  pickPortalOpacity,
+} from '../rendering/portalMarkers.js'
 import {
   cellFoliageRolls,
   computeArticleAverageCps,
@@ -32,13 +39,12 @@ import {
   pickFoliageVariant,
 } from '../rendering/foliage.js'
 import { useHoverState } from '../composables/useHoverState.js'
-import { BIOME_THRESHOLDS, CITATION_FAERIES } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
   showPortals: { type: Boolean, default: true },
   showSections: { type: Boolean, default: true },
-  showFaeries: { type: Boolean, default: true },
   showFoliage: { type: Boolean, default: true },
 })
 
@@ -73,7 +79,6 @@ let terrainMesh = null
 let waterMesh = null
 let portalGroup = null
 let haloGroup = null
-let faerieGroup = null
 let foliageGroup = null
 let animationFrameId = null
 let raycaster = null
@@ -86,9 +91,14 @@ let pointerDownPosition = null
 // Movement (CSS px) below which a press/release pair still counts as a click.
 const CLICK_DRAG_TOLERANCE = 5
 
-// Cached accent color for section halos — sourced from the app's --accent
-// CSS variable at rebuildScene time so a theme swap picks up automatically.
-let haloAccent = new THREE.Color(0xffd58c)
+// Cached accent color for section halos and portal auras — sourced from
+// the app's --accent CSS variable at rebuildScene time so a theme swap
+// picks up automatically.
+let accentColor = new THREE.Color(0xffd58c)
+
+// portalId currently under the cursor, read by the animate loop to grow
+// that sprite. Plain variable, not a ref — it's per-frame render state.
+let hoveredPortalId = null
 
 function detectWebGLSupport() {
   try {
@@ -110,16 +120,35 @@ function resolveAccentColor() {
   return new THREE.Color(0xffd58c)
 }
 
-/** Draws an emoji onto a canvas texture, used for the whirlpool portal sprites. */
-function makeEmojiSprite(emoji, size = 96) {
+/**
+ * Portal sprite: the whirlpool glyph sitting inside a soft accent-tinted
+ * aura. The aura is what makes a portal read as a light source on the
+ * map at exploration zoom — a bare emoji at this scale disappears into
+ * the terrain colors, especially over bright biomes.
+ */
+function makePortalSprite() {
+  const { size, glyphRatio, coreRatio, auraRatio } = PORTAL_MARKERS.texture
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  ctx.font = `${size * 0.8}px serif`
+  const center = size / 2
+  const { r, g, b } = accentColor
+  const rgb = `${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}`
+
+  const aura = ctx.createRadialGradient(center, center, size * coreRatio, center, center, center)
+  aura.addColorStop(0, 'rgba(255, 255, 255, 0.85)')
+  aura.addColorStop(auraRatio, `rgba(${rgb}, 0.4)`)
+  aura.addColorStop(1, `rgba(${rgb}, 0)`)
+  ctx.fillStyle = aura
+  ctx.beginPath()
+  ctx.arc(center, center, center, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.font = `${size * glyphRatio}px serif`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(emoji, size / 2, size / 2 + size * 0.05)
+  ctx.fillText('🌀', center, center + size * 0.02)
 
   const material = new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas),
@@ -203,17 +232,22 @@ function buildTerrainMesh(world) {
 
   const portals = new THREE.Group()
   if (props.showPortals) {
-    for (const portal of world.portals) {
+    world.portals.forEach((portal, index) => {
       const local = computePortalLocalPosition(portal, world.terrain, heightScale)
-      const sprite = makeEmojiSprite('🌀')
-      sprite.scale.set(5, 5, 1)
+      const sprite = makePortalSprite()
+      const baseScale = PORTAL_MARKERS.baseScale
+      sprite.scale.set(baseScale, baseScale, 1)
       sprite.position.set(local.x, local.y, local.z)
       sprite.userData.portal = portal
       sprite.userData.markerType = 'portal'
       sprite.userData.destinationTitle = portal.targetTitle ?? portal.targetArticleId
-      sprite.userData.baseScale = 5
+      sprite.userData.baseScale = baseScale
+      // Per-portal phase so a cluster shimmers instead of beating in unison.
+      sprite.userData.pulsePhase = index * 0.7
+      // Current (lerped) hover growth — 1 at rest, see animate().
+      sprite.userData.hoverScale = 1
       portals.add(sprite)
-    }
+    })
   }
 
   const halos = buildSectionHalos(world, heightScale)
@@ -253,31 +287,7 @@ function buildTerrainMesh(world) {
     foliage.add(new THREE.Points(geometry, material))
   }
 
-  // Citation faeries hover within the terrain footprint of their cited section.
-  const faeries = new THREE.Group()
-  for (const peak of world.terrain.peaks ?? []) {
-    if (!peak.ownCitationCount) continue
-
-    const { gridX, gridY } = computeFaerieGridPosition(peak, world.seed, width, height)
-    const localX = gridX - width / 2
-    const localY = height / 2 - gridY
-    const baseHeight = heightMap[gridY * width + gridX] * heightScale + 5
-    const faerieSprite = makeFaerieSprite(peak.ownCitationCount)
-    const faerieScale = Math.min(7 + peak.ownCitationCount * 0.35, 13)
-    faerieSprite.scale.set(faerieScale, faerieScale, 1)
-    faerieSprite.position.set(localX, localY, baseHeight)
-    faerieSprite.userData.baseHeight = baseHeight
-    faerieSprite.userData.hoverPhase = Math.random() * Math.PI * 2
-    faerieSprite.userData.peakTitle = peak.title
-    faerieSprite.userData.citationCount = peak.ownCitationCount
-    faerieSprite.userData.markerType = 'faerie'
-    // Peak's owning top-level section (Phase 1 stamp) — enables the
-    // section-linked pulse/dim reactions when a section is hovered.
-    faerieSprite.userData.sectionIndex = peak.sectionIndex ?? -1
-    faeries.add(faerieSprite)
-  }
-
-  return { mesh, water, portals, halos, faeries, foliage, heightScale }
+  return { mesh, water, portals, halos, foliage, heightScale }
 }
 
 /**
@@ -316,7 +326,7 @@ function buildSectionHalos(world, heightScale) {
 
     const ringGeo = new THREE.RingGeometry(ringRadii.inner, ringRadii.outer, 48)
     const ringMat = new THREE.MeshBasicMaterial({
-      color: haloAccent,
+      color: accentColor,
       transparent: true,
       opacity: initialOpacity,
       side: THREE.DoubleSide,
@@ -336,7 +346,7 @@ function buildSectionHalos(world, heightScale) {
       true,
     )
     const wallMat = new THREE.MeshBasicMaterial({
-      color: haloAccent,
+      color: accentColor,
       transparent: true,
       opacity: initialOpacity,
       side: THREE.DoubleSide,
@@ -480,7 +490,7 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
-  for (const group of [portalGroup, haloGroup, faerieGroup, foliageGroup]) {
+  for (const group of [portalGroup, haloGroup, foliageGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -497,21 +507,19 @@ function rebuildScene() {
 
   // Pull the accent color from CSS so a theme change gets picked up on
   // the next world rebuild without any three.js code touching styling.
-  haloAccent = resolveAccentColor()
+  accentColor = resolveAccentColor()
 
-  const { mesh, water, portals, halos, faeries, foliage, heightScale } = buildTerrainMesh(props.world)
+  const { mesh, water, portals, halos, foliage, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
   haloGroup = halos
-  faerieGroup = faeries
   foliageGroup = foliage
   // Apply the current layer toggles so a rebuild respects the user's
   // last on/off state without waiting for the layer-watch to fire.
   haloGroup.visible = props.showSections
-  faerieGroup.visible = props.showFaeries
   foliageGroup.visible = props.showFoliage
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, faerieGroup, foliageGroup)
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, foliageGroup)
 
   const { width, height } = props.world.terrain
   const cameraDistance = Math.max(width, height) * 0.9
@@ -608,27 +616,20 @@ function pickHaloClickTarget() {
 }
 
 function onPointerMove(event) {
-  if (!raycaster || (!portalGroup && !faerieGroup)) return
+  if (!raycaster) return
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const markers = [
-    ...(portalGroup?.children ?? []),
-    ...(faerieGroup?.children ?? []),
-  ]
-  const [hit] = raycaster.intersectObjects(markers, true)
+  const [hit] = raycaster.intersectObjects(portalGroup?.children ?? [], true)
 
   let node = hit?.object ?? null
-  while (node && node.userData.markerType === undefined && node.userData.peakTitle === undefined) node = node.parent
-  hoveredMarker.value = node?.userData.markerType === 'portal'
-    ? { title: node.userData.destinationTitle, type: 'portal' }
-    : node?.userData.peakTitle
-      ? {
-        title: node.userData.peakTitle,
-        citationCount: node.userData.citationCount ?? 0,
-        type: node.userData.markerType ?? 'peak',
-      }
-      : null
+  while (node && node.userData.markerType === undefined) node = node.parent
+  const portal = node?.userData.markerType === 'portal' ? node.userData.portal : null
+
+  hoveredMarker.value = portal ? { title: node.userData.destinationTitle, type: 'portal' } : null
+  hoveredPortalId = portal?.portalId ?? null
+  // Portals are the one marker a click navigates through, so say so.
+  if (renderer) renderer.domElement.style.cursor = portal ? 'pointer' : ''
 
   tooltipX.value = event.clientX - rect.left
   tooltipY.value = event.clientY - rect.top
@@ -726,6 +727,8 @@ function updateSectionHoverFromTerrain() {
 function onPointerLeave() {
   hoverState.clearNow()
   hoveredMarker.value = null
+  hoveredPortalId = null
+  if (renderer) renderer.domElement.style.cursor = ''
 }
 
 function resizeToContainer() {
@@ -741,48 +744,38 @@ function resizeToContainer() {
 function animate() {
   animationFrameId = requestAnimationFrame(animate)
 
-  const nowMs = performance.now()
-  const nowSec = nowMs * 0.001
+  const nowSec = performance.now() * 0.001
   const peaks = props.world?.terrain?.peaks
   const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
-  const hasHover = hoveredTopLevel >= 0
 
   if (portalGroup) {
-    const t = nowMs * 0.003
-    portalGroup.children.forEach((sprite, index) => {
-      const pulse = 1 + Math.sin(t + index) * 0.15
-      const base = sprite.userData.baseScale
-      sprite.scale.set(base * pulse, base * pulse, 1)
+    const alpha = PORTAL_MARKERS.lerpAlpha
+    for (const sprite of portalGroup.children) {
+      const portal = sprite.userData.portal
+      const isHovered = hoveredPortalId !== null && portal?.portalId === hoveredPortalId
+
+      // Hover growth eases in via the same lerp as the opacity fade, so
+      // the sprite swells under the cursor instead of snapping.
+      const targetHoverScale = pickPortalHoverScale(isHovered)
+      const hoverScale = sprite.userData.hoverScale + (targetHoverScale - sprite.userData.hoverScale) * alpha
+      sprite.userData.hoverScale = hoverScale
+
+      const pulse = computePortalPulse(nowSec, sprite.userData.pulsePhase)
+      const scale = computePortalScale(sprite.userData.baseScale, pulse, hoverScale)
+      sprite.scale.set(scale, scale, 1)
+
       // Section-link: dim portals whose section isn't the hovered one.
-      // Nothing hovered → all at full opacity.
-      const portalSection = sprite.userData.portal?.sectionIndex ?? -1
-      const isRelated = !hasHover || portalSection === hoveredTopLevel
-      const target = isRelated ? 1 : 0.28
-      sprite.material.opacity += (target - sprite.material.opacity) * 0.15
+      // Nothing hovered → all at full presence.
+      const isRelated = isPortalRelated(portal?.sectionIndex ?? -1, hoveredTopLevel)
+      const target = pickPortalOpacity(isRelated, isHovered)
+      sprite.material.opacity += (target - sprite.material.opacity) * alpha
       sprite.material.transparent = true
-    })
+    }
   }
 
   if (haloGroup) {
     updateHalos(nowSec)
     updateSectionTooltip()
-  }
-
-  if (faerieGroup) {
-    const baseFreq = CITATION_FAERIES.hoverFrequency
-    const t = nowSec * baseFreq
-    faerieGroup.children.forEach((sprite) => {
-      const hoverPhase = sprite.userData.hoverPhase || 0
-      // Related faeries hover a bit stronger + brighter; unrelated ones
-      // dim to background presence so the hovered section reads clearly.
-      const faerieSection = sprite.userData.sectionIndex ?? -1
-      const isRelated = !hasHover || faerieSection === hoveredTopLevel
-      const amplitudeScale = isRelated ? 1.35 : 1
-      const hoverOffset = Math.sin(t + hoverPhase) * CITATION_FAERIES.hoverAmplitude * amplitudeScale
-      sprite.position.z = sprite.userData.baseHeight + hoverOffset
-      const targetOpacity = isRelated ? 1 : 0.35
-      sprite.material.opacity += (targetOpacity - sprite.material.opacity) * 0.15
-    })
   }
 
   controls?.update()
@@ -799,10 +792,9 @@ onMounted(() => {
   renderer = new THREE.WebGLRenderer({ antialias: true })
   containerRef.value.appendChild(renderer.domElement)
 
-  // A single rotated group so terrain/water/portals/halos/faeries/foliage
-  // all share one consistent transform from grid-space (XY, Z-up) to
+  // A single rotated group so terrain/water/portals/halos/foliage all
+  // share one consistent transform from grid-space (XY, Z-up) to
   // world-space (Y-up).
-  // consistent transform from grid-space (XY, Z-up) to world-space (Y-up).
   worldGroup = new THREE.Group()
   worldGroup.rotation.x = -Math.PI / 2
   scene.add(worldGroup)
@@ -848,10 +840,9 @@ onBeforeUnmount(() => {
 watch(() => [props.world, props.showPortals], rebuildScene)
 
 watch(
-  () => [props.showSections, props.showFaeries, props.showFoliage],
+  () => [props.showSections, props.showFoliage],
   () => {
     if (haloGroup) haloGroup.visible = props.showSections
-    if (faerieGroup) faerieGroup.visible = props.showFaeries
     if (foliageGroup) foliageGroup.visible = props.showFoliage
   },
   { immediate: false },
@@ -866,8 +857,8 @@ watch(
       class="world-view-3d__tooltip"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
-      <strong>{{ hoveredMarker.type === 'portal' ? `Portal to ${hoveredMarker.title}` : hoveredMarker.type === 'faerie' ? `Citations in ${hoveredMarker.title}` : hoveredMarker.title }}</strong>
-      <span v-if="hoveredMarker.type !== 'portal'">{{ hoveredMarker.citationCount }} references</span>
+      <strong>Portal to {{ hoveredMarker.title }}</strong>
+      <span>Click to travel</span>
     </div>
     <SectionTooltip
       :model="sectionTooltipModel"

@@ -36,7 +36,7 @@ This layer should not know about the UI or network fetching.
 Responsible for:
 - displaying the generated world
 - rendering 2D and Three.js 3D terrain views from the same world data
-- showing portal, section-beacon, and citation-faerie interactions
+- showing portal and section-beacon interactions
 - presenting section and citation context on hover
 - visualizing history and article context
 - handling user input and navigation actions

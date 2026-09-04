@@ -52,8 +52,9 @@ needs to be used now, but it's worth capturing so nothing is forgotten.
   in multiple sections without being deduplicated away)
 - per-section citation count — parsed from inline reference markers. The
   citation density of the dominant top-level section selects land lushness:
-  desert, light vegetation, meadow, woodland, or jungle. A section's own
-  citations place a faerie marker in its peak footprint in the 3D view.
+  desert, light vegetation, meadow, woodland, or jungle, and modulates how
+  densely that land is planted. Citation density is expressed entirely
+  through the land itself — a well-sourced section is visibly greener.
 - section anchors (`#Section_Title`) — retained for future click-to-jump
   interactions
 - templates (infoboxes, navboxes, citation lists, etc.) — not represented
@@ -151,7 +152,6 @@ Feature signals currently influence:
 - biome distribution: citation density drives land lushness; elevation still
   determines ocean, beach, mountain, and snow
 - portal count and placement
-- citation-faerie placement
 
 ## Section identity in generation output
 
@@ -176,19 +176,33 @@ This is a data-side convention only; how (or whether) a renderer chooses
 to react to the ownership map — hover halos, region highlights, biome
 labels — is a UI concern that stays out of the generation engine.
 
-## Citation Faeries
+## Portal Placement
 
-The generation engine exposes both a section's own citation count and its
-subtree citation total on terrain peaks. The UI deliberately renders one
-glowing faerie per cited retained section, rather than one per individual
-reference, to preserve legibility.
+A portal's region resolves most-specific-first: the section's own peak
+(matched by heading anchor, so a subsection that survived peak folding
+gets its own footprint), then its top-level ancestor's peak, then the
+"Miscellaneous" aggregate when that ancestor was folded away. Lead-section
+links have no mountain of their own and are placed in a region at the
+middle of the map.
 
-Faeries are placed deterministically from the world seed within the owning
-peak's footprint, offset from its summit beacon. They hover at a bounded
-height above the terrain and reveal `Citations in <section name>` and the
-section's reference count on hover. This keeps citation locations
-section-aware without inventing a false exact position for individual
-references in article prose.
+Within a region, portals are spread by sunflower spacing — the i-th of n
+sits at radius proportional to sqrt((i + 1/2)/n) at successive golden
+angles, with a seeded rotation and small jitter. Spacing by area rather
+than by radius is what keeps a link-heavy section from piling most of its
+portals near its own summit; the golden angle keeps a growing set from
+falling into spokes or rings. Every portal lands between
+`minFootprintFraction` and `maxFootprintFraction` of the region radius, so
+it clears the section's summit marker and still reads as inside that
+section's land.
+
+The `maxPortals` cap is applied to a round-robin over sections rather than
+to document order, so every linked section places its first portal before
+any section places its second. In document order a link-heavy opening
+section would otherwise swallow the entire budget.
+
+Citation counts remain on peaks (own and subtree totals) but are no longer
+rendered as their own marker: citation density reads through biome
+lushness and foliage density instead.
 
 ## Biome-Aware Foliage
 
@@ -206,7 +220,7 @@ deterministic terrain data and do not alter world generation.
 2. Fetch metadata and content features
 3. Derive deterministic seed material
 4. Generate terrain and biome structure
-5. Place section-aware portals and citation markers
+5. Place section-aware portals
 6. Assemble final world model
 
 ## Design notes

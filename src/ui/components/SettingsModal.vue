@@ -29,14 +29,6 @@
 
               <label class="settings-modal__row">
                 <span>
-                  <strong>✨ Citation faeries</strong>
-                  <small>Hovering sprites — one per cited section.</small>
-                </span>
-                <input type="checkbox" :checked="preferences.showFaeries" @change="update('showFaeries', $event.target.checked)" />
-              </label>
-
-              <label class="settings-modal__row">
-                <span>
                   <strong>🌲 Foliage</strong>
                   <small>Trees, grass, and scrub matching each biome.</small>
                 </span>
@@ -88,7 +80,6 @@ function reset() {
   emit('update:preferences', {
     showSections: true,
     showPortals: true,
-    showFaeries: true,
     showFoliage: true,
     panelOpacity: 0.9,
     autoHideHUD: false,

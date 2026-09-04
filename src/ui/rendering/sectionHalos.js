@@ -1,5 +1,3 @@
-import { CITATION_FAERIES } from '../../engine/generation/config.js'
-
 /**
  * Section marker sizing/animation parameters — the "energy wall" cylinder
  * around each section's radius plus a soft flat halo ring on the ground.
@@ -66,10 +64,11 @@ export const SECTION_MARKERS = Object.freeze({
     subsectionIdle: 0.05,
   }),
   // Slow breathing pulse on the hovered wall — modulates opacity so it
-  // reads as "attention" without being distracting. Kept slow (period ~2s)
-  // so it doesn't compete with the faster faerie hover animation.
+  // reads as "attention" without being distracting. Kept slow (period
+  // ~20s) so it stays well under the portal marker's own pulse and never
+  // reads as a second competing animation.
   pulse: Object.freeze({
-    frequency: CITATION_FAERIES.hoverFrequency * 0.5, // rad/sec, ~half faerie speed
+    frequency: 0.3, // rad/sec
     amplitude: 0.15, // ± this on top of opacity.hovered
   }),
 })
@@ -216,7 +215,7 @@ export function relationshipToHover(peak, hoveredIndex, peakIndex, peaks) {
  * Given a hovered peaks-array index (top-level OR subsection) resolves
  * to the peaks-array index of its owning top-level section. Used by
  * markers whose semantics only care about "which top-level range am I
- * in" — portals and citation faeries.
+ * in" — portals, for example.
  *
  * @param {number | null | undefined} hoveredIndex
  * @param {object[]} peaks

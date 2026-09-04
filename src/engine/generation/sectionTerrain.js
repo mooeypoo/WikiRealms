@@ -159,7 +159,7 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
  * order (parent immediately followed by its subtree).
  *
  * Enables O(1) "which section does this marker belong to" lookups for
- * portals, faeries, halos, hover state, etc. Kept as a separate pass so
+ * portals, halos, hover state, etc. Kept as a separate pass so
  * flattenPeaks stays free of index-bookkeeping state.
  *
  * @param {object[]} peaks output of flattenPeaks (mutated in place)

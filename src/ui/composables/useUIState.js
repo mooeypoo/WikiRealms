@@ -16,7 +16,6 @@ export const useUIState = () => {
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
-    showFaeries: true,
     showFoliage: true,
     panelOpacity: 0.9,
     autoHideHUD: false,
@@ -35,6 +34,10 @@ export const useUIState = () => {
           parsed.showSections = parsed.showPeakFlags !== 'none';
           delete parsed.showPeakFlags;
         }
+        // The citation-faerie layer is gone — citation density now reads
+        // through the biome greenery instead. Drop the stored toggle so
+        // it doesn't linger in the persisted preferences forever.
+        delete parsed.showFaeries;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

@@ -11,13 +11,28 @@ describe('useUIState — preference migration', () => {
     localStorage.clear()
   })
 
-  it('defaults to all four map-layer toggles enabled', () => {
+  it('defaults to all three map-layer toggles enabled', () => {
     const { preferences } = useUIState()
 
     expect(preferences.showSections).toBe(true)
     expect(preferences.showPortals).toBe(true)
-    expect(preferences.showFaeries).toBe(true)
     expect(preferences.showFoliage).toBe(true)
+    // The citation-faerie layer was removed; citation density now reads
+    // through the biome greenery.
+    expect(preferences.showFaeries).toBeUndefined()
+  })
+
+  it('drops a stored showFaeries toggle from the removed faerie layer', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ showSections: false, showFaeries: false, panelOpacity: 0.9 }),
+    )
+    const { preferences, loadPreferences } = useUIState()
+    loadPreferences()
+
+    expect(preferences.showFaeries).toBeUndefined()
+    // Unrelated stored preferences still load.
+    expect(preferences.showSections).toBe(false)
   })
 
   it('migrates legacy showPeakFlags="none" to showSections=false', () => {
@@ -58,18 +73,18 @@ describe('useUIState — preference migration', () => {
 
   it('savePreferences round-trips the new boolean layer toggles', () => {
     const { preferences, savePreferences, loadPreferences } = useUIState()
-    Object.assign(preferences, { showSections: false, showFaeries: false })
+    Object.assign(preferences, { showSections: false, showFoliage: false })
     savePreferences()
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY))
     expect(stored.showSections).toBe(false)
-    expect(stored.showFaeries).toBe(false)
+    expect(stored.showFoliage).toBe(false)
 
     // Reset the in-memory values and reload from storage to prove
     // the persisted booleans come back correctly.
-    Object.assign(preferences, { showSections: true, showFaeries: true })
+    Object.assign(preferences, { showSections: true, showFoliage: true })
     loadPreferences()
     expect(preferences.showSections).toBe(false)
-    expect(preferences.showFaeries).toBe(false)
+    expect(preferences.showFoliage).toBe(false)
   })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createRng } from '../../../src/engine/generation/rng.js'
+import { PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
 import { generateSectionPortals } from '../../../src/engine/generation/sectionPortals.js'
 
 const width = 32
@@ -125,6 +126,80 @@ describe('generateSectionPortals', () => {
     const b = generateSectionPortals(tree, peaks, createRng(42), { width, height })
 
     expect(a).toEqual(b)
+  })
+
+  it('places a subsection\'s portals in its OWN peak when that subsection kept one', () => {
+    const peaksWithSubPeak = [
+      ...peaks,
+      { x: 26, y: 26, radius: 3, title: 'Sub Feature', anchor: 'Sub_Feature', depth: 2 },
+    ]
+    const tree = {
+      lead: { links: [] },
+      sections: [
+        {
+          title: 'Features',
+          anchor: 'Features',
+          links: [],
+          children: [{ title: 'Sub Feature', anchor: 'Sub_Feature', links: ['Polystyrene'], children: [] }],
+        },
+      ],
+    }
+
+    const [portal] = generateSectionPortals(tree, peaksWithSubPeak, createRng(1), { width, height })
+
+    // Inside the sub-peak, not merely somewhere in the parent range.
+    expect(Math.hypot(portal.gridX - 26, portal.gridY - 26)).toBeLessThanOrEqual(3)
+    // Hover-linking still resolves to the owning top-level range.
+    expect(portal.sectionTitle).toBe('Features')
+    expect(portal.sectionIndex).toBe(1)
+  })
+
+  it('spreads a link-heavy section across its footprint instead of stacking portals', () => {
+    const links = Array.from({ length: 12 }, (_, i) => `Link ${i}`)
+    const tree = { lead: { links: [] }, sections: [{ title: 'Purpose', anchor: 'Purpose', links, children: [] }] }
+
+    const portals = generateSectionPortals(tree, peaks, createRng(3), { width, height })
+    const cells = new Set(portals.map((p) => `${p.gridX},${p.gridY}`))
+    const distances = portals.map((p) => Math.hypot(p.gridX - 16, p.gridY - 16))
+
+    // No two portals land on the same grid cell.
+    expect(cells.size).toBe(portals.length)
+    // Spread by area, not piled at the summit: the set reaches the outer
+    // footprint and still clears the middle where the section marker sits.
+    expect(Math.max(...distances)).toBeGreaterThan(10 * 0.7)
+    expect(Math.min(...distances)).toBeGreaterThan(0)
+    for (const distance of distances) expect(distance).toBeLessThanOrEqual(10)
+  })
+
+  it('gives every linked section a portal before any section gets a second', () => {
+    const tree = {
+      lead: { links: [] },
+      sections: [
+        // Enough links to swallow the whole cap in document order.
+        { title: 'Purpose', anchor: 'Purpose', links: Array.from({ length: 40 }, (_, i) => `P${i}`), children: [] },
+        { title: 'Features', anchor: 'Features', links: ['Chemistry'], children: [] },
+      ],
+    }
+
+    const portals = generateSectionPortals(tree, peaks, createRng(1), { width, height })
+
+    expect(portals).toHaveLength(PORTAL_LIMITS.maxPortals)
+    expect(portals.some((p) => p.targetArticleId === 'Chemistry')).toBe(true)
+  })
+
+  it('places lead links in the middle of the map, not in the folded-sections aggregate', () => {
+    const tree = { lead: { links: ['Pet', 'Dog', 'Cat', 'Bird'] }, sections: [] }
+    const peaksWithMisc = [{ x: 26, y: 26, radius: 3, title: 'Miscellaneous', depth: 1 }]
+
+    const portals = generateSectionPortals(tree, peaksWithMisc, createRng(1), { width, height })
+    const leadRadius = Math.min(width, height) * PORTAL_LIMITS.leadRegionRadiusRatio
+
+    for (const portal of portals) {
+      expect(Math.hypot(portal.gridX - width / 2, portal.gridY - height / 2)).toBeLessThanOrEqual(leadRadius)
+    }
+    // They'd all be inside the tiny Miscellaneous footprint if the lead
+    // were still sharing its region.
+    expect(portals.some((p) => Math.hypot(p.gridX - 26, p.gridY - 26) > 3)).toBe(true)
   })
 
   it('keeps every portal within the grid bounds', () => {

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 /**
  * Tracks which section is currently "focused" on the world view — the
  * single source of truth every marker layer reactively reads from
- * (halos, labels, portals, faeries, tooltip).
+ * (halos, labels, portals, tooltip).
  *
  * The hover state is intentionally a small dumb value ({ sectionIndex,
  * source }) rather than an object reference — index space matches

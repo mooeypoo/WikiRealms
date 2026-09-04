@@ -52,6 +52,15 @@ export const FEATURE_SOFT_CAPS = Object.freeze({
  */
 export const PORTAL_LIMITS = Object.freeze({
   maxPortals: 24,
+  // Portals sit between these fractions of their region's footprint
+  // radius: far enough out to clear the section's summit marker, far
+  // enough in to still read as "inside this section's land".
+  minFootprintFraction: 0.18,
+  maxFootprintFraction: 0.92,
+  // Lead-section links belong to the article as a whole rather than to
+  // any one mountain, so they get a central region sized to this
+  // fraction of the smaller grid axis.
+  leadRegionRadiusRatio: 0.3,
 })
 
 /**
@@ -252,16 +261,5 @@ export const TERRAIN_GENERATION = Object.freeze({
     passes: 1,
     strength: 0.15,
   },
-})
-
-/**
- * Citation visualization: glowing faerie birds hovering near cited sections.
- */
-export const CITATION_FAERIES = Object.freeze({
-  glimmerMax: 3, // small glimmer: 1-3 citations
-  faerieMax: 7, // bright faerie: 4-7 citations
-  // 8+ citations: a prominent faerie flock
-  hoverAmplitude: 1.4,
-  hoverFrequency: 0.6,
 })
 
