@@ -1,7 +1,7 @@
 import { createNoise3D } from 'simplex-noise'
-import { PEAK_LAYOUT, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
-import { classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
-import { computeSpiralLayout } from './layout.js'
+import { BIOME_THRESHOLDS, GRID, PEAK_LAYOUT, POLAR_CAPS, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
+import { BIOME, classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
+import { computeRidgeLayout, computeSpiralLayout } from './layout.js'
 
 /**
  * The grid is an equirectangular map: column 0 and column width-1 are
@@ -9,14 +9,14 @@ import { computeSpiralLayout } from './layout.js'
  * measures an x-distance or reads an x-neighbour has to say so, or a
  * landmass spanning the seam gets a cliff down the ±180° line.
  *
- * Full modular reduction rather than a single ±width nudge: the
- * bounding-box pass below walks x from `peak.x - reach`, which for a wide
- * peak is several widths outside the grid.
- *
  * Latitude does NOT wrap — the top and bottom rows are the poles, so y
  * stays clamped throughout.
  */
 function wrapDeltaX(dx, width) {
+  // Full modular reduction, not a single ±width nudge. The bounding-box
+  // passes walk x from `peak.x - reach`, which for a wide peak is many
+  // widths away from the grid, so a one-step adjustment leaves the
+  // distance wrong by whole multiples of the world.
   const wrapped = ((dx % width) + width) % width
   return wrapped > width / 2 ? wrapped - width : wrapped
 }
@@ -24,6 +24,15 @@ function wrapDeltaX(dx, width) {
 /** Wraps a column index into [0, width). */
 function wrapColumn(x, width) {
   return ((x % width) + width) % width
+}
+
+/**
+ * Bounds a peak's footprint into [minPeakRadius, maxPeakRadiusRatio x grid].
+ * See PEAK_LAYOUT in config.js for why the upper bound exists.
+ */
+function clampPeakRadius(radius) {
+  const maximum = Math.min(GRID.width, GRID.height) * PEAK_LAYOUT.maxPeakRadiusRatio
+  return Math.min(Math.max(radius, PEAK_LAYOUT.minPeakRadius), maximum)
 }
 
 function clamp01(value) {
@@ -122,17 +131,120 @@ function thermalErosion(heightMap, width, height, iterations, strength, slopeThr
 }
 
 /**
+ * Raises a small, noise-bitten icecap around each pole, in place.
+ *
+ * The cap's radius is measured in grid ROWS from the pole, which on the
+ * equirectangular grid is true angular distance regardless of longitude —
+ * so the result is a genuine circular cap on the globe even though it
+ * spans every column at the top and bottom rows.
+ *
+ * @returns {Uint8Array} 1 for every cell the cap raised
+ */
+function applyPolarCaps(heightMap, width, height, rng) {
+  const mask = new Uint8Array(width * height)
+  const reach = POLAR_CAPS.reachRows
+  if (reach <= 0) return mask
+
+  const capNoise = createNoise3D(rng)
+  const params = {
+    octaves: POLAR_CAPS.noiseOctaves,
+    persistence: POLAR_CAPS.noisePersistence,
+    scale: POLAR_CAPS.noiseScale,
+  }
+  const seaLevel = BIOME_THRESHOLDS.oceanMaxHeight
+
+  for (let y = 0; y < height; y++) {
+    const rowsFromPole = Math.min(y, height - 1 - y)
+    if (rowsFromPole > reach) continue
+    // 1 at the pole itself, 0 at the cap's nominal edge.
+    const closeness = 1 - rowsFromPole / reach
+
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      // Noise eats into the disc so the shoreline is ragged rather than a
+      // drawn circle; at the pole itself `closeness` is 1 and no amount of
+      // roughness can punch a hole through the middle.
+      const bite = (1 - sampleFractalNoiseWrapped(capNoise, x, y, width, params)) * POLAR_CAPS.roughness
+      const shape = closeness - bite
+      if (shape <= 0) continue
+
+      const lifted = seaLevel + smoothstep(0, 1, shape) * POLAR_CAPS.peakLift
+      if (lifted > heightMap[idx]) {
+        heightMap[idx] = clamp01(lifted)
+        mask[idx] = 1
+      }
+    }
+  }
+  return mask
+}
+
+/**
+ * Builds the per-cell displacement field used to domain-warp the
+ * continental base. Two independent noise channels give an x and a y
+ * offset; sampling them on the cylinder (see sampleFractalNoiseWrapped)
+ * keeps the warp — and therefore the coastline it bends — continuous
+ * across the ±180° seam.
+ *
+ * Latitude is tapered toward the poles: a warp that pushed land poleward
+ * would undo the latitude band that keeps the polar caps open ocean.
+ *
+ * @returns {{ warpX: Float64Array, warpY: Float64Array }}
+ */
+function buildWarpField(width, height, rng, continentConfig) {
+  const cellCount = width * height
+  const warpX = new Float64Array(cellCount)
+  const warpY = new Float64Array(cellCount)
+  const amplitude = continentConfig.warpAmplitude
+  if (!amplitude) return { warpX, warpY }
+
+  const noiseA = createNoise3D(rng)
+  const noiseB = createNoise3D(rng)
+  const params = {
+    octaves: continentConfig.warpOctaves,
+    persistence: continentConfig.warpPersistence,
+    scale: continentConfig.warpScale,
+  }
+
+  for (let y = 0; y < height; y++) {
+    // 1 at the equator, 0 at either pole.
+    const poleTaper = Math.sin((y / Math.max(height - 1, 1)) * Math.PI)
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x
+      warpX[idx] = (sampleFractalNoiseWrapped(noiseA, x, y, width, params) * 2 - 1) * amplitude
+      warpY[idx] = (sampleFractalNoiseWrapped(noiseB, x, y, width, params) * 2 - 1) * amplitude * poleTaper
+    }
+  }
+  return { warpX, warpY }
+}
+
+/**
  * Number of standard deviations out at which a Gaussian peak stops being
  * evaluated. At 4σ the remaining contribution is exp(-8) ≈ 3.4e-4 of the
- * peak's amplitude — orders of magnitude below what survives quantization
- * into the Float32 vertex buffer, let alone what an eye can see.
+ * peak's amplitude — several orders of magnitude below what survives
+ * quantization into the Float32 vertex buffer, let alone what an eye can
+ * see on a slope.
  *
- * This matters because passes 2 and 3 are O(cells × peaks): on the
- * 512 × 256 grid with a full subsection tree that is ~33M exp() calls if
+ * This matters because passes 2 and 3 are O(cells × peaks): on a
+ * 512 × 256 grid with a full subsection tree that's ~33M exp() calls if
  * every peak is tested against every cell. Bounding each peak to its own
- * 4σ box is what keeps the wider grid from costing anything.
+ * 4σ box cuts that by well over an order of magnitude, which is what
+ * keeps the 2:1 grid (needed for the planet view — see config.js GRID)
+ * from costing anything.
  */
 const GAUSSIAN_CUTOFF_SIGMAS = 4
+
+/**
+ * Angle step between successive top-level section axes. The golden angle
+ * never repeats or lines up, so adjacent sections never end up with
+ * parallel ranges (which would read as corduroy rather than geology).
+ */
+const ORIENTATION_STEP = Math.PI * (3 - Math.sqrt(5))
+
+/**
+ * Extra bounding-box slack for the continental pass, covering the largest
+ * displacement the domain warp can apply to a sample point.
+ */
+const WARP_REACH_MARGIN = TERRAIN_GENERATION.continent.warpAmplitude * 1.5
 
 /**
  * Writes max_i(amplitude_i * exp(-d²/(2σ_i²))) into `out` for every cell,
@@ -141,39 +253,138 @@ const GAUSSIAN_CUTOFF_SIGMAS = 4
  * Loop order is inverted relative to the naive version — peaks outside,
  * cells inside — so total work is the sum of the peaks' footprints rather
  * than the product of cells and peaks. The MAX blend is order-independent,
- * so the result matches testing every peak against every cell (modulo the
- * 4σ truncation above).
- *
- * Columns are visited unwrapped and folded back with wrapColumn, so a peak
- * near the seam spills onto the far edge instead of being cut off by it.
+ * so the result is identical to testing every peak against every cell
+ * (modulo the 4σ truncation above).
  *
  * @param {Float64Array} out per-cell accumulator, zero-initialized
  * @param {{ x: number, y: number, amplitude: number }[]} peaks
  * @param {number[]} sigmaSqValues per-peak 2σ² (the exp() denominator)
+ * @param {number} width
+ * @param {number} height
  */
-function accumulateGaussianMax(out, peaks, sigmaSqValues, width, height) {
+function accumulateGaussianMax(out, peaks, axes, width, height) {
   for (let i = 0; i < peaks.length; i++) {
     const peak = peaks[i]
-    const sigmaSq = sigmaSqValues[i]
-    // sigmaSqValues holds 2σ², so σ = sqrt(sigmaSq / 2).
-    const reach = GAUSSIAN_CUTOFF_SIGMAS * Math.sqrt(sigmaSq / 2)
+    const { alongSq, acrossSq, cos, sin } = axes[i]
+    // alongSq/acrossSq hold 2σ², so σ = sqrt(x / 2). Reach uses the LONGER
+    // axis, or an elongated peak would be clipped along its own spine.
+    const reach = GAUSSIAN_CUTOFF_SIGMAS * Math.sqrt(Math.max(alongSq, acrossSq) / 2)
+    // Columns are visited unwrapped and folded back with wrapColumn, so a
+    // peak near the seam spills onto the far edge instead of being cut
+    // off by it. Capped at `width` columns so a peak whose reach exceeds
+    // half the world doesn't visit the same cell twice.
     const startX = Math.floor(peak.x - reach)
-    // Capped at `width` so a peak reaching more than half the world
-    // doesn't visit the same cell twice.
     const columnCount = Math.min(Math.ceil(2 * reach) + 1, width)
     const minY = Math.max(0, Math.floor(peak.y - reach))
     const maxY = Math.min(height - 1, Math.ceil(peak.y + reach))
 
     for (let y = minY; y <= maxY; y++) {
       const dy = y - peak.y
-      const dySq = dy * dy
       const rowOffset = y * width
-      for (let i2 = 0; i2 < columnCount; i2++) {
-        const x = startX + i2
+      for (let i = 0; i < columnCount; i++) {
+        const x = startX + i
         const dx = wrapDeltaX(x - peak.x, width)
-        const contribution = peak.amplitude * Math.exp(-(dx * dx + dySq) / sigmaSq)
+        // Rotate into the peak's own frame so the two sigmas stretch it
+        // along its ridge axis rather than along the grid axes.
+        const along = dx * cos + dy * sin
+        const across = -dx * sin + dy * cos
+        const contribution = peak.amplitude * Math.exp(-((along * along) / alongSq + (across * across) / acrossSq))
         const index = rowOffset + wrapColumn(x, width)
         if (contribution > out[index]) out[index] = contribution
+      }
+    }
+  }
+}
+
+/**
+ * Half-length of the ridge a section's subsections are strung along.
+ *
+ * Scales with the NUMBER of subsections, not just the parent's size: a
+ * fixed span packs 13 summits into the same length as 2, at which point
+ * neighbouring peaks sit closer than their own sigma and smear into one
+ * ridge you can't read. The spacing floor keeps adjacent summits far
+ * enough apart to stay individually legible.
+ *
+ * @param {number} parentRadius
+ * @param {number} childCount
+ */
+function computeRidgeHalfLength(parentRadius, childCount) {
+  const fromParent = parentRadius * PEAK_LAYOUT.ridgeHalfLengthRatio
+  const fromSpacing = (PEAK_LAYOUT.ridgeMinSpacing * Math.max(childCount - 1, 0)) / 2
+  return Math.max(fromParent, fromSpacing)
+}
+
+/**
+ * Builds the per-peak elliptical Gaussian parameters used by every
+ * shaping pass: 2σ² along and across the peak's own axis, plus the
+ * rotation that gets there.
+ *
+ * Isotropic Gaussians are what made every landmass a disc. Stretching
+ * each one along its ridge axis (and squeezing it across, so the
+ * footprint's area is roughly preserved) turns those discs into
+ * elongated masses that follow the mountain range they contain.
+ *
+ * @param {object[]} peaks each carrying its own `orientation` and `elongation`
+ * @param {number} sigmaMultiplier σ as a multiple of the peak's radius
+ */
+function buildPeakAxes(peaks, sigmaMultiplier) {
+  return peaks.map((peak) => {
+    const sigma = peak.radius * sigmaMultiplier
+    const elongation = peak.elongation ?? PEAK_LAYOUT.minSectionElongation
+    const along = sigma * elongation
+    const across = sigma / elongation
+    const orientation = peak.orientation ?? 0
+    return {
+      alongSq: 2 * along * along,
+      acrossSq: 2 * across * across,
+      cos: Math.cos(orientation),
+      sin: Math.sin(orientation),
+    }
+  })
+}
+
+/**
+ * Continental-base variant of accumulateGaussianMax: as well as keeping
+ * the strongest contribution per cell it records WHOSE it was, which is
+ * what sectionOwnershipMap needs.
+ *
+ * Same inverted loop order and 4σ bounding box — worth keeping here even
+ * though the naive version is simpler, because the base is now built from
+ * every peak (sections and subsections), not just the handful of
+ * top-level ones. Cell-by-cell that is an order of magnitude more work.
+ *
+ * @param {Float64Array} outValue per-cell strongest contribution
+ * @param {Int32Array} outOwner per-cell owning peak index, pre-filled with -1
+ * @param {number[]} owners owning top-level peak index per contributor
+ * @param {Float64Array} warpX per-cell domain-warp displacement
+ */
+function accumulateGaussianArgMax(outValue, outOwner, peaks, axes, owners, warpX, warpY, width, height) {
+  for (let i = 0; i < peaks.length; i++) {
+    const peak = peaks[i]
+    const axis = axes[i]
+    const owner = owners[i]
+    // Reach must allow for the warp displacing the sample point toward
+    // this peak, or warped cells at the rim get clipped out of the box.
+    const reach = GAUSSIAN_CUTOFF_SIGMAS * Math.sqrt(Math.max(axis.alongSq, axis.acrossSq) / 2) + WARP_REACH_MARGIN
+    const startX = Math.floor(peak.x - reach)
+    const columnCount = Math.min(Math.ceil(2 * reach) + 1, width)
+    const minY = Math.max(0, Math.floor(peak.y - reach))
+    const maxY = Math.min(height - 1, Math.ceil(peak.y + reach))
+
+    for (let y = minY; y <= maxY; y++) {
+      const rowOffset = y * width
+      for (let c = 0; c < columnCount; c++) {
+        const x = startX + c
+        const index = rowOffset + wrapColumn(x, width)
+        const dx = wrapDeltaX(x + warpX[index] - peak.x, width)
+        const dy = y + warpY[index] - peak.y
+        const along = dx * axis.cos + dy * axis.sin
+        const across = -dx * axis.sin + dy * axis.cos
+        const contribution = Math.exp(-((along * along) / axis.alongSq + (across * across) / axis.acrossSq))
+        if (contribution > outValue[index]) {
+          outValue[index] = contribution
+          outOwner[index] = owner
+        }
       }
     }
   }
@@ -187,30 +398,87 @@ function accumulateGaussianMax(out, peaks, sigmaSqValues, width, height) {
  * sharper summits that reveal the range's internal article structure.
  *
  * @param {object[]} nodes section tree nodes (title, subtreeSize, children, ...)
- * @param {{ centerX: number, centerY: number, maxRadius: number, minRadius?: number }} bounds
+ * @param {{
+ *   centerX: number,
+ *   centerY: number,
+ *   maxRadius: number,
+ *   minRadius?: number,
+ *   yScale?: number,
+ *   peakRadiusScale?: number,
+ * }} bounds `maxRadius`/`minRadius`/`yScale` govern where peaks are PLACED
+ *   (see computeSpiralLayout); `peakRadiusScale` governs how big they
+ *   GROW, and defaults to maxRadius when omitted.
  * @returns {{ x: number, y: number, radius: number, amplitude: number, title: string, anchor: string | null, depth: number, citationsPerSentence: number, subtreeCitationsPerSentence: number }[]}
  */
-export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0 }) {
+export function flattenPeaks(
+  nodes,
+  {
+    centerX,
+    centerY,
+    maxRadius,
+    minRadius = 0,
+    yScale = 1,
+    peakRadiusScale,
+    ridgeOrientation = null,
+    latitudeBand = null,
+  },
+) {
   if (!nodes || nodes.length === 0) return []
 
+  // How far apart sections are SPREAD (maxRadius) and how big each one
+  // GROWS (peakRadiusScale) are independent: the planet spreads sections
+  // right around the globe, but a section's footprint is still sized
+  // against the grid, not against how far its neighbours happen to sit.
+  // Defaults to maxRadius, which is the coupled behavior subsection
+  // layout still wants — children genuinely do scale with their parent.
+  const radiusScale = peakRadiusScale ?? maxRadius
   const totalSubtreeSize = nodes.reduce((sum, node) => sum + node.subtreeSize, 0) || 1
   const totalOwnSize = nodes.reduce((sum, node) => sum + node.ownSize, 0) || 1
-  const positions = computeSpiralLayout(nodes.length, { centerX, centerY, maxRadius, minRadius })
+
+  // Top-level sections spiral across the world; subsections run along
+  // their parent's ridge axis (ridgeOrientation is set only by the child
+  // recursion below). That's what makes a range linear instead of a
+  // circular cluster of summits.
+  const positions =
+    ridgeOrientation === null
+      ? computeSpiralLayout(nodes.length, { centerX, centerY, maxRadius, minRadius, yScale })
+      : computeRidgeLayout(nodes.length, {
+          centerX,
+          centerY,
+          halfLength: maxRadius,
+          orientation: ridgeOrientation,
+          wander: PEAK_LAYOUT.ridgeWander,
+          phase: ridgeOrientation * 3.1,
+          minY: latitudeBand?.min ?? -Infinity,
+          maxY: latitudeBand?.max ?? Infinity,
+        })
 
   const peaks = []
   nodes.forEach((node, index) => {
     const breadthShare = node.subtreeSize / totalSubtreeSize
     const heightShare = node.ownSize / totalOwnSize
-    const radius = Math.max(maxRadius * Math.sqrt(breadthShare), PEAK_LAYOUT.minPeakRadius)
+    const radius = clampPeakRadius(radiusScale * Math.sqrt(breadthShare))
     const minimumAmplitude = node.depth <= 1 ? PEAK_LAYOUT.minTopLevelAmplitude : PEAK_LAYOUT.minSubsectionAmplitude
     const nodeAmplitude = Math.max(Math.sqrt(heightShare), minimumAmplitude)
     const position = positions[index]
+
+    // Every peak carries an axis. A top-level section derives its own from
+    // its index (golden angle, so neighbours never end up parallel); its
+    // subsections inherit it, so the ridge of summits and the elongated
+    // landmass beneath them point the same way.
+    const orientation = ridgeOrientation ?? index * ORIENTATION_STEP
+    const ridgeHalfLength = computeRidgeHalfLength(radius, node.children.length)
 
     peaks.push({
       x: position.x,
       y: position.y,
       radius,
       amplitude: nodeAmplitude,
+      orientation,
+      // Baseline stretch of this peak's own Gaussian. Carried on the peak
+      // so the halo's fallback ellipse matches the terrain blob under it;
+      // a section's overall shape comes from its ridge, not from here.
+      elongation: PEAK_LAYOUT.minSectionElongation,
       title: node.title,
       anchor: node.anchor ?? null,
       depth: node.depth,
@@ -228,8 +496,16 @@ export function flattenPeaks(nodes, { centerX, centerY, maxRadius, minRadius = 0
         ...flattenPeaks(node.children, {
           centerX: position.x,
           centerY: position.y,
-          maxRadius: radius * PEAK_LAYOUT.childRadiusRatio,
+          // For a ridge this is the half-length of the spine, not a disc
+          // radius, so it grows with the number of subsections.
+          maxRadius: ridgeHalfLength,
           minRadius: radius * PEAK_LAYOUT.childInnerRadiusRatio,
+          ridgeOrientation: orientation,
+          // Footprint size must NOT follow the ridge length, or a section
+          // with many subsections would inflate each of them; subsections
+          // are still sized against their parent's own radius.
+          peakRadiusScale: radius * PEAK_LAYOUT.childRadiusRatio,
+          latitudeBand,
         }),
       )
     }
@@ -311,24 +587,32 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   const sections = peaks.filter((p) => p.depth <= 1)
   const subsections = peaks.filter((p) => p.depth > 1)
 
-  // Map filtered-sections index back to peaks-array index so
-  // sectionOwnershipMap stores the SAME index space as peak.sectionIndex.
-  const sectionPeakIndices = []
-  for (let i = 0; i < peaks.length; i++) {
-    if ((peaks[i].depth ?? 0) <= 1) sectionPeakIndices.push(i)
-  }
-
   const cfg = TERRAIN_GENERATION
   const heightMap = new Float64Array(cellCount)
   // Per-cell peaks-array index of the section whose continental-base
   // Gaussian was strongest here. -1 for cells beyond any section's reach.
   const sectionOwnershipMap = new Int32Array(cellCount).fill(-1)
 
-  // Precompute per-peak σ² (the /2σ² denominator) so the inner loop is a
-  // single exp() call per (cell × peak) with no per-cell reallocation.
-  const sectionSigmaSq = sections.map((s) => 2 * (s.radius * cfg.continent.sigmaMultiplier) ** 2)
-  const rangeSigmaSq = sections.map((s) => 2 * (s.radius * cfg.ranges.sigmaMultiplier) ** 2)
-  const peakSigmaSq = subsections.map((s) => 2 * (s.radius * cfg.peaks.sigmaMultiplier) ** 2)
+  // Precompute each peak's elliptical axes so the inner loops are a
+  // single exp() per (cell × peak) with no per-cell reallocation.
+  // Owner index is the peaks-array index of the TOP-LEVEL section, for
+  // subsections as well as sections, so sectionOwnershipMap keeps meaning
+  // "which section's territory is this" and hover still resolves to a
+  // section rather than to one of its subsections.
+  const baseContributors = []
+  const baseOwners = []
+  for (let i = 0; i < peaks.length; i++) {
+    const peak = peaks[i]
+    const isTopLevel = (peak.depth ?? 0) <= 1
+    baseContributors.push(
+      isTopLevel ? peak : { ...peak, radius: peak.radius * cfg.continent.subsectionRadiusRatio },
+    )
+    baseOwners.push(isTopLevel ? i : (peak.sectionIndex ?? -1))
+  }
+
+  const baseAxes = buildPeakAxes(baseContributors, cfg.continent.sigmaMultiplier)
+  const rangeAxes = buildPeakAxes(sections, cfg.ranges.sigmaMultiplier)
+  const peakAxes = buildPeakAxes(subsections, cfg.peaks.sigmaMultiplier)
 
   // === PASS 1: Continental base ===
   // MAX blend of very-wide Gaussians. MAX (not SUM) is what preserves
@@ -338,23 +622,35 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // still gives a connected continent because Gaussians overlap at ~1.0
   // wherever peaks are within ~1σ of each other, so the "at least one
   // peak is nearby" region reads as one landmass.
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = y * width + x
-      let maxContrib = 0
-      let dominantIdx = -1
-      for (let i = 0; i < sections.length; i++) {
-        const dx = wrapDeltaX(x - sections[i].x, width)
-        const dy = y - sections[i].y
-        const contrib = Math.exp(-(dx * dx + dy * dy) / sectionSigmaSq[i])
-        if (contrib > maxContrib) {
-          maxContrib = contrib
-          dominantIdx = i
-        }
-      }
-      heightMap[idx] = cfg.continent.softCeiling * maxContrib
-      sectionOwnershipMap[idx] = dominantIdx >= 0 ? sectionPeakIndices[dominantIdx] : -1
-    }
+  //
+  // Subsections contribute to the base too, at their own (smaller) scale
+  // and credited to their parent. That's what makes a landmass FOLLOW its
+  // mountain range: a chain of overlapping Gaussians strung along the
+  // wandering ridge sweeps out a capsule that bends with the spine,
+  // instead of the range poking out of an ellipse that knows nothing
+  // about it. It also guarantees every subsection summit sits on land.
+  //
+  // The sample point is displaced by a low-frequency noise field before
+  // the Gaussians are evaluated ("domain warping"). Without it even an
+  // elongated Gaussian has a mathematically smooth edge, and coastlines
+  // read as inflated bumps; warping the domain bends those edges into
+  // bays, headlands and isthmuses at no cost to where land broadly sits.
+  const { warpX, warpY } = buildWarpField(width, height, rng, cfg.continent)
+
+  const baseContribution = new Float64Array(cellCount)
+  accumulateGaussianArgMax(
+    baseContribution,
+    sectionOwnershipMap,
+    baseContributors,
+    baseAxes,
+    baseOwners,
+    warpX,
+    warpY,
+    width,
+    height,
+  )
+  for (let idx = 0; idx < cellCount; idx++) {
+    heightMap[idx] = cfg.continent.softCeiling * baseContribution[idx]
   }
 
   // === PASS 2: Mountain ranges (gated by land) ===
@@ -362,7 +658,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // their summits, not fuse into a single plateau. SUM'ing here would
   // literally put the midpoint above both peaks.
   const rangeContribution = new Float64Array(cellCount)
-  accumulateGaussianMax(rangeContribution, sections, rangeSigmaSq, width, height)
+  accumulateGaussianMax(rangeContribution, sections, rangeAxes, width, height)
   for (let idx = 0; idx < cellCount; idx++) {
     const base = heightMap[idx]
     const gate = smoothstep(cfg.ranges.landGateMin, cfg.ranges.landGateMin + cfg.ranges.landGateWidth, base)
@@ -374,7 +670,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // Also MAX — see PASS 2. Sub-peaks close together should each show as a
   // summit with a low col between, not additively pile up.
   const peakContribution = new Float64Array(cellCount)
-  accumulateGaussianMax(peakContribution, subsections, peakSigmaSq, width, height)
+  accumulateGaussianMax(peakContribution, subsections, peakAxes, width, height)
   for (let idx = 0; idx < cellCount; idx++) {
     const current = heightMap[idx]
     const gate = smoothstep(cfg.peaks.rangeGateMin, cfg.peaks.rangeGateMin + cfg.peaks.rangeGateWidth, current)
@@ -405,6 +701,14 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
     heightMap[i] = clamp01(heightMap[i] + waterLevelShift)
   }
 
+  // === PASS 5b: Polar icecaps ===
+  // Raised after the water-level shift so a stub article's higher sea
+  // level doesn't drown them. Returns the mask of cells it lifted, so the
+  // biome pass can make them snow outright instead of running them
+  // through the citation-driven land biomes — an icecap shouldn't turn
+  // into meadow because the article happens to be well cited.
+  const polarCapMask = applyPolarCaps(heightMap, width, height, rng)
+
   // === PASS 6: Pre-erosion smoothing ===
   let terrain = smoothHeightMap(heightMap, width, height, cfg.preErosionSmoothing.passes, cfg.preErosionSmoothing.strength)
 
@@ -424,6 +728,15 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   const moistureMap = new Float64Array(cellCount)
   const biomeMap = new Uint8Array(cellCount)
   for (let i = 0; i < cellCount; i++) {
+    if (polarCapMask[i]) {
+      // Icecaps belong to no section: leaving them owned would make
+      // hovering one light up an unrelated continent's halo.
+      sectionOwnershipMap[i] = -1
+      moistureMap[i] = 0
+      biomeMap[i] = terrain[i] > BIOME_THRESHOLDS.oceanMaxHeight ? BIOME.SNOW : BIOME.OCEAN
+      continue
+    }
+
     const ownerIdx = sectionOwnershipMap[i]
     const cps = ownerIdx >= 0 && ownerIdx < peaks.length
       ? peaks[ownerIdx].subtreeCitationsPerSentence ?? 0

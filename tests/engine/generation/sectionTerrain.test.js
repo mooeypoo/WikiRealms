@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createRng } from '../../../src/engine/generation/rng.js'
 import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, smoothHeightMap } from '../../../src/engine/generation/sectionTerrain.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
+import { GRID, PEAK_LAYOUT } from '../../../src/engine/generation/config.js'
 
 function makeNode(title, subtreeSize, children = []) {
   return { title, depth: 1, anchor: title, ownSize: subtreeSize, subtreeSize, children }
@@ -35,6 +36,24 @@ describe('flattenPeaks', () => {
     const peaks = flattenPeaks([makeNode('History', 80, [child]), anchorless], bounds)
 
     expect(peaks.map((peak) => peak.anchor)).toEqual(['History', 'Child', null])
+  })
+
+  // Radius is maxRadius * sqrt(share), so an article with few sections
+  // gives each an enormous footprint whose continental skirt swamps the
+  // grid (and, on the planet, wraps over the poles). See PEAK_LAYOUT.
+  it('caps a dominant section\'s footprint at maxPeakRadiusRatio of the grid', () => {
+    const ceiling = Math.min(GRID.width, GRID.height) * PEAK_LAYOUT.maxPeakRadiusRatio
+    // One section owning the whole article, with a deliberately oversized
+    // layout radius: uncapped this would be the full maxRadius.
+    const [only] = flattenPeaks([makeNode('Everything', 100)], { centerX: 64, centerY: 64, maxRadius: 400 })
+
+    expect(only.radius).toBeCloseTo(ceiling)
+  })
+
+  it('still floors a negligible section at minPeakRadius', () => {
+    const [, tiny] = flattenPeaks([makeNode('Huge', 100000), makeNode('Tiny', 1)], bounds)
+
+    expect(tiny.radius).toBeCloseTo(PEAK_LAYOUT.minPeakRadius)
   })
 
   it('gives a larger share a bigger amplitude and radius', () => {
@@ -180,7 +199,7 @@ describe('generateSectionTerrain', () => {
   // the midpoint of two Gaussians ABOVE either centre.
   //
   // Proportions matter here: peak radius has to be small relative to the
-  // grid, the way GRID and the peak-sizing ratios actually produce. With a
+  // grid, the way GRID and peakRadiusRatio actually produce. With a
   // footprint wider than the world there is no saddle to find, and the
   // assertion just measures noise.
   it('keeps a saddle between nearby top-level section peaks', () => {
@@ -333,3 +352,4 @@ describe('smoothHeightMap', () => {
     expect(smoothed[4]).toBeGreaterThan(smoothed[1])
   })
 })
+

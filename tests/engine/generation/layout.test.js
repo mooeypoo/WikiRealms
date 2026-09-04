@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeSpiralLayout } from '../../../src/engine/generation/layout.js'
+import { computeRidgeLayout, computeSpiralLayout } from '../../../src/engine/generation/layout.js'
 
 const bounds = { centerX: 64, centerY: 64, maxRadius: 50 }
 
@@ -19,6 +19,35 @@ describe('computeSpiralLayout', () => {
 
     expect(first.x).toBeCloseTo(64)
     expect(first.y).toBeCloseTo(64)
+  })
+
+  // Grid rows are latitude in the planet view, so the spiral is squashed
+  // vertically to keep sections out of the polar caps — see layout.js.
+  describe('yScale', () => {
+    it('defaults to a circular spiral', () => {
+      const positions = computeSpiralLayout(12, bounds)
+      const squashed = computeSpiralLayout(12, { ...bounds, yScale: 1 })
+
+      expect(positions).toEqual(squashed)
+    })
+
+    it('compresses the vertical spread without touching the horizontal', () => {
+      const circular = computeSpiralLayout(12, bounds)
+      const squashed = computeSpiralLayout(12, { ...bounds, yScale: 0.5 })
+
+      for (let i = 0; i < circular.length; i++) {
+        expect(squashed[i].x).toBeCloseTo(circular[i].x)
+        expect(squashed[i].y - bounds.centerY).toBeCloseTo((circular[i].y - bounds.centerY) * 0.5)
+      }
+    })
+
+    it('keeps the vertical spread strictly inside the unsquashed one', () => {
+      const spread = (positions) => Math.max(...positions.map((p) => Math.abs(p.y - bounds.centerY)))
+
+      expect(spread(computeSpiralLayout(20, { ...bounds, yScale: 0.55 }))).toBeLessThan(
+        spread(computeSpiralLayout(20, bounds)),
+      )
+    })
   })
 
   it('returns one position per requested count', () => {
@@ -56,3 +85,83 @@ describe('computeSpiralLayout', () => {
     expect(keys.size).toBe(positions.length)
   })
 })
+
+describe('computeRidgeLayout', () => {
+  const ridge = { centerX: 100, centerY: 100, halfLength: 40 }
+
+  it('returns an empty array for a zero count', () => {
+    expect(computeRidgeLayout(0, ridge)).toEqual([])
+  })
+
+  it('places a single subsection at the centre of the ridge', () => {
+    expect(computeRidgeLayout(1, ridge)).toEqual([{ x: 100, y: 100 }])
+  })
+
+  it('puts the first (largest) peak at the middle and alternates outward', () => {
+    // Straight, unwandering ridge along +X.
+    const offsets = computeRidgeLayout(5, { ...ridge, orientation: 0 }).map((p) => p.x - 100)
+
+    expect(offsets[0]).toBeCloseTo(0)
+    expect(offsets[1]).toBeLessThan(0)
+    expect(offsets[2]).toBeGreaterThan(0)
+    expect(Math.abs(offsets[3])).toBeGreaterThan(Math.abs(offsets[1]))
+    expect(Math.abs(offsets[4])).toBeGreaterThan(Math.abs(offsets[2]))
+  })
+
+  it('stays within halfLength along the axis', () => {
+    for (const p of computeRidgeLayout(9, { ...ridge, orientation: 0 })) {
+      expect(Math.abs(p.x - 100)).toBeLessThanOrEqual(ridge.halfLength + 1e-9)
+    }
+  })
+
+  it('lays an unwandering ridge exactly along its orientation', () => {
+    const spine = computeRidgeLayout(5, { ...ridge, orientation: Math.PI / 2 })
+
+    for (const p of spine) expect(p.x).toBeCloseTo(100)
+    expect(spine.some((p) => p.y !== 100)).toBe(true)
+  })
+
+  // The wander is what buys separation: a path that swings left and right
+  // is longer than the straight line between its ends, so summits placed
+  // along it sit further apart than the span alone would allow.
+  it('swings the spine to both sides of the axis when given wander', () => {
+    const across = computeRidgeLayout(9, { ...ridge, orientation: 0, wander: 0.34 }).map((p) => p.y - 100)
+
+    expect(Math.max(...across)).toBeGreaterThan(0)
+    expect(Math.min(...across)).toBeLessThan(0)
+  })
+
+  it('makes a wandering spine longer than a straight one', () => {
+    const length = (spine) =>
+      spine.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - spine[i].x, p.y - spine[i].y), 0)
+    // Sorted along the axis, so the polyline follows the spine in order.
+    const byAxis = (a, b) => a.x - b.x
+    const straight = computeRidgeLayout(11, { ...ridge, orientation: 0 }).sort(byAxis)
+    const wandering = computeRidgeLayout(11, { ...ridge, orientation: 0, wander: 0.34 }).sort(byAxis)
+
+    expect(length(wandering)).toBeGreaterThan(length(straight))
+  })
+
+  it('clamps the spine into the latitude band, keeping land off the poles', () => {
+    // A north-south ridge that would otherwise run well past the band.
+    const spine = computeRidgeLayout(7, {
+      ...ridge,
+      orientation: Math.PI / 2,
+      wander: 0.34,
+      minY: 80,
+      maxY: 120,
+    })
+
+    for (const p of spine) {
+      expect(p.y).toBeGreaterThanOrEqual(80)
+      expect(p.y).toBeLessThanOrEqual(120)
+    }
+  })
+
+  it('is deterministic — no RNG in placement', () => {
+    const options = { ...ridge, orientation: 1.1, wander: 0.34, phase: 0.7 }
+
+    expect(computeRidgeLayout(6, options)).toEqual(computeRidgeLayout(6, options))
+  })
+})
+
