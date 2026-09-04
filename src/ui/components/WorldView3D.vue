@@ -17,6 +17,7 @@ import {
   computeWallHeight,
   computeWallRadius,
   pickHaloOpacity,
+  pickWallHeightScale,
   relationshipToHover,
   resolveHoveredTopLevel,
   resolveSectionAnchor,
@@ -307,9 +308,11 @@ function buildSectionHalos(world, heightScale) {
     // regardless of grid size.
     const wallHeightWorld = wallHeightGrid * (heightScale / 40)
 
-    // Initial opacity matches this peak's idle state (0 for subsections
-    // so they don't flash in on first render, low for top-level).
+    // Initial opacity/height match this peak's idle state (0 for
+    // subsections so they don't flash in on first render, low for
+    // top-level).
     const initialOpacity = pickHaloOpacity(null, !isTopLevel)
+    const initialHeightScale = pickWallHeightScale(null, !isTopLevel)
 
     const ringGeo = new THREE.RingGeometry(ringRadii.inner, ringRadii.outer, 48)
     const ringMat = new THREE.MeshBasicMaterial({
@@ -344,7 +347,11 @@ function buildSectionHalos(world, heightScale) {
     // three.js CylinderGeometry is Y-axis-aligned; we want its axis to be
     // the world-up axis, which is Z BEFORE worldGroup rotation, so rotate π/2 on X.
     wall.rotation.x = Math.PI / 2
-    wall.position.set(local.x, local.y, local.z + wallHeightWorld / 2)
+    // Scaling happens along the cylinder's own axis (its local Y). The
+    // mesh's position is its CENTER, so the base only stays pinned to the
+    // terrain if the center moves with the height — see updateHalos.
+    wall.scale.y = initialHeightScale
+    wall.position.set(local.x, local.y, local.z + (wallHeightWorld * initialHeightScale) / 2)
 
     const peakGroup = new THREE.Group()
     peakGroup.add(ring, wall)
@@ -355,6 +362,11 @@ function buildSectionHalos(world, heightScale) {
     peakGroup.userData.pulsePhase = (peak.x * 0.7 + peak.y * 1.3) % (Math.PI * 2)
     peakGroup.userData.ringMaterial = ringMat
     peakGroup.userData.wallMaterial = wallMat
+    // Wall mesh + the geometry it was built from, so the per-frame height
+    // animation can rescale it about its base instead of its center.
+    peakGroup.userData.wallMesh = wall
+    peakGroup.userData.wallBaseZ = local.z
+    peakGroup.userData.wallHeight = wallHeightWorld
     // Every halo is scene-graph visible; opacity does the LOD work.
     // Subsections idle at 0 opacity so they hide until their parent is
     // hovered (see pickHaloOpacity/relationshipToHover). 'none' hides
@@ -395,6 +407,16 @@ function updateHalos(nowSeconds) {
     const alpha = 0.15
     ringMat.opacity += (targetOpacity - ringMat.opacity) * alpha
     wallMat.opacity += (targetOpacity - wallMat.opacity) * alpha
+
+    // Height animation: the hovered section's wall rises to full height
+    // while its parent/siblings/unrelated neighbors sit lower, so the
+    // focus reads as a silhouette and not just as brightness. Recentering
+    // by half the scaled height keeps the wall's base on the terrain.
+    const wall = peakGroup.userData.wallMesh
+    const targetScale = pickWallHeightScale(rel, isSubsection)
+    const scale = wall.scale.y + (targetScale - wall.scale.y) * alpha
+    wall.scale.y = scale
+    wall.position.z = peakGroup.userData.wallBaseZ + (peakGroup.userData.wallHeight * scale) / 2
   }
 }
 

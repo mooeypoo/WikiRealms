@@ -37,12 +37,33 @@ export const SECTION_MARKERS = Object.freeze({
   // and only reveal (via 'child') when their parent is hovered.
   opacity: Object.freeze({
     idle: 0.08, // top-level, nothing hovered
-    hovered: 0.75, // hovered top-level (with breathing pulse on top)
-    child: 0.4, // subsection of hovered top-level — the LOD reveal
-    parent: 0.42, // top-level whose subsection is hovered (Phase 5+, when subsection hover exists)
-    sibling: 0.06, // sibling of a hovered peak (Phase 5+)
+    hovered: 0.8, // hovered top-level (with breathing pulse on top)
+    child: 0.3, // subsection of hovered top-level — the LOD reveal
+    parent: 0.32, // top-level whose subsection is hovered (Phase 5+, when subsection hover exists)
+    // Siblings sit above the 0.1 halo-hover threshold so the cursor can
+    // travel straight from one subsection to the next without dropping
+    // back through terrain hover, but well below the hovered peak.
+    sibling: 0.14, // sibling of a hovered peak (Phase 5+)
     unrelated: 0.04, // top-level, another section hovered
     subsectionIdle: 0, // subsection when nothing/other is hovered — hides
+  }),
+  // Wall-height multipliers mirroring the opacity vocabulary. Opacity
+  // alone flattens out — a bright ring and a slightly-less-bright ring
+  // read as "both highlighted". Height doesn't: the hovered section's
+  // energy wall stands at full height while its context sits visibly
+  // lower, so the focus is legible from any camera angle. Applied to the
+  // wall only; ground rings keep tracing the true section footprint.
+  heightScale: Object.freeze({
+    idle: 0.45, // top-level, nothing hovered — the resting skyline
+    hovered: 1, // hovered peak — full wall, the tallest thing on the map
+    child: 0.55, // subsection revealed under its hovered parent
+    parent: 0.62, // top-level whose subsection is hovered — context, not focus
+    sibling: 0.3, // sibling of a hovered peak
+    unrelated: 0.25, // another section is hovered — sinks out of the way
+    // Never exactly 0: a zero-scaled mesh has a singular world matrix.
+    // Invisible at subsectionIdle opacity anyway, so the value is only
+    // the height these walls grow from when their parent is hovered.
+    subsectionIdle: 0.05,
   }),
   // Slow breathing pulse on the hovered wall — modulates opacity so it
   // reads as "attention" without being distracting. Kept slow (period ~2s)
@@ -115,6 +136,29 @@ export function pickHaloOpacity(relationship, isSubsection = false) {
     case 'sibling': return o.sibling
     case 'unrelated': return isSubsection ? o.subsectionIdle : o.unrelated
     default: return isSubsection ? o.subsectionIdle : o.idle
+  }
+}
+
+/**
+ * Wall-height multiplier for a peak given its relationship to the
+ * currently hovered section — the height counterpart of pickHaloOpacity,
+ * with the same relationship vocabulary and the same subsection default.
+ * Consumers lerp toward this each frame and keep the wall's base pinned
+ * to the terrain, so the wall grows and shrinks from the ground up.
+ *
+ * @param {'self' | 'child' | 'parent' | 'sibling' | 'unrelated' | null} relationship
+ * @param {boolean} [isSubsection]
+ * @returns {number} multiplier on the peak's computeWallHeight()
+ */
+export function pickWallHeightScale(relationship, isSubsection = false) {
+  const h = SECTION_MARKERS.heightScale
+  switch (relationship) {
+    case 'self': return h.hovered
+    case 'child': return h.child
+    case 'parent': return h.parent
+    case 'sibling': return h.sibling
+    case 'unrelated': return isSubsection ? h.subsectionIdle : h.unrelated
+    default: return isSubsection ? h.subsectionIdle : h.idle
   }
 }
 

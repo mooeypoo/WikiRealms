@@ -6,6 +6,7 @@ import {
   computeWallHeight,
   computeWallRadius,
   pickHaloOpacity,
+  pickWallHeightScale,
   relationshipToHover,
   resolveHoveredTopLevel,
   resolveSectionAnchor,
@@ -84,6 +85,68 @@ describe('pickHaloOpacity', () => {
     // isSubsection — it's a semantic relationship, not a per-depth override.
     expect(pickHaloOpacity('child', true)).toBe(SECTION_MARKERS.opacity.child)
     expect(SECTION_MARKERS.opacity.child).toBeGreaterThan(0)
+  })
+
+  it('keeps the hovered peak clearly brighter than its own context', () => {
+    const o = SECTION_MARKERS.opacity
+    // The hovered peak has to dominate, or a hovered range and its
+    // revealed subsections read as "everything is highlighted".
+    expect(o.hovered).toBeGreaterThan(o.parent * 2)
+    expect(o.hovered).toBeGreaterThan(o.child * 2)
+    // Related-but-not-hovered ranks below the direct parent/child pair,
+    // and everything related stays above the unrelated background.
+    expect(o.parent).toBeGreaterThan(o.sibling)
+    expect(o.child).toBeGreaterThan(o.sibling)
+    expect(o.sibling).toBeGreaterThan(o.unrelated)
+  })
+
+  it('keeps sibling subsections hoverable so the cursor can travel between them', () => {
+    // tryHoverHalo ignores halos below 0.1 — a sibling under that floor
+    // would drop the cursor back through terrain hover on its way over.
+    expect(SECTION_MARKERS.opacity.sibling).toBeGreaterThan(0.1)
+  })
+})
+
+describe('pickWallHeightScale', () => {
+  it('mirrors the opacity vocabulary, one scale per relationship', () => {
+    const h = SECTION_MARKERS.heightScale
+    expect(pickWallHeightScale('self')).toBe(h.hovered)
+    expect(pickWallHeightScale('child')).toBe(h.child)
+    expect(pickWallHeightScale('parent')).toBe(h.parent)
+    expect(pickWallHeightScale('sibling')).toBe(h.sibling)
+    expect(pickWallHeightScale('unrelated')).toBe(h.unrelated)
+    expect(pickWallHeightScale(null)).toBe(h.idle)
+    expect(pickWallHeightScale(undefined)).toBe(h.idle)
+  })
+
+  it('gives the hovered peak the tallest wall on the map', () => {
+    const h = SECTION_MARKERS.heightScale
+    const others = [h.idle, h.child, h.parent, h.sibling, h.unrelated, h.subsectionIdle]
+
+    expect(h.hovered).toBe(1)
+    for (const scale of others) expect(scale).toBeLessThan(h.hovered)
+  })
+
+  it('ranks context above bystanders: parent/child taller than sibling and unrelated', () => {
+    const h = SECTION_MARKERS.heightScale
+    expect(h.parent).toBeGreaterThan(h.sibling)
+    expect(h.child).toBeGreaterThan(h.sibling)
+    expect(h.sibling).toBeGreaterThan(h.unrelated)
+    // Hovering anything makes unrelated ranges sink below the resting skyline.
+    expect(h.unrelated).toBeLessThan(h.idle)
+  })
+
+  it('uses the subsection floor when a subsection is idle or unrelated', () => {
+    const h = SECTION_MARKERS.heightScale
+    expect(pickWallHeightScale(null, true)).toBe(h.subsectionIdle)
+    expect(pickWallHeightScale('unrelated', true)).toBe(h.subsectionIdle)
+    // Never exactly zero — a zero-scaled mesh has a singular world matrix.
+    expect(h.subsectionIdle).toBeGreaterThan(0)
+  })
+
+  it('reveals a subsection at its child height regardless of depth flag', () => {
+    expect(pickWallHeightScale('child', true)).toBe(SECTION_MARKERS.heightScale.child)
+    expect(pickWallHeightScale('child', false)).toBe(SECTION_MARKERS.heightScale.child)
   })
 })
 
