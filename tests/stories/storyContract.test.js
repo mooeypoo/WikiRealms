@@ -3,6 +3,7 @@ import { h, isVNode } from 'vue'
 import { describe, expect, it } from 'vitest'
 import { onStage } from '../../.storybook/preview.js'
 import * as iconStories from '../../stories/ui/design/Icon.stories.js'
+import * as overlayStories from '../../stories/ui/design/Overlays.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -61,6 +62,7 @@ describe('Storybook story contract', () => {
   describe.each([
     ['Icon', iconStories],
     ['Tokens', tokenStories],
+    ['Overlays', overlayStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 
