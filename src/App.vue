@@ -3,8 +3,12 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import SearchBar from './ui/components/SearchBar.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
-import Taskbar from './ui/components/Taskbar.vue'
+import Icon from './ui/design/Icon.vue'
+import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
+import TrailMenu from './ui/components/TrailMenu.vue'
+import JourneyMenu from './ui/components/JourneyMenu.vue'
+import Sheet from './ui/design/Sheet.vue'
 import Ledger from './ui/components/Ledger.vue'
 import InfoHub from './ui/components/InfoHub.vue'
 import SettingsModal from './ui/components/SettingsModal.vue'
@@ -36,7 +40,7 @@ const {
   graph,
   current,
   currentNodeId,
-  backstack,
+  path,
   canGoBack,
   canGoForward,
   navigateTo,
@@ -57,7 +61,8 @@ const portalConfirmation = ref(null)  // { targetArticleId, targetTitle }
 const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
-const showNavigationTools = ref(false)
+const showTrail = ref(false)
+const showJourney = ref(false)
 // Section anchor id currently focused via a map click (or null). Used to
 // scroll the article panel's section list into view + flash the card.
 const focusedSectionAnchor = ref(null)
@@ -92,7 +97,6 @@ const rendersInWebGL = computed(() => {
 
 function onSelect(result) {
   isSearchOpen.value = false
-  showNavigationTools.value = false
   // A search is not travel: it starts a journey rather than pretending the
   // result was reached from wherever the viewer happened to be standing.
   jumpTo(result.title)
@@ -158,11 +162,8 @@ function onExportClick() {
   URL.revokeObjectURL(url)
 }
 
-function onImportFile(event) {
-  const file = event.target.files?.[0]
-  event.target.value = '' // allow re-importing the same file later
-  if (!file) return
-
+function onImportFile(file) {
+  showJourney.value = false
   const reader = new FileReader()
   reader.onload = () => {
     try {
@@ -180,11 +181,13 @@ function toggleHideHud() {
   showHudHidden.value = !showHudHidden.value
 }
 
-function toggleNavigationTools() {
-  showNavigationTools.value = !showNavigationTools.value
+function onTrailSelect(nodeId) {
+  showTrail.value = false
+  goToNode(nodeId)
 }
 
 function onShareClick() {
+  showJourney.value = false
   if (article.value?.title) {
     shareArticle(article.value.title)
   }
@@ -283,23 +286,20 @@ watch([graph, articleCache], () => {
     :class="{ 'cosmos--hud-hidden': showHudHidden }"
     :style="{ '--hud-opacity': preferences.panelOpacity, '--citation-atmosphere': citationAtmosphere }"
   >
-    <Taskbar
-      :current-article-title="article?.title"
+    <TopScrim
+      v-if="!showHudHidden"
+      :realm="article?.title"
+      :trail-length="path.length"
       :can-go-back="canGoBack"
       :can-go-forward="canGoForward"
-      :has-world="Boolean(world)"
-      :search-open="isSearchOpen || !article"
-      @toggle-info-hub="showInfoHub = !showInfoHub"
-      @toggle-settings="showSettings = !showSettings"
-      @toggle-search="isSearchOpen = !isSearchOpen"
-      @go-back="goBack"
-      @go-forward="goForward"
-      @toggle-navigation-tools="toggleNavigationTools"
-    >
-      <template #search>
-        <SearchBar @select="onSelect" />
-      </template>
-    </Taskbar>
+      @back="goBack"
+      @forward="goForward"
+      @trail="showTrail = true"
+      @search="isSearchOpen = true"
+      @journey="showJourney = true"
+      @guide="showInfoHub = true"
+      @settings="showSettings = true"
+    />
     <div class="cosmos__field" aria-hidden="true"></div>
 
     <div class="cosmos__stage">
@@ -332,7 +332,7 @@ watch([graph, articleCache], () => {
     </div>
 
     <Helm
-      v-if="world"
+      v-if="world && !showHudHidden"
       :world-shape="preferences.worldShape"
       :disabled="worldStatus !== 'success'"
       :can-recenter="rendersInWebGL"
@@ -340,16 +340,6 @@ watch([graph, articleCache], () => {
       @recenter="recenterView"
     />
 
-    <div v-if="current" class="app__nav-controls hud hud--nav" :class="{ 'app__nav-controls--expanded': showNavigationTools }">
-      <button type="button" @click="onExportClick">Export snapshot</button>
-      <label class="app__import-label">
-        Import snapshot
-        <input type="file" accept="application/json" @change="onImportFile" />
-      </label>
-      <button type="button" class="app__nav-extra" @click="showInfoHub = !showInfoHub">Info</button>
-      <button type="button" class="app__nav-extra" @click="showSettings = !showSettings">Settings</button>
-      <button type="button" class="app__nav-extra" @click="onShareClick">Share</button>
-    </div>
 
     <p v-if="snapshotErrorMessage" class="app__alert app__alert--error hud hud--alert">
       ⚠️ {{ snapshotErrorMessage }}
@@ -360,7 +350,7 @@ watch([graph, articleCache], () => {
     </p>
 
     <Ledger
-      v-if="status === 'success' && article"
+      v-if="status === 'success' && article && !showHudHidden"
       :article="article"
       :world="world"
       :state="ledgerState"
@@ -382,6 +372,46 @@ watch([graph, articleCache], () => {
         </div>
       </div>
     </Transition>
+    <!-- Search is a summoned surface now, not a permanent fixture. The
+         command palette replaces this sheet in the next commit, along with
+         the launch screen that makes the empty state a place rather than a
+         sentence. -->
+    <Sheet
+      id="search"
+      :open="isSearchOpen || !current"
+      label="Search Wikipedia"
+      :dismissible="Boolean(current)"
+      :snap-points="[0.5, 0.9]"
+      :snap="0"
+      @close="isSearchOpen = false"
+    >
+      <template #header>
+        <h2 class="app__sheet-title">Find a realm</h2>
+      </template>
+      <SearchBar @select="onSelect" />
+    </Sheet>
+
+    <TrailMenu :show="showTrail" :path="path" @select="onTrailSelect" @close="showTrail = false" />
+
+    <JourneyMenu
+      :show="showJourney"
+      :can-share="Boolean(article)"
+      @share="onShareClick"
+      @export="onExportClick"
+      @import="onImportFile"
+      @close="showJourney = false"
+    />
+
+    <button
+      v-if="showHudHidden"
+      class="app__reveal"
+      type="button"
+      aria-label="Show the interface"
+      @click="showHudHidden = false"
+    >
+      <Icon name="eye" :size="18" />
+    </button>
+
     <InfoHub
       :show="showInfoHub"
       :current-tab="currentInfoTab"
@@ -401,6 +431,35 @@ watch([graph, articleCache], () => {
 </template>
 
 <style scoped>
+/* The one thing left on screen in immersive mode: without it, hiding the
+   interface would hide its own way back. */
+.app__reveal {
+  position: fixed;
+  top: max(var(--spacing-md), env(safe-area-inset-top, 0px));
+  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  z-index: var(--z-instruments);
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--ink-3);
+  opacity: 0.5;
+}
+
+.app__reveal:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.app__sheet-title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
 .cosmos {
   position: fixed;
   inset: 0;
@@ -469,39 +528,6 @@ watch([graph, articleCache], () => {
   transition: opacity var(--duration-normal) ease-out;
 }
 
-.hud--top {
-  top: 4.75rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(480px, 90vw);
-  text-align: center;
-}
-
-.hud__title {
-  margin: 0 0 0.6rem;
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  font-size: 1.5rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.hud--nav {
-  top: 4.75rem;
-  right: 1.25rem;
-  display: none;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  max-width: 220px;
-}
-
-.hud--nav.app__nav-controls--expanded {
-  display: flex;
-}
-
 .hud--alert {
   top: 6.5rem;
   left: 50%;
@@ -514,39 +540,6 @@ watch([graph, articleCache], () => {
   left: 50%;
   transform: translateX(-50%);
   color: var(--text-muted);
-}
-
-.app__nav-controls button,
-.app__import-label,
-.app__nav-extra {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  background: rgba(120, 140, 255, 0.12);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.app__nav-controls button:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.app__nav-extra {
-  display: none;
-}
-
-.app__import-label {
-  position: relative;
-  overflow: hidden;
-}
-
-.app__import-label input[type='file'] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .app__status {
@@ -694,12 +687,6 @@ watch([graph, articleCache], () => {
   opacity: 0;
 }
 
-.cosmos--hud-hidden .hud {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-
 .app__toast {
   position: fixed;
   z-index: 2100;
@@ -726,43 +713,7 @@ watch([graph, articleCache], () => {
   transform: translate(-50%, 12px);
 }
 
-@media (max-width: 1023px) {
-  .hud--nav {
-    top: 4.75rem;
-  }
-
-  .app__nav-extra {
-    display: inline-block;
-  }
-}
-
 @media (max-width: 767px) {
-  .hud--nav {
-    top: 4.75rem;
-    right: 1rem;
-    bottom: auto;
-    display: none;
-    width: min(15rem, calc(100vw - 2rem));
-    max-width: none;
-    padding: var(--spacing-sm);
-    gap: var(--spacing-xs);
-  }
-
-  .hud--nav.app__nav-controls--expanded {
-    display: flex;
-  }
-
-  .app__nav-controls button,
-  .app__nav-controls .app__import-label {
-    width: 100%;
-    min-height: var(--size-touch);
-    box-sizing: border-box;
-    text-align: left;
-  }
-
-  .app__nav-controls button {
-    justify-content: flex-start;
-  }
 
   .hud--status,
   .hud--alert {

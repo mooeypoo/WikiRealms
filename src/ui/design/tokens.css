@@ -158,8 +158,10 @@
  * components outright.
  *
  * This block is a migration ledger: each entry disappears as the last
- * component using it is rewritten, and the block should be empty by the
- * time the old shell is deleted (docs/ux-vision.md §8, commit 9).
+ * component using it is rewritten. What is left after the old shell went
+ * belongs to the three components still awaiting theirs — the search bar,
+ * the section tooltip, and App.vue's portal modal and toast — so it empties
+ * as the command palette, the legend and the travel moment land.
  * Anything unreferenced was deleted here rather than aliased — including
  * --breakpoint-*, which could never work: media queries cannot read
  * custom properties, which is why the real ladder lives in §4.3 as
@@ -178,7 +180,6 @@
   --text-primary: var(--ink-1);
   --text-secondary: var(--ink-2);
   --text-muted: var(--ink-3);
-  --accent-subtle: var(--accent-wash);
   --accent-warm: var(--trail);
 
   --danger-bg: var(--danger-wash);
