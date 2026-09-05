@@ -4,10 +4,14 @@ import Legend from '../../../src/ui/components/Legend.vue'
 import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
+import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
+import { resetOverlays, useOverlays } from '../../../src/ui/design/useOverlays.js'
 
 enableAutoUnmount(afterEach)
 
 afterEach(() => {
+  resetOverlays()
+  resetKeymap()
   document.body.innerHTML = ''
 })
 
@@ -92,6 +96,13 @@ describe('Legend', () => {
     document.body.innerHTML = ''
     mountLegend({ anchors: { portal: { x: 100, y: 100 } } })
     expect(keyed()).not.toContain('A portal is an outbound link')
+  })
+
+  it('takes its turn in the overlay stack, so Escape reaches it', () => {
+    // It is a summon; every other one is dismissed the same way.
+    mountLegend()
+
+    expect(useOverlays().isOpen('legend')).toBe(true)
   })
 
   it('asks to be closed from the key and from the world', async () => {

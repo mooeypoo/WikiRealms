@@ -1,6 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import Icon from '../design/Icon.vue'
+import { useOverlays } from '../design/useOverlays.js'
 import {
   FEATURE_LEGEND,
   GROUND_LEGEND,
@@ -30,7 +31,23 @@ const props = defineProps({
   anchors: { type: Object, default: () => ({}) },
 })
 
-defineEmits(['close'])
+const emit = defineEmits(['close'])
+
+const overlays = useOverlays()
+
+// It is a summon like any other, so it takes its turn in the stack: Escape
+// closes it, and opening something else puts it away rather than leaving
+// two explanations of the world on screen at once.
+watch(
+  () => props.show,
+  (open) => {
+    if (open) overlays.open('legend', { onClose: () => emit('close') })
+    else overlays.close('legend')
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => overlays.close('legend'))
 
 const annotations = computed(() =>
   FEATURE_LEGEND.filter((entry) => props.anchors[entry.id]).map((entry) => ({

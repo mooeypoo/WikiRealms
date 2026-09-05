@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Sheet from '../../../src/ui/design/Sheet.vue'
@@ -367,5 +369,43 @@ describe('Sheet', () => {
 
     expect(document.querySelector('.sheet')).toBeNull()
     wrapper.unmount()
+  })
+})
+
+describe('stacking', () => {
+  /**
+   * Vue places a Teleport's anchor when the TELEPORT mounts, not when its
+   * content appears, so DOM order among teleported surfaces is not what
+   * anyone would guess: the menus exist from app start with nothing in
+   * them and anchor ahead of the Ledger, which mounts only once an article
+   * resolves. At equal z-index the Ledger therefore painted over every
+   * menu. Modality decides the rung instead, which is what the ladder in
+   * tokens.css meant by separating `sheets` from `overlays`.
+   */
+  const CSS = readFileSync(resolve(process.cwd(), 'src/ui/design/Sheet.vue'), 'utf8')
+  const TOKENS = readFileSync(resolve(process.cwd(), 'src/ui/design/tokens.css'), 'utf8')
+
+  const rung = (selector) =>
+    CSS.match(new RegExp(`\\${selector} \\{[^}]*z-index:\\s*var\\((--[a-z-]+)\\)`))?.[1]
+
+  const ladderValue = (name) => Number(TOKENS.match(new RegExp(`${name}:\\s*(\\d+)`))[1])
+
+  it('puts a summon on a higher rung than a persistent surface', () => {
+    const persistent = rung('.sheet-root')
+    const summon = rung('.sheet-root--modal')
+
+    expect(persistent).toBe('--z-sheets')
+    expect(summon).toBe('--z-overlays')
+    expect(ladderValue('--z-overlays')).toBeGreaterThan(ladderValue('--z-sheets'))
+  })
+
+  it('marks the rung from modality rather than from anything else', () => {
+    const modal = mountSheet({ modal: true })
+    expect(document.querySelector('[data-sheet-root]').classList.contains('sheet-root--modal')).toBe(true)
+    modal.unmount()
+
+    const persistent = mountSheet({ modal: false })
+    expect(document.querySelector('[data-sheet-root]').classList.contains('sheet-root--modal')).toBe(false)
+    persistent.unmount()
   })
 })

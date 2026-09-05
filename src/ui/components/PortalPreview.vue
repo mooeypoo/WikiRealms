@@ -101,7 +101,9 @@ const style = computed(() =>
 .preview-layer {
   position: fixed;
   inset: 0;
-  z-index: var(--z-sheets);
+  /* A summon, so it outranks the persistent panels for the same reason the
+     menus do — and it is anchored to a marker the Ledger may be sitting on. */
+  z-index: var(--z-overlays);
 }
 
 .preview__leader {

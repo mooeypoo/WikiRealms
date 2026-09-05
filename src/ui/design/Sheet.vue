@@ -307,7 +307,7 @@ function onScrimDismiss() {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="sheet-root" data-sheet-root>
+    <div v-if="open" :class="['sheet-root', { 'sheet-root--modal': modal }]" data-sheet-root>
       <Transition name="scrim">
         <Scrim v-if="modal" :dismissible="dismissible" @dismiss="onScrimDismiss" />
       </Transition>
@@ -366,8 +366,17 @@ function onScrimDismiss() {
 <style scoped>
 /**
  * One stacking context per surface. The scrim and the surface order
- * themselves inside it, so no presentation needs its own z-index and two
- * open sheets stack in mount order rather than fighting over a number.
+ * themselves inside it, so no presentation needs its own z-index.
+ *
+ * A MODAL surface sits a rung higher than a persistent one, which is what
+ * the ladder in tokens.css meant all along by separating `sheets` from
+ * `overlays` — and what this originally got wrong by putting every sheet on
+ * the same rung. Equal z-index leaves DOM order to decide, and DOM order
+ * here is not what anyone would guess: Vue places a Teleport's anchor when
+ * the TELEPORT mounts, not when its content appears, so the menus (which
+ * exist from app start with nothing in them) anchor ahead of the Ledger
+ * (which mounts only once an article resolves). The Ledger therefore
+ * painted over every menu.
  *
  * pointer-events are off here and back on for the children: a non-modal
  * panel renders inside a full-viewport root, and without this the invisible
@@ -378,6 +387,10 @@ function onScrimDismiss() {
   inset: 0;
   z-index: var(--z-sheets);
   pointer-events: none;
+}
+
+.sheet-root--modal {
+  z-index: var(--z-overlays);
 }
 
 .sheet {
