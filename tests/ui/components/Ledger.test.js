@@ -91,6 +91,25 @@ describe('Ledger', () => {
       expect(document.querySelector('.ledger__summary')).toBeNull()
     })
 
+    it('offers no actions at peek, having no room to put them', () => {
+      // They used to render below the fold: visible enough to look like
+      // controls, clipped enough to be unclickable, which is the worst of
+      // both. The panel is 16dvh and the header is most of it.
+      mountLedger({ state: 'peek' })
+
+      expect(document.querySelector('.ledger__footer')).toBeNull()
+      expect(document.querySelector('.sheet__footer')).toBeNull()
+    })
+
+    it('offers them from open onwards, where they fit', () => {
+      mountLedger({ state: 'open' })
+
+      const footer = document.querySelector('.ledger__footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent).toContain('View on Wikipedia')
+      expect(footer.textContent).toContain('Share')
+    })
+
     it('shows the summary and sections from open onwards', () => {
       mountLedger({ state: 'open' })
 

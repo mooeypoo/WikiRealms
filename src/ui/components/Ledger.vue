@@ -246,7 +246,12 @@ watch(
       </template>
     </div>
 
-    <template #footer>
+    <!-- Not at peek. That state is 16dvh, the header alone is most of it,
+         and the footer was rendering below the fold — visible enough to
+         look like a control and clipped enough to be unclickable, which is
+         the worst of both. Peek is where you are and four readouts;
+         actions belong with the content they act on. -->
+    <template v-if="state !== 'peek'" #footer>
       <div class="ledger__footer">
         <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
           View on Wikipedia
