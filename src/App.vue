@@ -685,6 +685,24 @@ watch([graph, articleCache], () => {
   pointer-events: none;
 }
 
+/* A second, fainter field on a tile that shares no useful factor with the
+   400px one: the combined pattern only repeats every 5200px, so the sky
+   reads as scattered instead of tiled. Cooler and dimmer than the layer
+   above it, which is what gives the field any sense of depth. */
+.cosmos__field::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 33% 8%, rgba(198, 214, 255, 0.55) 50%, transparent 50%),
+    radial-gradient(1px 1px at 7% 62%, rgba(255, 255, 255, 0.4) 50%, transparent 50%),
+    radial-gradient(1.5px 1.5px at 58% 41%, rgba(198, 214, 255, 0.5) 50%, transparent 50%),
+    radial-gradient(1px 1px at 84% 27%, rgba(255, 255, 255, 0.45) 50%, transparent 50%),
+    radial-gradient(1px 1px at 46% 90%, rgba(198, 214, 255, 0.4) 50%, transparent 50%);
+  background-repeat: repeat;
+  background-size: 260px 260px;
+}
+
 .cosmos__field::after {
   content: '';
   position: absolute;

@@ -992,7 +992,14 @@ onMounted(() => {
   scene = new THREE.Scene()
   camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000)
 
-  renderer = new THREE.WebGLRenderer({ antialias: true })
+  // Transparent, so the CSS starfield and the body's nebula gradient show
+  // through instead of a black canvas painted over them. This is why the
+  // sky costs nothing: no skybox, no star geometry, no texture — the
+  // backdrop is a gradient the compositor already had to draw. It also
+  // means the stars hold still while the world turns under them, which is
+  // what reads as "far away".
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setClearColor(0x000000, 0)
   containerRef.value.appendChild(renderer.domElement)
 
   // A single rotated group so terrain/water/portals/halos/foliage all
