@@ -37,11 +37,13 @@ export const infoHubContent = {
     title: 'About',
     icon: 'ℹ️',
     content: `
-      <h3>Created by mooeypoo</h3>
+      <h3>Created by Moriel Schottlender</h3>
       <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
+      <p>It asks the question: What would a Wikipedia article look like if it were a physical place you could explore? How would an article be represented through geography?</p>
+      <p>Now you can explore Wikipedia articles as landscapes, where each section is a peak and every link is a portal to another world.</p>
       <ul>
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
-        <li><a href="https://mooeypoo.com" target="_blank" rel="noopener noreferrer">Personal website</a></li>
+        <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>
       </ul>
     `,
   },
