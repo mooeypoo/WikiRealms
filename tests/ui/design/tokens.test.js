@@ -126,6 +126,30 @@ describe('design tokens', () => {
       return { used, defined }
     }
 
+    it('closes every bracket it opens', () => {
+      // A malformed declaration is DROPPED by the browser, silently, the
+      // same way an unknown custom property is — which is how a bulk
+      // rename left `var(--surface-1-solid))` in a tooltip and took its
+      // background away with nobody noticing. The regex that did it stopped
+      // at the first ")" inside a nested rgba().
+      const broken = []
+
+      for (const file of walkSrc()) {
+        const source = readFileSync(file, 'utf8')
+        source.split('\n').forEach((line, index) => {
+          const declaration = line.trim()
+          if (!declaration.endsWith(';') || !declaration.includes(':')) return
+          if (!declaration.includes('(')) return
+
+          const opens = (declaration.match(/\(/g) ?? []).length
+          const closes = (declaration.match(/\)/g) ?? []).length
+          if (opens !== closes) broken.push(`${file.split('/src/')[1]}:${index + 1} ${declaration}`)
+        })
+      }
+
+      expect(broken).toEqual([])
+    })
+
     it('references no token that is never defined', () => {
       const { used, defined } = scanSrc()
       const dangling = [...used].filter((name) => !defined.has(name) && !RUNTIME_SET_IN_JS.has(name))

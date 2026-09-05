@@ -1192,8 +1192,8 @@ watch(
 .world-view-3d__tooltip {
   position: absolute;
   transform: translate(-50%, calc(-100% - 12px));
-  background: var(--surface-1-solid));
-  border: 1px solid var(--edge-hair));
+  background: var(--surface-1-solid);
+  border: 1px solid var(--edge-hair);
   border-radius: 6px;
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
