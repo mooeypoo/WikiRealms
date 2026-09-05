@@ -1,10 +1,10 @@
 <script setup>
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { useOverlays } from '../design/useOverlays.js'
-import { CURATED_REALMS, randomRealm } from '../content/realms.js'
+import { pickRealms, randomRealm } from '../content/realms.js'
 
 /**
  * Before there is anywhere to be.
@@ -31,6 +31,11 @@ const emit = defineEmits(['select', 'guide', 'close'])
 
 const { query, results, status, errorMessage, setQuery } = useArticleSearch()
 const overlays = useOverlays()
+
+// Sampled once per mount rather than per render, so the grid does not
+// reshuffle under the pointer — and freshly each time the screen is
+// summoned, so coming back shows somewhere new.
+const suggestions = ref(pickRealms())
 
 // Summoned over a live world it is a surface like any other: Escape closes
 // it, and it takes its turn in the stack rather than inventing a dismissal.
@@ -88,7 +93,7 @@ function choose(title) {
       <div v-if="results.length === 0" class="launch__suggestions">
         <p class="launch__label">Or begin somewhere</p>
         <ul class="launch__realms">
-          <li v-for="realm in CURATED_REALMS" :key="realm.title">
+          <li v-for="realm in suggestions" :key="realm.title">
             <button type="button" @click="choose(realm.title)">
               <strong>{{ realm.title }}</strong>
               <span>{{ realm.hint }}</span>
@@ -97,7 +102,11 @@ function choose(title) {
         </ul>
 
         <div class="launch__extras">
-          <button class="launch__extra" type="button" @click="choose(randomRealm().title)">
+          <button
+            class="launch__extra"
+            type="button"
+            @click="choose(randomRealm(suggestions.map((realm) => realm.title)).title)"
+          >
             <Icon name="crosshair" :size="14" />
             Surprise me
           </button>

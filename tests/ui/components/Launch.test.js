@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Launch from '../../../src/ui/components/Launch.vue'
-import { CURATED_REALMS, randomRealm } from '../../../src/ui/content/realms.js'
+import { CURATED_REALMS, SUGGESTION_COUNT, pickRealms, randomRealm } from '../../../src/ui/content/realms.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
 import { resetOverlays, useOverlays } from '../../../src/ui/design/useOverlays.js'
 
@@ -24,28 +24,45 @@ describe('Launch', () => {
     expect(wrapper.find('input').exists()).toBe(true)
   })
 
-  it('offers somewhere to begin, so the field is not the only way in', () => {
+  it('offers a handful to begin from, not the whole shelf', () => {
     const wrapper = mount(Launch)
     const chips = wrapper.findAll('.launch__realms button')
 
-    expect(chips).toHaveLength(CURATED_REALMS.length)
-    expect(chips[0].text()).toContain(CURATED_REALMS[0].title)
+    expect(chips).toHaveLength(SUGGESTION_COUNT)
+    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(chips[0].find('strong').text())
+  })
+
+  it('shows somewhere new each time it is opened', () => {
+    // The point of a shelf larger than the grid: a viewer who comes back
+    // should not meet the same six forever.
+    const seen = new Set()
+    for (let visit = 0; visit < 12; visit += 1) {
+      for (const chip of mount(Launch).findAll('.launch__realms button')) {
+        seen.add(chip.text())
+      }
+    }
+
+    expect(seen.size).toBeGreaterThan(SUGGESTION_COUNT)
   })
 
   it('starts a journey from a suggestion', async () => {
     const wrapper = mount(Launch)
+    const chosen = wrapper.findAll('.launch__realms button')[2]
 
-    await wrapper.findAll('.launch__realms button')[2].trigger('click')
+    await chosen.trigger('click')
 
-    expect(wrapper.emitted('select')[0][0].title).toBe(CURATED_REALMS[2].title)
+    expect(chosen.text()).toContain(wrapper.emitted('select')[0][0].title)
   })
 
-  it('picks somewhere for the undecided', async () => {
+  it('picks somewhere for the undecided, from beyond what is on screen', async () => {
     const wrapper = mount(Launch)
+    const shown = wrapper.findAll('.launch__realms button').map((chip) => chip.find('strong').text())
 
     await wrapper.findAll('.launch__extra')[0].trigger('click')
 
-    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(wrapper.emitted('select')[0][0].title)
+    const picked = wrapper.emitted('select')[0][0].title
+    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(picked)
+    expect(shown).not.toContain(picked)
   })
 
   it('offers the guide, for someone who wants to know first', async () => {
@@ -92,22 +109,60 @@ describe('Launch', () => {
   })
 })
 
-describe('randomRealm', () => {
-  it('never returns the realm already on screen', () => {
-    // "Surprise me" that surprises you with where you already are is a bug.
+describe('the realm shelf', () => {
+  it('is large enough that a sample means something', () => {
+    expect(CURATED_REALMS.length).toBeGreaterThan(SUGGESTION_COUNT * 3)
+  })
+
+  it('names each realm once', () => {
+    const titles = CURATED_REALMS.map((realm) => realm.title)
+    expect(new Set(titles).size).toBe(titles.length)
+  })
+
+  it('gives every realm a hint, since a bare title invites nobody', () => {
     for (const realm of CURATED_REALMS) {
-      for (let roll = 0; roll < CURATED_REALMS.length; roll += 1) {
-        const picked = randomRealm(realm.title, () => roll / CURATED_REALMS.length)
-        expect(picked.title).not.toBe(realm.title)
-      }
+      expect(realm.hint, realm.title).toBeTruthy()
     }
   })
 
-  it('can reach every realm', () => {
-    const reached = new Set()
-    for (let roll = 0; roll < CURATED_REALMS.length; roll += 1) {
-      reached.add(randomRealm(null, () => roll / CURATED_REALMS.length).title)
-    }
-    expect(reached.size).toBe(CURATED_REALMS.length)
+  describe('pickRealms', () => {
+    it('returns the asked-for number, without repeats', () => {
+      for (let seed = 0; seed < 20; seed += 1) {
+        const picked = pickRealms(SUGGESTION_COUNT, () => seed / 20)
+        expect(picked).toHaveLength(SUGGESTION_COUNT)
+        expect(new Set(picked.map((realm) => realm.title)).size).toBe(SUGGESTION_COUNT)
+      }
+    })
+
+    it('can reach beyond the first few entries of the shelf', () => {
+      // A sample that always returns the head of the list is not a sample.
+      const reached = new Set()
+      for (let seed = 0; seed < 40; seed += 1) {
+        for (const realm of pickRealms(SUGGESTION_COUNT, () => (seed * 0.137) % 1)) {
+          reached.add(realm.title)
+        }
+      }
+      expect(reached.size).toBeGreaterThan(SUGGESTION_COUNT * 2)
+    })
+
+    it('copes with being asked for more than the shelf holds', () => {
+      expect(pickRealms(CURATED_REALMS.length + 5)).toHaveLength(CURATED_REALMS.length)
+    })
+  })
+
+  describe('randomRealm', () => {
+    it('never returns something already on screen', () => {
+      // "Surprise me" that offers what the viewer just declined is a bug.
+      const shown = CURATED_REALMS.slice(0, SUGGESTION_COUNT).map((realm) => realm.title)
+
+      for (let roll = 0; roll < 30; roll += 1) {
+        expect(shown).not.toContain(randomRealm(shown, () => roll / 30).title)
+      }
+    })
+
+    it('still answers when everything is excluded', () => {
+      const all = CURATED_REALMS.map((realm) => realm.title)
+      expect(randomRealm(all)).toBeTruthy()
+    })
   })
 })
