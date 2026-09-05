@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import App from '../src/App.vue'
 
 vi.mock('../src/adapters/wikipediaSearchAdapter.js', () => ({
@@ -31,8 +31,39 @@ import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js
 import { fetchWikipediaArticle } from '../src/adapters/wikipediaArticleAdapter.js'
 import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/snapshotStorage.js'
 
+/**
+ * The Ledger is teleported to <body>, so it is not inside the wrapper's own
+ * tree. These read it the way a viewer would find it — by its accessible
+ * name and its content — rather than by a class that a rewrite can rename.
+ */
+function ledgerTitle() {
+  return document.querySelector('.ledger__title')?.textContent ?? null
+}
+
+function sectionCard(anchor) {
+  return document.querySelector(`[data-anchor="${anchor}"]`)
+}
+
+async function collapseLedger(wrapper) {
+  // Step down from open → peek → collapsed.
+  for (let step = 0; step < 3; step += 1) {
+    const less = document.querySelector('[aria-label="Show less of this panel"]')
+    if (!less) break
+    less.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+  }
+  return wrapper
+}
+
+// The Ledger and every Sheet teleport to <body>, so a wrapper left mounted
+// keeps its surfaces in the document and the next test finds them instead of
+// its own. Unmounting after each test removes that whole class of pollution.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
   vi.useFakeTimers()
+  localStorage.clear()
+  document.body.innerHTML = ''
   searchWikipediaTitles.mockReset()
   fetchWikipediaArticle.mockReset()
   saveSnapshotToStorage.mockReset()
@@ -69,9 +100,9 @@ describe('App', () => {
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    expect(wrapper.text()).toContain('German-born theoretical physicist.')
-    expect(wrapper.text()).toContain('1234')
+    expect(ledgerTitle()).toBe('Albert Einstein')
+    expect(document.body.textContent).toContain('German-born theoretical physicist.')
+    expect(document.body.textContent).toContain('1234')
 
     expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
     expect(wrapper.findAll('.world-view__portal')).toHaveLength(2)
@@ -127,7 +158,7 @@ describe('App', () => {
     await wrapper.find('.search-bar__results button').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+    expect(ledgerTitle()).toBe('Albert Einstein')
     expect(wrapper.find('button[aria-label="Go back"]').attributes('disabled')).toBeDefined()
 
     await wrapper.find('.world-view__portal').trigger('click')
@@ -140,7 +171,7 @@ describe('App', () => {
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Physics')
+    expect(ledgerTitle()).toBe('Physics')
 
     const backButton = wrapper.find('button[aria-label="Go back"]')
     expect(backButton.attributes('disabled')).toBeUndefined()
@@ -148,7 +179,7 @@ describe('App', () => {
     await backButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+    expect(ledgerTitle()).toBe('Albert Einstein')
   })
 
   it('persists a snapshot to storage whenever traversal changes', async () => {
@@ -203,7 +234,7 @@ describe('App', () => {
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+    expect(ledgerTitle()).toBe('Albert Einstein')
     const backButton = wrapper.find('button[aria-label="Go back"]')
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
   })
@@ -212,7 +243,7 @@ describe('App', () => {
     const wrapper = mount(App)
 
     expect(wrapper.find('.app__empty-state').exists()).toBe(true)
-    expect(wrapper.find('.app__selected-article').exists()).toBe(false)
+    expect(ledgerTitle()).toBeNull()
   })
 
   it('shows a stale-world badge when a revisited article has a newer revision than last time', async () => {
@@ -257,7 +288,7 @@ describe('App', () => {
     await wrapper.find('.search-bar__results button').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.app__badge--stale').exists()).toBe(false) // first visit, nothing to compare against
+    expect(document.body.textContent).not.toContain('Updated on Wikipedia') // first visit, nothing to compare against
 
     await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
       // Confirm the portal navigation via modal
@@ -272,7 +303,7 @@ describe('App', () => {
     await backButton.trigger('click') // back to Albert Einstein, refetches with a newer revision
     await flushPromises()
 
-    expect(wrapper.find('.app__badge--stale').exists()).toBe(true)
+    expect(document.body.textContent).toContain('Updated on Wikipedia')
   })
 })
 
@@ -375,21 +406,22 @@ describe('App section focus', () => {
   it('renders a card per top-level section, with subsection/word/citation chips', async () => {
     const wrapper = await mountWithArticle()
 
-    const cards = wrapper.findAll('.app__section-card')
+    const cards = [...document.querySelectorAll('.ledger__section')]
+
     expect(cards).toHaveLength(2)
-    expect(cards[0].attributes('id')).toBe('app-section-Early_life')
-    expect(cards[0].find('h4').text()).toBe('Early life')
-    expect(cards[0].text()).toContain('1 subsection')
-    expect(cards[0].text()).toContain('4 cites')
-    expect(cards[1].attributes('id')).toBe('app-section-Career')
+    expect(cards[0].dataset.anchor).toBe('Early_life')
+    expect(cards[0].querySelector('h4').textContent).toBe('Early life')
+    expect(cards[0].textContent).toContain('1 sub')
+    expect(cards[0].textContent).toContain('4 c')
+    expect(cards[1].dataset.anchor).toBe('Career')
     // Subsections aren't listed as cards of their own.
-    expect(wrapper.find('#app-section-Childhood').exists()).toBe(false)
+    expect(sectionCard('Childhood')).toBeNull()
   })
 
   it('links each card to its section on Wikipedia', async () => {
     const wrapper = await mountWithArticle()
 
-    expect(wrapper.find('#app-section-Career a').attributes('href')).toBe(
+    expect(sectionCard('Career').querySelector('a').getAttribute('href')).toBe(
       'https://en.wikipedia.org/wiki/Albert_Einstein#Career',
     )
   })
@@ -399,7 +431,7 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
 
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
@@ -408,18 +440,18 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: 'Childhood', sectionAnchor: 'Early_life', depth: 2 })
 
-    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('expands a collapsed panel before focusing', async () => {
     const wrapper = await mountWithArticle()
-    await wrapper.find('.app__article-toggle').trigger('click')
-    expect(wrapper.find('.app__selected-article').classes()).toContain('app__selected-article--collapsed')
+    await collapseLedger(wrapper)
+    expect(document.querySelector('.ledger__restore')).not.toBeNull()
 
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
 
-    expect(wrapper.find('.app__selected-article').classes()).not.toContain('app__selected-article--collapsed')
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(document.querySelector('.ledger__restore')).toBeNull()
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('re-flashes the same card when it is clicked again', async () => {
@@ -432,10 +464,10 @@ describe('App section focus', () => {
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
     await vi.advanceTimersByTimeAsync(800)
 
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
 
     await vi.advanceTimersByTimeAsync(800)
-    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
   })
 
   it('moves the highlight when a different section is clicked mid-flash', async () => {
@@ -444,8 +476,8 @@ describe('App section focus', () => {
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
     await clickSectionMarker(wrapper, { anchor: 'Early_life', sectionAnchor: 'Early_life', depth: 1 })
 
-    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
-    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
+    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('ignores a click on a peak with no section anchor (the folded range)', async () => {
@@ -453,7 +485,7 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: null, sectionAnchor: null, depth: 1 })
 
-    expect(wrapper.findAll('.app__section-card--flash')).toHaveLength(0)
+    expect(document.querySelectorAll('.ledger__section--flash')).toHaveLength(0)
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 })

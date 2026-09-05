@@ -73,7 +73,13 @@ export function open(id, { modal = true, exclusive = true, dismissible = true, o
   if (stack.value.some((entry) => entry.id === id)) return
 
   if (exclusive) {
-    for (const entry of [...stack.value]) close(entry.id)
+    // Only other SUMMONS are evicted. A persistent surface — the Ledger,
+    // later the Trail — is not one: it coexists with everything, and
+    // throwing it out because someone opened settings would be the panel
+    // vanishing for a reason that has nothing to do with it (§3, §4.2).
+    for (const entry of [...stack.value]) {
+      if (entry.modal) close(entry.id)
+    }
   }
 
   const restoreFocusTo = typeof document !== 'undefined' ? document.activeElement : null

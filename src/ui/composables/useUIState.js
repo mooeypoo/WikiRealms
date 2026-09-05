@@ -24,6 +24,9 @@ export const useUIState = () => {
     // How the world is drawn, as opposed to what shape it is: 'high' forces
     // WebGL, 'low' forces the 2D canvas fallback, 'auto' picks by capability.
     rendering: 'auto',
+    // How much of the Ledger is showing. Null until the viewer chooses, so
+    // the first visit can differ by screen size without overriding them.
+    ledgerState: null,
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
@@ -54,6 +57,7 @@ export const useUIState = () => {
         // 3D view — fall back to the flat map.
         if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
         if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
+        if (!['collapsed', 'peek', 'open', 'full'].includes(parsed.ledgerState)) delete parsed.ledgerState;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

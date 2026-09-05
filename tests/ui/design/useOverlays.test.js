@@ -38,6 +38,18 @@ describe('useOverlays', () => {
     expect(isOpen('guide')).toBe(false)
   })
 
+  it('leaves a persistent surface alone when a summon opens', () => {
+    // The Ledger is not a summon. Opening settings must not throw it out —
+    // it would vanish for a reason that has nothing to do with it.
+    const { isOpen } = useOverlays()
+
+    open('ledger', { modal: false, exclusive: false })
+    open('settings')
+
+    expect(isOpen('ledger')).toBe(true)
+    expect(isOpen('settings')).toBe(true)
+  })
+
   it('layers when a surface explicitly asks to', () => {
     const { stack, isTopmost } = useOverlays()
 

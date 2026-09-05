@@ -40,9 +40,20 @@ const props = defineProps({
   /** Accessible name. One of these is required for a modal surface. */
   label: { type: String, default: null },
   labelledby: { type: String, default: null },
-  /** Sheet heights as fractions of the viewport: peek, open, full. */
+  /** Heights as fractions of the viewport: peek, open, full. */
   snapPoints: { type: Array, default: () => [0.14, 0.45, 0.9] },
   snap: { type: Number, default: 1 },
+  /**
+   * Minimised to a bar, rather than gone.
+   *
+   * A summon is dismissed and the top scrim is how you ask again. A
+   * PERSISTENT surface cannot work that way: close it outright and nothing
+   * on screen explains how to get it back, because its own affordance went
+   * with it (docs/ux-vision.md §4.2). Collapsing renders the `collapsed`
+   * slot in place of everything else, so the bar left behind is both the
+   * state and the way out of it.
+   */
+  collapsed: { type: Boolean, default: false },
   /** Which edge a drawer or panel is docked to. */
   side: { type: String, default: 'left', validator: (value) => ['left', 'right'].includes(value) },
   /** Dragging a sheet below its lowest snap dismisses it. */
@@ -66,6 +77,8 @@ const resolvedPresentation = computed(() => {
 })
 
 const isSheet = computed(() => resolvedPresentation.value === 'sheet')
+/** A drawer already fills its edge; only these take a height from a snap. */
+const isSized = computed(() => ['sheet', 'panel'].includes(resolvedPresentation.value))
 const canDragDismiss = computed(() => props.dismissOnDrag ?? props.modal)
 
 const snapFraction = computed(() => {
@@ -75,7 +88,9 @@ const snapFraction = computed(() => {
 })
 
 const surfaceStyle = computed(() => {
-  if (!isSheet.value) return {}
+  // Collapsed takes its height from the bar it is showing, so a consumer
+  // can put whatever it likes in there without picking a number here.
+  if (props.collapsed || !isSized.value) return {}
   return {
     height: `${snapFraction.value * 100}dvh`,
     transform: dragOffset.value ? `translateY(${dragOffset.value}px)` : undefined,
@@ -227,7 +242,7 @@ let dragStartY = 0
 let dragStartHeight = 0
 
 function onDragStart(event) {
-  if (!isSheet.value) return
+  if (!isSheet.value || props.collapsed) return
   dragging.value = true
   dragStartY = event.clientY
   dragStartHeight = snapFraction.value * window.innerHeight
@@ -301,7 +316,11 @@ function onScrimDismiss() {
         <section
           ref="surface"
           class="sheet"
-          :class="[`sheet--${resolvedPresentation}`, `sheet--${side}`, { 'sheet--dragging': dragging }]"
+          :class="[
+            `sheet--${resolvedPresentation}`,
+            `sheet--${side}`,
+            { 'sheet--dragging': dragging, 'sheet--collapsed': collapsed },
+          ]"
           :style="surfaceStyle"
           :role="modal ? 'dialog' : undefined"
           :aria-modal="modal ? 'true' : undefined"
@@ -310,6 +329,11 @@ function onScrimDismiss() {
           tabindex="-1"
           @keydown="onKeydown"
         >
+          <template v-if="collapsed">
+            <slot name="collapsed" />
+          </template>
+
+          <template v-else>
           <div
             v-if="isSheet"
             class="sheet__grip"
@@ -332,6 +356,7 @@ function onScrimDismiss() {
           <footer v-if="$slots.footer" class="sheet__footer">
             <slot name="footer" />
           </footer>
+          </template>
         </section>
       </Transition>
     </div>
@@ -430,6 +455,11 @@ function onScrimDismiss() {
 
 .sheet--panel.sheet--right {
   right: var(--spacing-md);
+}
+
+.sheet--collapsed {
+  height: auto;
+  max-height: none;
 }
 
 .sheet--dragging {

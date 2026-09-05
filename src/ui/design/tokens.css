@@ -178,17 +178,13 @@
   --text-primary: var(--ink-1);
   --text-secondary: var(--ink-2);
   --text-muted: var(--ink-3);
-  --text-link: var(--accent);
-
   --accent-subtle: var(--accent-wash);
   --accent-warm: var(--trail);
-  --glow-warm: var(--glow-trail);
 
   --danger-bg: var(--danger-wash);
   --danger-border: var(--danger-edge);
   --danger-text: var(--danger);
 
-  --panel-bg-rgb: var(--surface-1-rgb);
   --panel-border-rgb: var(--edge-rgb);
 
   --size-touch: var(--hit);
