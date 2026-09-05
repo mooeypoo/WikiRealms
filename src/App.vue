@@ -726,7 +726,7 @@ watch([graph, articleCache], () => {
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   padding: var(--spacing-lg) var(--spacing-xl);
-  z-index: 1;
+  z-index: var(--z-stage-notice);
   transition: opacity var(--dur-2) ease-out;
 }
 
@@ -761,7 +761,7 @@ watch([graph, articleCache], () => {
 
 .app__toast {
   position: fixed;
-  z-index: 2100;
+  z-index: var(--z-toast);
   left: 50%;
   bottom: 1.5rem;
   margin: 0;

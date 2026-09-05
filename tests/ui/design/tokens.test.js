@@ -101,12 +101,48 @@ describe('design tokens', () => {
     expect(TOKENS).not.toMatch(/^\s*--breakpoint-[a-z]+\s*:/m)
   })
 
-  it('defines one z-index ladder and no strays elsewhere', () => {
-    for (const layer of ['stage', 'instruments', 'sheets', 'overlays', 'toast']) {
-      expect(() => token(`z-${layer}`)).not.toThrow()
+  const LADDER = ['stage', 'stage-notice', 'stage-label', 'stage-portal', 'instruments', 'sheets', 'overlays', 'toast']
+
+  it('defines one z-index ladder, in order', () => {
+    for (const layer of LADDER) expect(() => token(`z-${layer}`)).not.toThrow()
+
+    const rungs = LADDER.map((layer) => Number(token(`z-${layer}`)))
+    expect(rungs).toEqual([...rungs].sort((a, b) => a - b))
+  })
+
+  it('puts a portal prompt above a section label', () => {
+    // Both are drawn onto the world and both follow the cursor, so a portal
+    // sitting on a summit puts them on the same pixel. "Click to travel" is
+    // the one you can act on; it cannot be the one underneath.
+    expect(Number(token('z-stage-portal'))).toBeGreaterThan(Number(token('z-stage-label')))
+  })
+
+  it('keeps everything drawn on the world below the instruments', () => {
+    // SectionTooltip carried a bare z-index: 15 against --z-instruments: 10,
+    // so a hover label painted over the top bar and the helm.
+    for (const layer of ['stage-notice', 'stage-label', 'stage-portal']) {
+      expect(Number(token(`z-${layer}`))).toBeLessThan(Number(token('z-instruments')))
     }
-    const ladder = ['stage', 'instruments', 'sheets', 'overlays', 'toast'].map((l) => Number(token(`z-${l}`)))
-    expect(ladder).toEqual([...ladder].sort((a, b) => a - b))
+  })
+
+  it('stacks nothing outside the ladder', () => {
+    // The ladder is only a ladder if every rule climbs it. A bare number
+    // silently outranks it — that is how the section label got above the
+    // helm and the toast sat at 2100 with --z-toast defined as 300.
+    const strays = []
+
+    for (const file of walkSrc()) {
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, index) => {
+          const value = line.match(/^\s*z-index:\s*(.+?);/)?.[1]
+          if (value && !value.startsWith('var(--z-')) {
+            strays.push(`${file.split('/src/')[1]}:${index + 1} z-index: ${value}`)
+          }
+        })
+    }
+
+    expect(strays).toEqual([])
   })
 
   describe('the token system holds together across src/', () => {

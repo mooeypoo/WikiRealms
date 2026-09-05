@@ -41,7 +41,7 @@ defineProps({
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 15;
+  z-index: var(--z-stage-label);
   /* Nudge up + center so the summit sits just below the tooltip's bottom edge. */
   margin-top: -6.5rem;
   margin-left: -8.5rem;

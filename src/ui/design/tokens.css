@@ -120,6 +120,14 @@
   /* ── LAYERS ────────────────────────────────────────────────────────
      One ladder, replacing the ad-hoc 1 / 100 / 1000 / 2000 / 2100. */
   --z-stage: 0;
+  /* Things drawn onto the world itself, all of them under the instruments:
+     a notice about the world, then the two hover popups. A portal prompt
+     outranks a section label because one invites an action and the other
+     describes what is already there — when both land on the same pixel,
+     the actionable one has to be the readable one. */
+  --z-stage-notice: 2;
+  --z-stage-label: 4;
+  --z-stage-portal: 6;
   --z-instruments: 10;
   --z-sheets: 100;
   --z-overlays: 200;

@@ -1191,6 +1191,9 @@ watch(
 
 .world-view-3d__tooltip {
   position: absolute;
+  /* Above the section label: hovering a portal that happens to sit on a
+     summit must not bury "Click to travel" under the summit's description. */
+  z-index: var(--z-stage-portal);
   transform: translate(-50%, calc(-100% - 12px));
   background: var(--surface-1-solid);
   border: 1px solid var(--edge-hair);
