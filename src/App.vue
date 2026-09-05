@@ -11,7 +11,9 @@ import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
 import TrailMenu from './ui/components/TrailMenu.vue'
 import JourneyMenu from './ui/components/JourneyMenu.vue'
+import ToolsMenu from './ui/components/ToolsMenu.vue'
 import Ledger from './ui/components/Ledger.vue'
+import { clearsLedger, ledgerClearance } from './ui/components/ledgerStates.js'
 import InfoHub from './ui/components/InfoHub.vue'
 import SettingsModal from './ui/components/SettingsModal.vue'
 import { useArticle } from './ui/composables/useArticle.js'
@@ -71,6 +73,7 @@ const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showTrail = ref(false)
 const showJourney = ref(false)
+const showTools = ref(false)
 const showLaunch = ref(false)
 const showLegend = ref(false)
 const legendAnchors = ref({})
@@ -162,6 +165,26 @@ const ledgerState = computed(
   () => preferences.ledgerState ?? (viewport.atLeast('md') ? 'open' : 'peek'),
 )
 
+/**
+ * On a phone the Ledger's sheet and the helm share the bottom of the
+ * screen, so the helm rises to clear it — and once the sheet is past peek
+ * there is nowhere left to rise to, so the helm stands down rather than
+ * perching on top of a panel the viewer is reading.
+ *
+ * Neither applies elsewhere: on a desktop the Ledger is docked bottom-LEFT
+ * and the helm is bottom-right, and on a landscape phone the Ledger is a
+ * right-hand drawer while the helm has already crossed to the left edge.
+ */
+const ledgerSharesTheCorner = computed(() => !viewport.atLeast('md') && !viewport.isShort.value)
+
+const helmLift = computed(() =>
+  ledgerSharesTheCorner.value ? ledgerClearance(ledgerState.value) : '0px',
+)
+
+const helmVisible = computed(
+  () => !ledgerSharesTheCorner.value || clearsLedger(ledgerState.value),
+)
+
 function setLedgerState(state) {
   updatePreferences({ ledgerState: state })
 }
@@ -232,6 +255,16 @@ function toggleLegend() {
   }
   legendAnchors.value = worldViewRef.value?.legendAnchors?.() ?? {}
   showLegend.value = true
+}
+
+/**
+ * The menu is a way to the tools, not a place to be: choosing one closes
+ * it. Deferred a tick so the overlay stack sees the close before the open
+ * and does not treat the pair as a surface replacing itself.
+ */
+function fromTools(open) {
+  showTools.value = false
+  nextTick(open)
 }
 
 function onHomeClick() {
@@ -391,6 +424,7 @@ watch([graph, articleCache], () => {
       @home="showLaunch = true"
       @trail="showTrail = true"
       @search="isSearchOpen = true"
+      @tools="showTools = true"
       @journey="showJourney = true"
       @guide="showInfoHub = true"
       @settings="showSettings = true"
@@ -424,7 +458,8 @@ watch([graph, articleCache], () => {
     </div>
 
     <Helm
-      v-if="world && !showHudHidden"
+      v-if="world && !showHudHidden && helmVisible"
+      :lift="helmLift"
       :world-shape="preferences.worldShape"
       :disabled="worldStatus !== 'success'"
       :can-recenter="rendersInWebGL"
@@ -495,6 +530,15 @@ watch([graph, articleCache], () => {
     />
 
     <CommandPalette :show="isSearchOpen" @select="onSelect" @close="isSearchOpen = false" />
+
+    <ToolsMenu
+      :show="showTools"
+      @search="fromTools(() => (isSearchOpen = true))"
+      @journey="fromTools(() => (showJourney = true))"
+      @guide="fromTools(() => (showInfoHub = true))"
+      @settings="fromTools(() => (showSettings = true))"
+      @close="showTools = false"
+    />
 
     <TrailMenu :show="showTrail" :path="path" @select="onTrailSelect" @close="showTrail = false" />
 

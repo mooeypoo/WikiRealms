@@ -152,3 +152,88 @@ describe('accessibility', () => {
     expect(wrapper.find('.scrim').text()).not.toMatch(/\p{Extended_Pictographic}/u)
   })
 })
+
+/**
+ * Two controls sharing one corner, on the only screen where they do.
+ */
+describe('the phone bottom-right', () => {
+  function phone() {
+    window.innerWidth = 390
+    window.innerHeight = 844
+    window.dispatchEvent(new Event('resize'))
+  }
+
+  function desktop() {
+    window.innerWidth = 1280
+    window.innerHeight = 900
+    window.dispatchEvent(new Event('resize'))
+  }
+
+  it('lifts the helm clear of a minimised sheet rather than hiding behind it', async () => {
+    phone()
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ ledgerState: 'peek' }))
+    const wrapper = await inAWorld()
+
+    const helm = wrapper.find('.helm')
+    expect(helm.exists()).toBe(true)
+    expect(helm.attributes('style')).toContain('--helm-lift')
+    expect(helm.attributes('style')).not.toContain('--helm-lift: 0px')
+  })
+
+  it('stands the helm down once the sheet is most of the screen', async () => {
+    phone()
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ ledgerState: 'full' }))
+    const wrapper = await inAWorld()
+
+    expect(wrapper.find('.helm').exists()).toBe(false)
+  })
+
+  it('never lifts on a desktop, where they are on opposite sides', async () => {
+    desktop()
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ ledgerState: 'full' }))
+    const wrapper = await inAWorld()
+
+    expect(wrapper.find('.helm').exists()).toBe(true)
+    expect(wrapper.find('.helm').attributes('style')).toContain('--helm-lift: 0px')
+  })
+})
+
+describe('the phone top bar', () => {
+  it('collapses its utilities into one control, reachable as a menu', async () => {
+    // Four 48px targets plus a realm name plus the trail chevron do not
+    // fit across a phone, and shrinking them below 48 is the wrong give.
+    const wrapper = await inAWorld()
+
+    expect(wrapper.find('[aria-label="Tools"]').exists()).toBe(true)
+
+    await wrapper.find('[aria-label="Tools"]').trigger('click')
+    const menu = document.querySelector('.tools__list')
+
+    expect(menu).not.toBeNull()
+    for (const label of ['Search realms', 'Journey', 'About WikiRealms', 'Settings']) {
+      expect(menu.textContent).toContain(label)
+    }
+  })
+
+  it('keeps identity and the trail on the bar itself', async () => {
+    const wrapper = await inAWorld()
+
+    expect(wrapper.find('[aria-label="Opening screen"]').exists()).toBe(true)
+    expect(wrapper.find('h1').text()).toBe('Saturn')
+  })
+
+  it('closes itself on the way to what was chosen', async () => {
+    // A menu is a way to the tools, not a place to be.
+    const wrapper = await inAWorld()
+    await wrapper.find('[aria-label="Tools"]').trigger('click')
+
+    const settings = [...document.querySelectorAll('.tools__list button')].find((button) =>
+      button.textContent.includes('Settings'),
+    )
+    settings.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.tools__list')).toBeNull()
+    expect(document.querySelector('.settings__title')).not.toBeNull()
+  })
+})

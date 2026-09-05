@@ -10,6 +10,7 @@ import * as ledgerStories from '../../stories/ui/components/Ledger.stories.js'
 import * as scrimStories from '../../stories/ui/components/TopScrim.stories.js'
 import * as launchStories from '../../stories/ui/components/Launch.stories.js'
 import * as legendStories from '../../stories/ui/components/Legend.stories.js'
+import * as toolsStories from '../../stories/ui/components/ToolsMenu.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -75,6 +76,7 @@ describe('Storybook story contract', () => {
     ['TopScrim', scrimStories],
     ['Launch', launchStories],
     ['Legend', legendStories],
+    ['ToolsMenu', toolsStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 

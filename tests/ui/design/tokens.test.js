@@ -113,7 +113,7 @@ describe('design tokens', () => {
     // CSS swallows a reference to a token that does not exist: the
     // declaration is simply dropped and the element renders untouched. So a
     // typo is invisible until someone notices the colour is wrong.
-    const RUNTIME_SET_IN_JS = new Set(['--hud-opacity', '--citation-atmosphere'])
+    const RUNTIME_SET_IN_JS = new Set(['--citation-atmosphere', '--helm-lift'])
 
     function scanSrc() {
       const used = new Set()

@@ -20,6 +20,12 @@ defineProps({
    * offering one.
    */
   canRecenter: { type: Boolean, default: true },
+  /**
+   * How far to rise so the Ledger's sheet does not cover this. Only ever
+   * non-zero on a phone, where the sheet and the helm share a corner —
+   * everywhere else they are on opposite sides of the screen.
+   */
+  lift: { type: String, default: '0px' },
 })
 
 defineEmits(['update:worldShape', 'recenter', 'legend'])
@@ -31,7 +37,7 @@ const SHAPES = [
 </script>
 
 <template>
-  <div class="helm">
+  <div class="helm" :style="{ '--helm-lift': lift }">
     <div class="helm__shapes" role="radiogroup" aria-label="World shape">
       <button
         v-for="shape in SHAPES"
@@ -86,7 +92,8 @@ const SHAPES = [
 .helm {
   position: fixed;
   right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
-  bottom: max(var(--spacing-md), env(safe-area-inset-bottom, 0px));
+  bottom: calc(max(var(--spacing-md), env(safe-area-inset-bottom, 0px)) + var(--helm-lift, 0px));
+  transition: bottom var(--dur-2) var(--ease-out);
   z-index: var(--z-instruments);
   display: flex;
   align-items: center;

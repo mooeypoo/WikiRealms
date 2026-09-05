@@ -20,7 +20,7 @@ defineProps({
   canGoForward: { type: Boolean, default: false },
 })
 
-defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings'])
+defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings', 'tools'])
 </script>
 
 <template>
@@ -71,6 +71,13 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
         <Icon name="chevron-right" :size="17" />
       </button>
     </nav>
+
+    <!-- Below md these four collapse into one control: four 48px targets
+         plus a realm name plus the trail chevron do not fit across a phone,
+         and shrinking them under 48 is the wrong thing to give up. -->
+    <button class="scrim__button scrim__more" type="button" aria-label="Tools" @click="$emit('tools')">
+      <Icon name="more" :size="17" />
+    </button>
 
     <nav class="scrim__utilities" aria-label="Tools">
       <button class="scrim__button" type="button" aria-label="Search realms" @click="$emit('search')">
@@ -190,6 +197,10 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
   background: var(--trail-wash);
 }
 
+.scrim__more {
+  display: none;
+}
+
 .scrim__travel,
 .scrim__utilities {
   display: flex;
@@ -236,6 +247,14 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
   .scrim__button {
     width: var(--hit);
     height: var(--hit);
+  }
+
+  .scrim__utilities {
+    display: none;
+  }
+
+  .scrim__more {
+    display: grid;
   }
 }
 

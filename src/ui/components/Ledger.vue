@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { LEDGER_SNAP_POINTS as SNAP_POINTS, LEDGER_STATES as STATES } from './ledgerStates.js'
 
 /**
  * What this place is.
@@ -28,9 +29,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:state', 'share'])
 
-const STATES = ['collapsed', 'peek', 'open', 'full']
-/** peek / open / full as fractions of the viewport; collapsed sizes itself. */
-const SNAP_POINTS = [0.16, 0.42, 0.88]
 
 const body = ref(null)
 const summaryExpanded = ref(false)
