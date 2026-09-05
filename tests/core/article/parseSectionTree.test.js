@@ -125,6 +125,57 @@ describe('parseSectionTree', () => {
     expect(sections[0].links).toEqual(['Physics'])
   })
 
+  it('ignores red links, which point at an article nobody has written', () => {
+    // Reported from a real world: a portal labelled
+    // "Politics South?action=edit&redlink=1". Two bugs in one — the portal
+    // led to a page that does not exist, and the query string was being
+    // read as part of the title because only "#" was stripped.
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1">
+          <h2 id="Body">Body</h2>
+          <p>
+            <a rel="mw:WikiLink" href="./Physics">Physics</a>
+            <a rel="mw:WikiLink" href="./Politics_South?action=edit&amp;redlink=1"
+               class="new" title="Politics South (page does not exist)">Politics South</a>
+          </p>
+        </section>
+      `),
+    )
+
+    expect(sections[0].links).toEqual(['Physics'])
+  })
+
+  it('drops a query-string href even when class="new" is missing', () => {
+    // The two signals are independent, and the href is the one that
+    // produced the garbled title.
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1">
+          <h2 id="Body">Body</h2>
+          <p><a rel="mw:WikiLink" href="./Politics_South?action=edit&amp;redlink=1">Politics South</a></p>
+        </section>
+      `),
+    )
+
+    expect(sections[0].links).toEqual([])
+  })
+
+  it('keeps a title that really does end in a question mark', () => {
+    // %3F is a "?" in the name; a bare "?" is a query. Rejecting the wrong
+    // one would quietly delete portals to real articles.
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1">
+          <h2 id="Body">Body</h2>
+          <p><a rel="mw:WikiLink" href="./Who_Framed_Roger_Rabbit%3F">film</a></p>
+        </section>
+      `),
+    )
+
+    expect(sections[0].links).toEqual(['Who Framed Roger Rabbit?'])
+  })
+
   it('ignores citation backlinks and external links, not just categories', () => {
     const { sections } = parseSectionTree(
       html(`

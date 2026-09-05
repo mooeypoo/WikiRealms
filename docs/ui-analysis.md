@@ -1,5 +1,8 @@
 # WikiRealms UI Analysis & Redesign Strategy
 
+> **Superseded by [`ux-vision.md`](./ux-vision.md) (2026-09-04).** Kept for history only; its
+> layout proposals, token values, and roadmap no longer reflect the plan of record.
+
 **Document Date**: 2026-09-01  
 **Scope**: Current state audit, game UI best practices research, library vs. custom approach evaluation, and design system proposal
 

@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import {
   computePeakFlagPosition,
   computePortalLocalPosition,
@@ -29,6 +30,7 @@ import {
   resolveSectionAnchor,
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
+import { facesCamera, shouldShowCard } from '../rendering/anchorPlacement.js'
 import SectionTooltip from './SectionTooltip.vue'
 import {
   PORTAL_MARKERS,
@@ -122,15 +124,6 @@ let accentColor = new THREE.Color(0xffd58c)
 // that sprite. Plain variable, not a ref — it's per-frame render state.
 let hoveredPortalId = null
 
-function detectWebGLSupport() {
-  try {
-    const canvas = document.createElement('canvas')
-    return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'))
-  } catch {
-    return false
-  }
-}
-
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
 function resolveAccentColor() {
   try {
@@ -149,7 +142,8 @@ function resolveAccentColor() {
  * the terrain colors, especially over bright biomes.
  */
 function makePortalSprite() {
-  const { size, glyphRatio, coreRatio, auraRatio } = PORTAL_MARKERS.texture
+  const { size, coreRatio, auraRatio, ringRatio, innerRingRatio, tickRatio, strokeRatio } =
+    PORTAL_MARKERS.texture
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -167,10 +161,37 @@ function makePortalSprite() {
   ctx.arc(center, center, center, 0, Math.PI * 2)
   ctx.fill()
 
-  ctx.font = `${size * glyphRatio}px serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('🌀', center, center + size * 0.02)
+  // An aperture: two rings, four cardinal ticks and a bright core. Drawn
+  // in the accent colour, so it belongs to the same instrument as every
+  // control on screen — which an emoji never could, taking neither the
+  // colour nor a consistent shape from one platform to the next.
+  ctx.lineWidth = size * strokeRatio
+  ctx.lineCap = 'round'
+
+  ctx.strokeStyle = `rgba(${rgb}, 0.9)`
+  ctx.beginPath()
+  ctx.arc(center, center, size * ringRatio, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.strokeStyle = `rgba(${rgb}, 0.55)`
+  ctx.beginPath()
+  ctx.arc(center, center, size * innerRingRatio, 0, Math.PI * 2)
+  ctx.stroke()
+
+  for (let quarter = 0; quarter < 4; quarter += 1) {
+    const angle = (quarter * Math.PI) / 2
+    const from = size * ringRatio
+    const to = from + size * tickRatio
+    ctx.beginPath()
+    ctx.moveTo(center + Math.cos(angle) * from, center + Math.sin(angle) * from)
+    ctx.lineTo(center + Math.cos(angle) * to, center + Math.sin(angle) * to)
+    ctx.stroke()
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+  ctx.beginPath()
+  ctx.arc(center, center, size * coreRatio, 0, Math.PI * 2)
+  ctx.fill()
 
   const material = new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas),
@@ -541,6 +562,39 @@ function updateHalos(nowSeconds) {
  * children are draped over the terrain, so none of them sits at the
  * summit any more.
  */
+const occlusionCameraLocal = new THREE.Vector3()
+
+/**
+ * Whether a point on the world is on the FAR side of it.
+ *
+ * Projection alone cannot answer this: a marker behind the planet still
+ * lands at valid screen coordinates, so its label used to appear on top of
+ * the markers actually in front of it. Only the sphere occludes — the flat
+ * map is seen from above, where nothing hides behind anything.
+ */
+function isOccluded(localPoint) {
+  if (!projection.isSpherical || !camera) return false
+
+  occlusionCameraLocal.copy(camera.position)
+  worldGroup.worldToLocal(occlusionCameraLocal)
+  // A small bias also drops the grazing band at the limb, where a label is
+  // technically visible and practically unreadable.
+  return !facesCamera(localPoint, occlusionCameraLocal, 0.12)
+}
+
+/** Where a marker sits on screen, for a card that has to point at it. */
+function screenPositionOf(localPoint) {
+  if (!camera || !renderer) return null
+
+  const vector = new THREE.Vector3().copy(localPoint)
+  worldGroup.localToWorld(vector)
+  vector.project(camera)
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  const projected = projectClipToScreen(vector, { width: rect.width, height: rect.height })
+  return { x: rect.left + projected.screenX, y: rect.top + projected.screenY }
+}
+
 function updateSectionTooltip() {
   const hoveredIdx = hoverState.sectionIndex.value
   if (hoveredIdx === null || hoveredIdx < 0 || !haloGroup || !camera || !renderer) {
@@ -557,12 +611,13 @@ function updateSectionTooltip() {
 
   // Local summit -> world (via worldGroup's rotation) -> NDC.
   summitProjectionVec.copy(peakGroup.userData.summitLocal)
+  const occluded = isOccluded(peakGroup.userData.summitLocal)
   worldGroup.localToWorld(summitProjectionVec)
   summitProjectionVec.project(camera)
 
   const rect = renderer.domElement.getBoundingClientRect()
   const projected = projectClipToScreen(summitProjectionVec, { width: rect.width, height: rect.height })
-  if (projected.isBehindCamera) {
+  if (!shouldShowCard(projected, occluded)) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
   }
@@ -627,6 +682,7 @@ function rebuildScene() {
   foliageGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, foliageGroup)
 
+  currentHeightScale = heightScale
   frameCamera(props.world.terrain, heightScale)
 }
 
@@ -636,6 +692,8 @@ function rebuildScene() {
  * views resets the constraints the other one set rather than inheriting
  * them.
  */
+let currentHeightScale = 1
+
 function frameCamera(terrain, heightScale) {
   if (projection.isSpherical) {
     const radius = planetRadius(terrain)
@@ -696,7 +754,10 @@ function onPointerClick(event) {
   if (portalGroup) {
     const [portalHit] = raycaster.intersectObjects(portalGroup.children)
     if (portalHit?.object?.userData?.portal) {
-      emit('portal-click', portalHit.object.userData.portal)
+      emit('portal-click', {
+        portal: portalHit.object.userData.portal,
+        anchor: screenPositionOf(portalHit.object.position),
+      })
       return
     }
   }
@@ -884,6 +945,8 @@ function resizeToContainer() {
 function animate() {
   animationFrameId = requestAnimationFrame(animate)
 
+  advanceDive()
+
   const nowSec = performance.now() * 0.001
   const peaks = props.world?.terrain?.peaks
   const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
@@ -929,7 +992,14 @@ onMounted(() => {
   scene = new THREE.Scene()
   camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000)
 
-  renderer = new THREE.WebGLRenderer({ antialias: true })
+  // Transparent, so the CSS starfield and the body's nebula gradient show
+  // through instead of a black canvas painted over them. This is why the
+  // sky costs nothing: no skybox, no star geometry, no texture — the
+  // backdrop is a gradient the compositor already had to draw. It also
+  // means the stars hold still while the world turns under them, which is
+  // what reads as "far away".
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setClearColor(0x000000, 0)
   containerRef.value.appendChild(renderer.domElement)
 
   // A single rotated group so terrain/water/portals/halos/foliage all
@@ -982,6 +1052,99 @@ onBeforeUnmount(() => {
 // vertex position depends on the projection — but a view-mode switch only
 // re-renders the SAME world, it never regenerates terrain. Other layer
 // toggles just flip .visible on their existing groups — no rebuild needed.
+/**
+ * Puts the camera back where a rebuild would have left it. Exposed rather
+ * than driven by a prop because it is an EVENT — "do this now" — and a
+ * prop would need a counter or a flag to say it happened twice.
+ */
+function recenter() {
+  cancelDive()
+  if (!props.world) return
+  frameCamera(props.world.terrain, currentHeightScale)
+}
+
+/* ── the dive ──────────────────────────────────────────────────────────
+ * The cheap half of the travel transition: a camera tween and nothing
+ * else, which is why it can run as motion at all. The expensive half —
+ * fetching and generating the next world — happens afterwards, behind a
+ * static wash, because it blocks the main thread and would stutter this.
+ */
+
+let dive = null
+
+function diveTo(portal) {
+  const sprite = portalGroup?.children.find((child) => child.userData.portal?.portalId === portal?.portalId)
+  if (!sprite || !camera) return
+
+  const destination = sprite.getWorldPosition(new THREE.Vector3())
+  dive = {
+    from: camera.position.clone(),
+    // Not all the way in: stopping short of the marker leaves the wash to
+    // cover the last of the distance, and going through it would clip the
+    // near plane through the terrain.
+    to: camera.position.clone().lerp(destination, 0.72),
+    lookFrom: controls ? controls.target.clone() : new THREE.Vector3(),
+    lookTo: destination,
+    startedAt: performance.now(),
+    duration: 260,
+  }
+  if (controls) controls.enabled = false
+}
+
+function cancelDive() {
+  dive = null
+  if (controls) controls.enabled = true
+}
+
+function advanceDive() {
+  if (!dive) return
+
+  const elapsed = (performance.now() - dive.startedAt) / dive.duration
+  const t = Math.min(1, Math.max(0, elapsed))
+  // Ease-in: the camera gathers speed toward the portal rather than
+  // drifting off at a constant rate.
+  const eased = t * t
+
+  camera.position.lerpVectors(dive.from, dive.to, eased)
+  if (controls) {
+    controls.target.lerpVectors(dive.lookFrom, dive.lookTo, eased)
+    controls.update()
+  }
+
+  if (t >= 1) cancelDive()
+}
+
+/**
+ * Screen anchors for a couple of features the viewer can actually SEE, so
+ * the legend can point at the real thing rather than at a diagram of it.
+ * Occluded and off-screen candidates are skipped: pointing at something
+ * behind the planet is how the tooltips became unreadable in the first
+ * place, and a legend repeating that mistake would be worse.
+ */
+function legendAnchors() {
+  const anchors = {}
+
+  const range = haloGroup?.children.find(
+    (child) => child.userData.summitLocal && !isOccluded(child.userData.summitLocal),
+  )
+  if (range) {
+    const point = screenPositionOf(range.userData.summitLocal)
+    const peak = props.world?.terrain?.peaks?.[range.userData.peakIndex]
+    if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
+  }
+
+  const portal = portalGroup?.children.find((sprite) => sprite.visible && !isOccluded(sprite.position))
+  if (portal) {
+    const point = screenPositionOf(portal.position)
+    const title = portal.userData.portal?.targetTitle
+    if (point) anchors.portal = { ...point, label: title ? `A portal to ${title}` : undefined }
+  }
+
+  return anchors
+}
+
+defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
+
 watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
 
 watch(
@@ -1028,20 +1191,23 @@ watch(
 }
 
 .world-view-3d__fallback {
-  color: var(--text-muted, #999);
+  color: var(--ink-3);
   text-align: center;
   padding: 2rem;
 }
 
 .world-view-3d__tooltip {
   position: absolute;
+  /* Above the section label: hovering a portal that happens to sit on a
+     summit must not bury "Click to travel" under the summit's description. */
+  z-index: var(--z-stage-portal);
   transform: translate(-50%, calc(-100% - 12px));
-  background: var(--panel-bg, rgba(18, 22, 40, 0.85));
-  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
+  background: var(--surface-1-solid);
+  border: 1px solid var(--edge-hair);
   border-radius: 6px;
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
-  color: var(--text-primary, #eef0ff);
+  color: var(--ink-1);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -1053,7 +1219,7 @@ watch(
 
 .world-view-3d__tooltip span {
   margin-top: 0.1rem;
-  color: var(--text-muted, #9aa3c7);
+  color: var(--ink-3);
   font-size: 0.72rem;
 }
 </style>

@@ -1,0 +1,178 @@
+/**
+ * WikiRealms design tokens — the "expedition instrument" direction
+ * (docs/ux-vision.md §5). The single source for colour, type, space,
+ * elevation, motion and layering. Nothing else in the app should invent
+ * a colour or a duration.
+ *
+ * Contrast is measured, not asserted: tests/ui/design/tokens.test.js
+ * computes every ink-on-surface ratio from this file, including the worst
+ * case of a translucent panel sitting over snow-covered terrain.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── SURFACES ──────────────────────────────────────────────────────
+     The stage is the darkest thing on screen; panels sit above it. */
+  --surface-void: #05070d;                  /* behind the world */
+  --surface-nebula: #0d1120;                /* the body gradient's lift */
+  --surface-deep: #0a0d14;
+  --surface-1-solid: #0a0d14;               /* panel fill with no alpha */
+  --surface-1: rgba(10, 13, 20, 0.9);       /* panels */
+  --surface-2: rgba(16, 20, 28, 0.94);      /* raised, inside a panel */
+  --surface-scrim: rgba(5, 7, 13, 0.72);    /* behind a modal surface */
+
+  /* Panel alpha is derived, not chosen. At 0.90 every ink still clears its
+     contrast floor when a panel lies over the brightest terrain the
+     generator can produce (snow, #f5f5fa). At 0.82 --ink-3 falls to 2.76:1
+     and at 0.72 --ink-2 falls to 3.81:1. This is the floor; it is why the
+     old user-facing opacity slider is being retired rather than retuned. */
+  --panel-alpha-min: 0.9;
+
+  /* ── INK ───────────────────────────────────────────────────────────
+     Measured against --surface-1 over snow, the worst case in the app. */
+  --ink-1: #e9edf3;                         /* 13.2:1 — body and headings */
+  --ink-2: #a3b1c2;                         /* 7.1:1  — secondary prose */
+  --ink-3: #6c7b8e;                         /* 3.6:1  — labels, never body */
+
+  /* ── EDGES ─────────────────────────────────────────────────────────
+     Hairlines, not borders: the instrument look comes from thin rules. */
+  --edge-hair: rgba(163, 184, 205, 0.16);
+  --edge-line: rgba(163, 184, 205, 0.28);
+  --edge-accent: rgba(116, 214, 232, 0.55);
+
+  /* ── ACCENT ────────────────────────────────────────────────────────
+     Two accents, each with one meaning. Cyan is interactive: controls,
+     links, portals. Gold is YOUR TRAIL — history, breadcrumbs, visited
+     realms — and is used for nothing else, so a glance reads as "me". */
+  --accent: #74d6e8;                        /* 9.3:1 worst case */
+  --accent-ink: #cff2fa;                    /* text on an accent fill */
+  --accent-wash: rgba(116, 214, 232, 0.14);
+  --trail: #e0b878;                         /* 8.4:1 worst case */
+  --trail-wash: rgba(224, 184, 120, 0.14);
+
+  /* ── STATE ─────────────────────────────────────────────────────────── */
+  --danger: #ff9a9a;
+  --danger-wash: rgba(255, 120, 120, 0.14);
+  --danger-edge: rgba(255, 120, 120, 0.42);
+
+  /* ── RGB TRIPLETS ──────────────────────────────────────────────────
+     For rgba() composition where a token alone will not do. */
+  --accent-rgb: 116, 214, 232;
+  --trail-rgb: 224, 184, 120;
+  --ink-1-rgb: 233, 237, 243;
+  --edge-rgb: 163, 184, 205;
+  --surface-1-rgb: 10, 13, 20;
+
+  /* ── TYPE ──────────────────────────────────────────────────────────
+     Two faces. Space Grotesk carries display and body alike; IBM Plex
+     Mono carries every readout, where tabular figures stop numbers from
+     shifting as they update — which is most of what sells "instrument". */
+  --font-display: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-xs: 0.6875rem;   /* 11px — chips, readout labels */
+  --text-sm: 0.8125rem;   /* 13px — secondary prose */
+  --text-md: 0.9375rem;   /* 15px — body */
+  --text-lg: 1.1875rem;   /* 19px — panel titles */
+  --text-xl: 1.625rem;    /* 26px — realm names */
+
+  --tracking-label: 0.14em;  /* uppercase mono labels need the air */
+  --tracking-title: 0.01em;
+
+  /* ── SPACE ─────────────────────────────────────────────────────────
+     The scale is immutable — --spacing-lg means the same STEP at every
+     breakpoint. Density changes the step's size, in one place, so a
+     component never has to know which breakpoint it is in. */
+  --density: 1;
+  --spacing-xs: calc(0.25rem * var(--density));
+  --spacing-sm: calc(0.5rem * var(--density));
+  --spacing-md: calc(1rem * var(--density));
+  --spacing-lg: calc(1.5rem * var(--density));
+  --spacing-xl: calc(2rem * var(--density));
+  --spacing-2xl: calc(3rem * var(--density));
+
+  /* ── SHAPE ─────────────────────────────────────────────────────────── */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-sheet: 16px;
+
+  /* ── HIT TARGETS ───────────────────────────────────────────────────── */
+  --hit: 44px;
+
+  /* ── ELEVATION ─────────────────────────────────────────────────────── */
+  --shadow-panel: 0 16px 44px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.5);
+  --glow-accent: drop-shadow(0 0 8px rgba(116, 214, 232, 0.55));
+  --glow-trail: drop-shadow(0 0 8px rgba(224, 184, 120, 0.45));
+  --glow-subtle: drop-shadow(0 0 4px rgba(116, 214, 232, 0.3));
+
+  /* ── MOTION ────────────────────────────────────────────────────────── */
+  --dur-1: 120ms;   /* state change on a control */
+  --dur-2: 220ms;   /* a panel opening */
+  --dur-3: 400ms;   /* a surface arriving */
+  --dur-travel: 900ms;  /* the portal dive */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* ── LAYERS ────────────────────────────────────────────────────────
+     One ladder, replacing the ad-hoc 1 / 100 / 1000 / 2000 / 2100. */
+  --z-stage: 0;
+  /* Things drawn onto the world itself, all of them under the instruments:
+     a notice about the world, then the two hover popups. A portal prompt
+     outranks a section label because one invites an action and the other
+     describes what is already there — when both land on the same pixel,
+     the actionable one has to be the readable one. */
+  --z-stage-notice: 2;
+  --z-stage-label: 4;
+  --z-stage-portal: 6;
+  --z-instruments: 10;
+  --z-sheets: 100;
+  --z-overlays: 200;
+  --z-toast: 300;
+}
+
+/**
+ * How present the chrome is, replacing the old panel-opacity slider.
+ *
+ * That slider applied `opacity` to the panel ELEMENT, so it dimmed the text
+ * along with the surface, and it let a viewer walk their own interface below
+ * legibility — it shipped at 0.9 and went to 0.5. These three change the
+ * surface and nothing else, and none of them drops below the contrast floor
+ * derived above.
+ */
+:root[data-chrome='solid'] {
+  --surface-1: var(--surface-1-solid);
+  --surface-2: #10141c;
+}
+
+:root[data-chrome='minimal'] {
+  --shadow-panel: none;
+  --shadow-float: none;
+  --edge-hair: rgba(163, 184, 205, 0.1);
+}
+
+/* Coarse pointers need a larger target than a mouse does. */
+@media (pointer: coarse) {
+  :root {
+    --hit: 48px;
+  }
+}
+
+/* Density, not a different scale: every step shrinks together. */
+@media (max-width: 479px) {
+  :root {
+    --density: 0.875;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+    --dur-travel: 0ms;
+  }
+}

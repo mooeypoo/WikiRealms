@@ -25,9 +25,16 @@ export const PORTAL_MARKERS = Object.freeze({
   hoverOffset: 6,
   texture: Object.freeze({
     size: 128, // px; the aura needs room around the glyph to fade out
-    glyphRatio: 0.5, // emoji size as a fraction of the canvas
     coreRatio: 0.06, // solid-white core radius, fraction of the canvas
     auraRatio: 0.34, // where the accent-tinted aura peaks, before fading
+    // The glyph is drawn rather than typed. It was an emoji, which cannot
+    // take the accent colour, renders differently on every platform, and
+    // was the last thing in the app still doing that — in the place a
+    // viewer looks most.
+    ringRatio: 0.19, // outer aperture ring, fraction of the canvas
+    innerRingRatio: 0.11,
+    tickRatio: 0.075, // length of the four cardinal ticks
+    strokeRatio: 0.022, // line weight, so the glyph scales as one piece
   }),
   // Slow idle breathing so a map full of portals shimmers rather than
   // strobes. Frequency is rad/sec.

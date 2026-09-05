@@ -1,0 +1,12 @@
+# Restates the defaults Netlify infers from a Vite import, so adding this file
+# changes nothing about production or branch builds — it exists only to extend
+# the deploy-preview context.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# PR previews additionally serve the Storybook workbench at /storybook, so a
+# reviewer can inspect components and breakpoints alongside the running app.
+# `vite build` empties dist/, so Storybook has to be written into it after.
+[context.deploy-preview]
+  command = "npm run build && npm run build-storybook -- -o dist/storybook"

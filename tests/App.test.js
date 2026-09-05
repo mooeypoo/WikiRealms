@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import App from '../src/App.vue'
 
 vi.mock('../src/adapters/wikipediaSearchAdapter.js', () => ({
@@ -8,18 +8,112 @@ vi.mock('../src/adapters/wikipediaSearchAdapter.js', () => ({
 vi.mock('../src/adapters/wikipediaArticleAdapter.js', () => ({
   fetchWikipediaArticle: vi.fn(),
 }))
+// jsdom has no WebGL, so `auto` rendering resolves to the 2D canvas here —
+// which is what most of these tests want. The section-focus suite forces the
+// 3D view back on, since that is the only view that emits section clicks.
+vi.mock('../src/ui/rendering/webglSupport.js', () => ({
+  supportsWebGL: vi.fn(() => false),
+  detectWebGLSupport: vi.fn(() => false),
+  resetWebGLSupport: vi.fn(),
+}))
+
 vi.mock('../src/adapters/snapshotStorage.js', () => ({
   saveSnapshotToStorage: vi.fn(),
   loadSnapshotFromStorage: vi.fn().mockReturnValue(null),
   clearSnapshotFromStorage: vi.fn(),
 }))
 
+import { supportsWebGL } from '../src/ui/rendering/webglSupport.js'
+import { currentTitle } from '../src/core/traversal/visitGraph.js'
+import { resetKeymap } from '../src/ui/design/useKeymap.js'
+import { resetOverlays } from '../src/ui/design/useOverlays.js'
 import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js'
 import { fetchWikipediaArticle } from '../src/adapters/wikipediaArticleAdapter.js'
 import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/snapshotStorage.js'
 
+/**
+ * The Ledger is teleported to <body>, so it is not inside the wrapper's own
+ * tree. These read it the way a viewer would find it — by its accessible
+ * name and its content — rather than by a class that a rewrite can rename.
+ */
+/**
+ * Travel is a transition now, not an instant swap: the preview card asks,
+ * and the world is replaced behind a wash. These wait it out.
+ */
+function travelButton() {
+  return [...document.querySelectorAll('.preview__go')][0]
+}
+
+async function settleTravel() {
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(1200)
+  await flushPromises()
+}
+
+function press(key, target = document.body) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'target', { value: target })
+  window.dispatchEvent(event)
+}
+
+function searchField() {
+  return document.querySelector('.search-bar input')
+}
+
+/**
+ * Search is summoned now rather than permanently on screen: it opens itself
+ * when there is no realm yet, and is reached from the scrim once there is.
+ * Typing therefore starts by opening it, the way a viewer would.
+ */
+async function typeSearch(text) {
+  if (!searchField()) {
+    document
+      .querySelector('[aria-label="Search realms"]')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+  }
+
+  const field = searchField()
+  field.value = text
+  field.dispatchEvent(new Event('input', { bubbles: true }))
+  await flushPromises()
+}
+
+function firstResult() {
+  return document.querySelector('.search-bar__results button')
+}
+
+function ledgerTitle() {
+  return document.querySelector('.ledger__title')?.textContent ?? null
+}
+
+function sectionCard(anchor) {
+  return document.querySelector(`[data-anchor="${anchor}"]`)
+}
+
+async function collapseLedger(wrapper) {
+  // Step down from open → peek → collapsed.
+  for (let step = 0; step < 3; step += 1) {
+    const less = document.querySelector('[aria-label="Show less of this panel"]')
+    if (!less) break
+    less.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+  }
+  return wrapper
+}
+
+// The Ledger and every Sheet teleport to <body>, so a wrapper left mounted
+// keeps its surfaces in the document and the next test finds them instead of
+// its own. Unmounting after each test removes that whole class of pollution.
+enableAutoUnmount(afterEach)
+
 beforeEach(() => {
   vi.useFakeTimers()
+  localStorage.clear()
+  // The URL is session state now, so it leaks between tests: without this a
+  // test inherits the previous one's realm and opens straight into it.
+  history.replaceState(null, '', '/')
+  document.body.innerHTML = ''
   searchWikipediaTitles.mockReset()
   fetchWikipediaArticle.mockReset()
   saveSnapshotToStorage.mockReset()
@@ -29,11 +123,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
 })
-
-async function switchTo2D(wrapper) {
-  const toggleButton = wrapper.find('button[aria-label="Switch to 2D view"]')
-  await toggleButton.trigger('click')
-}
 
 describe('App', () => {
   it('loads and displays the selected article after choosing a search result', async () => {
@@ -51,21 +140,21 @@ describe('App', () => {
       sections: { lead: { ownSize: 100, links: ['Physics', 'Nobel Prize in Physics'] }, totalSize: 100, sections: [] },
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
-    await wrapper.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
 
-    await wrapper.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    expect(wrapper.text()).toContain('German-born theoretical physicist.')
-    expect(wrapper.text()).toContain('1234')
+    expect(ledgerTitle()).toBe('Albert Einstein')
+    expect(document.body.textContent).toContain('German-born theoretical physicist.')
+    expect(document.body.textContent).toContain('1234')
 
-    await switchTo2D(wrapper)
     expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
     expect(wrapper.findAll('.world-view__portal')).toHaveLength(2)
   })
@@ -74,13 +163,14 @@ describe('App', () => {
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
     fetchWikipediaArticle.mockRejectedValue(new Error('boom'))
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
-    await wrapper.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
 
-    await wrapper.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await flushPromises()
 
     expect(wrapper.find('.app__alert--error').text()).toContain('boom')
@@ -112,37 +202,36 @@ describe('App', () => {
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
     fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
-    await wrapper.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
-    await wrapper.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await flushPromises()
 
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    expect(wrapper.find('button[aria-label="Go back"]').attributes('disabled')).toBeDefined()
+    expect(ledgerTitle()).toBe('Albert Einstein')
+    expect(wrapper.find('button[aria-label="Back"]').attributes('disabled')).toBeDefined()
 
-    await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click')
     await flushPromises()
 
-    // Confirm the portal navigation via modal
-    const confirmButton = wrapper.find('.app__portal-modal-confirm')
-    expect(confirmButton.exists()).toBe(true)
-    await confirmButton.trigger('click')
-    await flushPromises()
+    // The preview card names the destination and IS the confirmation.
+    expect(document.querySelector('.preview__title').textContent).toBe('Physics')
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Physics')
+    expect(ledgerTitle()).toBe('Physics')
 
-    const backButton = wrapper.find('button[aria-label="Go back"]')
+    const backButton = wrapper.find('button[aria-label="Back"]')
     expect(backButton.attributes('disabled')).toBeUndefined()
 
     await backButton.trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
+    expect(ledgerTitle()).toBe('Albert Einstein')
   })
 
   it('persists a snapshot to storage whenever traversal changes', async () => {
@@ -157,17 +246,18 @@ describe('App', () => {
       images: [],
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
-    await wrapper.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
-    await wrapper.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await flushPromises()
 
     expect(saveSnapshotToStorage).toHaveBeenCalled()
     const [snapshot] = saveSnapshotToStorage.mock.calls.at(-1)
-    expect(snapshot.navigation.current).toBe('Albert Einstein')
+    expect(currentTitle(snapshot.navigation.graph)).toBe('Albert Einstein')
     expect(snapshot.articleCache['Albert Einstein'].title).toBe('Albert Einstein')
   })
 
@@ -193,20 +283,24 @@ describe('App', () => {
       images: [],
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
-    expect(wrapper.find('.app__selected-article h2').text()).toBe('Albert Einstein')
-    const backButton = wrapper.find('button[aria-label="Go back"]')
+    expect(ledgerTitle()).toBe('Albert Einstein')
+    const backButton = wrapper.find('button[aria-label="Back"]')
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
   })
 
-  it('shows an empty-state prompt before any article has been selected', () => {
-    const wrapper = mount(App)
+  it('opens on the launch screen, which says what this is', () => {
+    // The empty state used to be one italic sentence pointing at a search
+    // box that, below 1024px, was neither above nor visible.
+    mount(App, { attachTo: document.body })
 
-    expect(wrapper.find('.app__empty-state').exists()).toBe(true)
-    expect(wrapper.find('.app__selected-article').exists()).toBe(false)
+    expect(document.querySelector('.launch')).not.toBeNull()
+    expect(document.body.textContent).toContain('Every Wikipedia article is a world')
+    expect(document.querySelector('.launch .search-bar input')).not.toBeNull()
+    expect(ledgerTitle()).toBeNull()
   })
 
   it('shows a stale-world badge when a revisited article has a newer revision than last time', async () => {
@@ -243,35 +337,43 @@ describe('App', () => {
         sections: { lead: { ownSize: 100, links: ['Physics'] }, totalSize: 100, sections: [] },
       })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
-    await wrapper.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
-    await wrapper.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
     await flushPromises()
 
-    expect(wrapper.find('.app__badge--stale').exists()).toBe(false) // first visit, nothing to compare against
+    expect(document.body.textContent).not.toContain('Updated on Wikipedia') // first visit, nothing to compare against
 
-    await switchTo2D(wrapper)
     await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
-      // Confirm the portal navigation via modal
-      const confirmButton = wrapper.find('.app__portal-modal-confirm')
-      expect(confirmButton.exists()).toBe(true)
-      await confirmButton.trigger('click')
-      await flushPromises()
+      travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await settleTravel()
 
     await flushPromises()
 
-    const backButton = wrapper.find('button[aria-label="Go back"]')
+    const backButton = wrapper.find('button[aria-label="Back"]')
     await backButton.trigger('click') // back to Albert Einstein, refetches with a newer revision
     await flushPromises()
 
-    expect(wrapper.find('.app__badge--stale').exists()).toBe(true)
+    expect(document.body.textContent).toContain('Updated on Wikipedia')
   })
 })
 
 describe('App section focus', () => {
+  // Section markers live in the 3D view, so this suite needs it mounted.
+  // App loads that view on demand, and a first dynamic import does not settle
+  // within a flushPromises under fake timers — so warm the module cache here
+  // rather than depend on some earlier test in the file having done it, which
+  // is what these tests were quietly relying on before.
+  beforeEach(async () => {
+    supportsWebGL.mockReturnValue(true)
+    await import('../src/ui/components/WorldView3D.vue')
+  })
+  afterEach(() => supportsWebGL.mockReturnValue(false))
+
   const articleWithSections = {
     articleId: 'en:736',
     title: 'Albert Einstein',
@@ -339,10 +441,14 @@ describe('App section focus', () => {
 
   async function mountWithArticle() {
     mounted = mount(App, { attachTo: document.body })
-    await mounted.find('input').setValue('Ein')
+    await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
-    await mounted.find('.search-bar__results button').trigger('click')
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await flushPromises()
+    // The 3D view is loaded on demand; one more flush lets it render once the
+    // module is cached (see the suite's beforeEach).
     await flushPromises()
     return mounted
   }
@@ -356,21 +462,22 @@ describe('App section focus', () => {
   it('renders a card per top-level section, with subsection/word/citation chips', async () => {
     const wrapper = await mountWithArticle()
 
-    const cards = wrapper.findAll('.app__section-card')
+    const cards = [...document.querySelectorAll('.ledger__section')]
+
     expect(cards).toHaveLength(2)
-    expect(cards[0].attributes('id')).toBe('app-section-Early_life')
-    expect(cards[0].find('h4').text()).toBe('Early life')
-    expect(cards[0].text()).toContain('1 subsection')
-    expect(cards[0].text()).toContain('4 cites')
-    expect(cards[1].attributes('id')).toBe('app-section-Career')
+    expect(cards[0].dataset.anchor).toBe('Early_life')
+    expect(cards[0].querySelector('h4').textContent).toBe('Early life')
+    expect(cards[0].textContent).toContain('1 sub')
+    expect(cards[0].textContent).toContain('4 c')
+    expect(cards[1].dataset.anchor).toBe('Career')
     // Subsections aren't listed as cards of their own.
-    expect(wrapper.find('#app-section-Childhood').exists()).toBe(false)
+    expect(sectionCard('Childhood')).toBeNull()
   })
 
   it('links each card to its section on Wikipedia', async () => {
     const wrapper = await mountWithArticle()
 
-    expect(wrapper.find('#app-section-Career a').attributes('href')).toBe(
+    expect(sectionCard('Career').querySelector('a').getAttribute('href')).toBe(
       'https://en.wikipedia.org/wiki/Albert_Einstein#Career',
     )
   })
@@ -380,7 +487,7 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
 
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
@@ -389,18 +496,18 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: 'Childhood', sectionAnchor: 'Early_life', depth: 2 })
 
-    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('expands a collapsed panel before focusing', async () => {
     const wrapper = await mountWithArticle()
-    await wrapper.find('.app__article-toggle').trigger('click')
-    expect(wrapper.find('.app__selected-article').classes()).toContain('app__selected-article--collapsed')
+    await collapseLedger(wrapper)
+    expect(document.querySelector('.ledger__restore')).not.toBeNull()
 
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
 
-    expect(wrapper.find('.app__selected-article').classes()).not.toContain('app__selected-article--collapsed')
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(document.querySelector('.ledger__restore')).toBeNull()
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('re-flashes the same card when it is clicked again', async () => {
@@ -413,10 +520,10 @@ describe('App section focus', () => {
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
     await vi.advanceTimersByTimeAsync(800)
 
-    expect(wrapper.find('#app-section-Career').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
 
     await vi.advanceTimersByTimeAsync(800)
-    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
   })
 
   it('moves the highlight when a different section is clicked mid-flash', async () => {
@@ -425,8 +532,8 @@ describe('App section focus', () => {
     await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
     await clickSectionMarker(wrapper, { anchor: 'Early_life', sectionAnchor: 'Early_life', depth: 1 })
 
-    expect(wrapper.find('#app-section-Career').classes()).not.toContain('app__section-card--flash')
-    expect(wrapper.find('#app-section-Early_life').classes()).toContain('app__section-card--flash')
+    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
+    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('ignores a click on a peak with no section anchor (the folded range)', async () => {
@@ -434,7 +541,674 @@ describe('App section focus', () => {
 
     await clickSectionMarker(wrapper, { anchor: null, sectionAnchor: null, depth: 1 })
 
-    expect(wrapper.findAll('.app__section-card--flash')).toHaveLength(0)
+    expect(document.querySelectorAll('.ledger__section--flash')).toHaveLength(0)
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+})
+
+describe('App keyboard', () => {
+  afterEach(() => {
+    resetOverlays()
+    resetKeymap()
+    document.body.innerHTML = ''
+  })
+
+  it('opens the guide from the registry and dismisses it from the stack', async () => {
+    // End to end through the two pieces that replaced the app's own two
+    // competing keydown listeners: useKeymap declares it, useOverlays
+    // dismisses it, and neither surface handles Escape itself any more.
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('?')
+    await flushPromises()
+    expect(document.querySelector('.guide__prose')).not.toBeNull()
+
+    press('Escape')
+    await flushPromises()
+    expect(document.querySelector('.guide__prose')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('opens settings, and opening it closes the guide rather than stacking', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('?')
+    await flushPromises()
+    press('s')
+    await flushPromises()
+
+    expect(document.querySelector('.settings__title')).not.toBeNull()
+    expect(document.querySelector('.guide__prose')).toBeNull()
+
+    wrapper.unmount()
+  })
+
+  it('ignores a bare-letter shortcut typed into the search field', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('s', searchField())
+    await flushPromises()
+
+    expect(document.querySelector('.settings__title')).toBeNull()
+    wrapper.unmount()
+  })
+})
+
+describe('App URL state', () => {
+  afterEach(() => {
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('opens the realm a shared link points at', async () => {
+    // The whole point of this: every share link ever produced opened an
+    // empty app, because nothing read the parameter they carried.
+    history.replaceState(null, '', '?realm=Saturn')
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'Saturn',
+      summary: 'Sixth planet.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Saturn')
+  })
+
+  it('prefers a shared link over the session it would otherwise restore', async () => {
+    history.replaceState(null, '', '?realm=Saturn')
+    loadSnapshotFromStorage.mockReturnValue({
+      schemaVersion: '1.0',
+      createdAt: '2026-08-31T00:00:00Z',
+      appVersion: '0.1.0',
+      engineVersion: 'v1',
+      worlds: {},
+      navigation: { current: 'Jazz', backstack: [], forwardstack: [] },
+      articleCache: {},
+      generationCache: {},
+      uiState: {},
+    })
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'Saturn',
+      summary: 'Sixth planet.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenLastCalledWith('Saturn')
+  })
+
+  it('writes each move into browser history so Back retraces the journey', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:736',
+      title: 'Albert Einstein',
+      summary: 'Physicist.',
+      latestRevisionId: 1234,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Ein')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await flushPromises()
+
+    expect(window.location.search).toContain('realm=Albert')
+    expect(history.state).toMatchObject({ title: 'Albert Einstein' })
+  })
+})
+
+describe('App view axis', () => {
+  const article = {
+    articleId: 'en:1',
+    title: 'Saturn',
+    summary: 'Sixth planet.',
+    latestRevisionId: 1,
+    categories: [],
+    links: [],
+    images: [],
+    sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+  }
+
+  async function mountWithWorld() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue(article)
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await flushPromises()
+    return wrapper
+  }
+
+  afterEach(() => {
+    localStorage.clear()
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('shows the helm once there is a world, and not before', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('.helm').exists()).toBe(false)
+
+    wrapper.unmount()
+
+    const withWorld = await mountWithWorld()
+    expect(withWorld.find('.helm').exists()).toBe(true)
+    withWorld.unmount()
+  })
+
+  it('changes world shape from the helm and remembers it', async () => {
+    const wrapper = await mountWithWorld()
+
+    await wrapper.findAll('.helm [role="radio"]')[1].trigger('click')
+
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).worldShape).toBe('flat')
+    wrapper.unmount()
+  })
+
+  it('toggles the shape from the keyboard on one key, not two', async () => {
+    // Keys 1 and 3 used to switch RENDERER, while shape hid in settings.
+    const wrapper = await mountWithWorld()
+
+    const event = new KeyboardEvent('keydown', { key: 'v', bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'target', { value: document.body })
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    wrapper.unmount()
+  })
+
+  it('falls back to the 2D canvas when the browser cannot do WebGL', async () => {
+    // supportsWebGL is mocked false for this file, standing in for jsdom.
+    const wrapper = await mountWithWorld()
+
+    expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'WorldView3D' }).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('honours an explicit low rendering setting even where WebGL works', async () => {
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ rendering: 'low' }))
+    supportsWebGL.mockReturnValue(true)
+
+    const wrapper = await mountWithWorld()
+
+    expect(wrapper.find('.world-view__canvas').exists()).toBe(true)
+    supportsWebGL.mockReturnValue(false)
+    wrapper.unmount()
+  })
+})
+
+describe('App helm and the 2D fallback', () => {
+  afterEach(() => {
+    localStorage.clear()
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('offers no recentre control while the 2D fallback is drawing', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'Saturn',
+      summary: 'Sixth planet.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.find('.helm').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="Recentre the view"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('App shell', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('has one shell, not two', async () => {
+    // The taskbar and the floating nav panel both carried Info, Settings and
+    // Share; below 1024px you got both copies.
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(wrapper.findAll('.scrim')).toHaveLength(1)
+    expect(document.querySelectorAll('[aria-label="Settings"]')).toHaveLength(1)
+    expect(wrapper.find('.taskbar').exists()).toBe(false)
+  })
+
+  it('opens search on arrival, since there is nowhere to be yet', async () => {
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(document.querySelector('.search-bar input')).not.toBeNull()
+  })
+
+  it('walks the trail back to an earlier realm without rewriting it', async () => {
+    const articles = {
+      Saturn: { articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1, categories: [], links: ['Titan'], images: [], sections: { lead: { ownSize: 10, links: ['Titan'] }, totalSize: 10, sections: [] } },
+      Titan: { articleId: 'en:2', title: 'Titan', summary: 'A moon.', latestRevisionId: 2, categories: [], links: [], images: [], sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] } },
+    }
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
+
+    expect(ledgerTitle()).toBe('Titan')
+
+    // Open the trail and step back to the first realm.
+    wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const stops = [...document.querySelectorAll('.trail__name')].map((name) => name.textContent)
+    expect(stops).toEqual(['Saturn', 'Titan'])
+
+    const saturn = [...document.querySelectorAll('.trail__stop')].find((stop) =>
+      stop.textContent.includes('Saturn'),
+    )
+    saturn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ledgerTitle()).toBe('Saturn')
+    // Returning to a realm is a move like any other: it goes into history,
+    // so back reaches where you just were.
+    expect(wrapper.find('[aria-label="Back"]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('App search inversion', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('puts search away once there is a realm', async () => {
+    // It held 30rem of the top bar on desktop before, for the thing least
+    // needed after arriving: from here on the way onward is portals.
+    await arrive()
+
+    expect(document.querySelector('.launch')).toBeNull()
+    expect(document.querySelector('.search-bar input')).toBeNull()
+  })
+
+  it('brings it back on the palette shortcut, but not before', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    // On the launch screen the field is already there and focused, so the
+    // shortcut has nothing to do.
+    const before = document.querySelectorAll('.search-bar').length
+    press('/')
+    await flushPromises()
+    expect(document.querySelectorAll('.search-bar')).toHaveLength(before)
+
+    wrapper.unmount()
+
+    await arrive()
+    press('/')
+    await flushPromises()
+
+    expect(document.querySelector('.search-bar input')).not.toBeNull()
+  })
+
+  it('says plainly that searching leaves the world you are in', async () => {
+    await arrive()
+    press('/')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('starts a new journey')
+  })
+})
+
+describe('App returning to the opening screen', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('comes back from the mark, and leaves again', async () => {
+    const wrapper = await arrive()
+    expect(document.querySelector('.launch')).toBeNull()
+
+    await wrapper.find('[aria-label="Opening screen"]').trigger('click')
+    expect(document.querySelector('.launch')).not.toBeNull()
+
+    press('Escape')
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).toBeNull()
+    expect(ledgerTitle()).toBe('Saturn')
+  })
+
+  it('is reachable from the trail, where the journey actions live', async () => {
+    const wrapper = await arrive()
+
+    wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    ;[...document.querySelectorAll('.trail__actions button')]
+      .find((action) => action.textContent.includes('Somewhere new'))
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).not.toBeNull()
+  })
+
+  it('dismisses itself when a realm is chosen from it', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('[aria-label="Opening screen"]').trigger('click')
+
+    document.querySelector('.launch__realms button').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).toBeNull()
+  })
+})
+
+describe('App travel', () => {
+  const articles = {
+    Saturn: { articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1, categories: [], links: ['Titan'], images: [], sections: { lead: { ownSize: 10, links: ['Titan'] }, totalSize: 10, sections: [] } },
+    Titan: { articleId: 'en:2', title: 'Titan', summary: 'A moon.', latestRevisionId: 2, categories: [], links: [], images: [], sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] } },
+  }
+
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('asks at the marker, naming where the portal goes', async () => {
+    // The old confirm was a centred dialog with no destination context,
+    // dropped away from whatever the viewer had just tapped.
+    const wrapper = await arrive()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    expect(document.querySelector('.preview__title').textContent).toBe('Titan')
+    expect(document.querySelector('.preview__leader')).not.toBeNull()
+  })
+
+  it('lets the viewer stay', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    document.querySelector('.preview__stay').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.preview')).toBeNull()
+    expect(ledgerTitle()).toBe('Saturn')
+  })
+
+  it('replaces the world behind a wash rather than during the motion', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    // Diving: nothing fetched yet, because a ~120ms synchronous generate
+    // would stutter the camera.
+    expect(document.querySelector('.app__wash')).not.toBeNull()
+    expect(fetchWikipediaArticle).not.toHaveBeenCalledWith('Titan')
+
+    await settleTravel()
+
+    expect(ledgerTitle()).toBe('Titan')
+    expect(document.querySelector('.app__wash')).toBeNull()
+  })
+
+  it('can be cut short with Escape', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    press('Escape')
+    await flushPromises()
+
+    expect(document.querySelector('.app__wash')).toBeNull()
+  })
+
+  it('arrives without any transition when the setting is off', async () => {
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ travelAnimation: false }))
+    const wrapper = await arrive()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(0)
+    await flushPromises()
+
+    expect(ledgerTitle()).toBe('Titan')
+  })
+})
+
+describe('App legend', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('is offered only once there is a world to explain', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('l')
+    await flushPromises()
+    expect(document.querySelector('.legend')).toBeNull()
+
+    wrapper.unmount()
+
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    press('l')
+    await flushPromises()
+
+    expect(document.querySelector('.legend')).not.toBeNull()
+    expect(document.body.textContent).toContain('citation density')
+
+    press('l')
+    await flushPromises()
+    expect(document.querySelector('.legend')).toBeNull()
+  })
+})
+
+describe('App legend affordance', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('opens from the helm, not only from the keyboard', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.find('[aria-label="What am I looking at?"]').trigger('click')
+
+    expect(document.querySelector('.legend')).not.toBeNull()
+  })
+})
+
+describe('App trail', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('shows the branch you left, and walks back into it', async () => {
+    // The end-to-end version of the thing the flat list could not show.
+    const articles = {
+      Saturn: { articleId: 'en:1', title: 'Saturn', summary: '.', latestRevisionId: 1, categories: [], links: ['Titan'], images: [], sections: { lead: { ownSize: 10, links: ['Titan'] }, totalSize: 10, sections: [] } },
+      Titan: { articleId: 'en:2', title: 'Titan', summary: '.', latestRevisionId: 2, categories: [], links: [], images: [], sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] } },
+    }
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
+    expect(ledgerTitle()).toBe('Titan')
+
+    await wrapper.find('[aria-label="Back"]').trigger('click')
+    await flushPromises()
+
+    wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    // Both stops are listed, the abandoned branch included.
+    const names = [...document.querySelectorAll('.trail__name')].map((n) => n.textContent)
+    expect(names).toEqual(['Saturn', 'Titan'])
+
+    // And it is reachable again.
+    const titan = [...document.querySelectorAll('.trail__stop')].find((s) => s.textContent.includes('Titan'))
+    titan.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ledgerTitle()).toBe('Titan')
   })
 })

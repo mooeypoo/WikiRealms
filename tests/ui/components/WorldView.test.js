@@ -40,13 +40,17 @@ describe('WorldView', () => {
     expect(portalButtons[0].attributes('title')).toBe('Travel to Physics')
   })
 
-  it('emits portal-click with the portal when a marker is clicked', async () => {
+  it('emits portal-click with the portal and where its marker sits', async () => {
     const wrapper = mount(WorldView, { props: { world: makeWorld() } })
 
     await wrapper.find('.world-view__portal').trigger('click')
 
     expect(wrapper.emitted('portal-click')).toBeTruthy()
-    expect(wrapper.emitted('portal-click')[0][0].targetArticleId).toBe('Physics')
+    const [payload] = wrapper.emitted('portal-click')[0]
+    expect(payload.portal.targetArticleId).toBe('Physics')
+    // The anchor is the marker's own centre, so a preview card points at
+    // the portal rather than at wherever inside it the click landed.
+    expect(payload.anchor).toEqual({ x: expect.any(Number), y: expect.any(Number) })
   })
 
   it('renders no portal markers when the world has none', () => {

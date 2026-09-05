@@ -1,4 +1,5 @@
 <script setup>
+import Icon from '../design/Icon.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { biomeColor } from '../rendering/biomeColor.js'
 
@@ -11,7 +12,20 @@ const props = defineProps({
   showPortals: { type: Boolean, default: true },
 })
 
-defineEmits(['portal-click'])
+const emit = defineEmits(['portal-click'])
+
+/**
+ * Reports the marker's own position, not the pointer's, so the preview card
+ * anchors to the portal rather than to wherever the click happened to land
+ * inside it. Same payload shape as the 3D view, so App has one handler.
+ */
+function onPortalClick(portal, event) {
+  const rect = event.currentTarget.getBoundingClientRect()
+  emit('portal-click', {
+    portal,
+    anchor: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+  })
+}
 
 const canvasRef = ref(null)
 
@@ -58,9 +72,9 @@ watch(() => props.world, draw, { flush: 'post' })
           class="world-view__portal"
           :style="portalStyle(portal)"
           :title="`Travel to ${portal.targetArticleId}`"
-          @click="$emit('portal-click', portal)"
+          @click="onPortalClick(portal, $event)"
         >
-          🌀
+          <Icon name="globe" :size="16" />
         </button>
       </div>
     </div>
@@ -72,7 +86,7 @@ watch(() => props.world, draw, { flush: 'post' })
   width: 100%;
   height: 100%;
   overflow: auto;
-  box-shadow: inset 0 0 12vw 4vw var(--bg-void, #05060f);
+  box-shadow: inset 0 0 12vw 4vw var(--surface-void);
 }
 
 .world-view__stage {

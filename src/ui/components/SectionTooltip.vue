@@ -41,7 +41,7 @@ defineProps({
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 15;
+  z-index: var(--z-stage-label);
   /* Nudge up + center so the summit sits just below the tooltip's bottom edge. */
   margin-top: -6.5rem;
   margin-left: -8.5rem;
@@ -50,12 +50,12 @@ defineProps({
 }
 
 .section-tooltip__body {
-  background: var(--panel-secondary);
-  border: 1px solid var(--panel-border);
+  background: var(--surface-1);
+  border: 1px solid var(--edge-hair);
   border-radius: 0.65rem;
   padding: 0.55rem 0.75rem 0.65rem;
   backdrop-filter: blur(8px);
-  color: var(--text-primary);
+  color: var(--ink-1);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   /* Little caret pointing down toward the summit anchor. */
   position: relative;
@@ -69,9 +69,9 @@ defineProps({
   transform: translateX(-50%) rotate(45deg);
   width: 10px;
   height: 10px;
-  background: var(--panel-secondary);
-  border-right: 1px solid var(--panel-border);
-  border-bottom: 1px solid var(--panel-border);
+  background: var(--surface-1);
+  border-right: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-hair);
 }
 
 .section-tooltip__title {
@@ -95,9 +95,9 @@ defineProps({
 .section-tooltip__chip {
   font-family: var(--font-body);
   font-size: 0.72rem;
-  color: var(--text-secondary);
-  background: rgba(var(--panel-border-rgb), 0.12);
-  border: 1px solid rgba(var(--panel-border-rgb), 0.25);
+  color: var(--ink-2);
+  background: rgba(var(--edge-rgb), 0.12);
+  border: 1px solid rgba(var(--edge-rgb), 0.25);
   border-radius: 0.4rem;
   padding: 0.12rem 0.4rem;
   white-space: nowrap;

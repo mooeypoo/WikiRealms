@@ -1,387 +1,264 @@
-<template>
-  <Teleport to="body">
-    <Transition name="modal-fade">
-      <div v-if="show" class="info-hub-overlay" @click.self="$emit('close')">
-        <div class="info-hub" role="dialog" aria-modal="true" aria-labelledby="info-hub-title">
-          <!-- Header -->
-          <div class="info-hub__header">
-            <h2 id="info-hub-title" class="info-hub__title">✨ WikiRealms Info</h2>
-            <button class="info-hub__close" @click="$emit('close')" aria-label="Close">×</button>
-          </div>
-
-          <!-- Tabs -->
-          <div class="info-hub__tabs">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              class="info-hub__tab"
-              :class="{ 'info-hub__tab--active': currentTab === tab.id }"
-              @click="$emit('update:currentTab', tab.id)"
-            >
-              <span class="info-hub__tab-icon">{{ tab.icon }}</span>
-              <span class="info-hub__tab-label">{{ tab.title }}</span>
-            </button>
-          </div>
-
-          <!-- Content -->
-          <div class="info-hub__content">
-            <div
-              v-for="tab in tabs"
-              :key="tab.id"
-              v-show="currentTab === tab.id"
-              class="info-hub__content-pane"
-            >
-              <div v-html="tab.content" class="info-hub__content-text"></div>
-            </div>
-          </div>
-
-          <!-- Footer -->
-          <div class="info-hub__footer">
-            <p class="info-hub__footer-text">Press <kbd>?</kbd> or <kbd>I</kbd> to close</p>
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
-</template>
-
 <script setup>
 import { computed } from 'vue'
+import Icon from '../design/Icon.vue'
+import Sheet from '../design/Sheet.vue'
 import { infoTabs } from '../content/infoHub.js'
+import { useKeymap } from '../design/useKeymap.js'
 
+/**
+ * Ported onto <Sheet>: the overlay, backdrop, transitions, Escape handling
+ * and focus behaviour it used to carry itself are all the primitive's now.
+ * The content is unchanged — it gets rewritten as the Field Guide, with a
+ * legend and a generated shortcut list, later in the overhaul.
+ */
 defineProps({
   show: Boolean,
-  currentTab: {
-    type: String,
-    default: 'what-is-this',
-  },
+  currentTab: { type: String, default: 'what-is-this' },
 })
 
 defineEmits(['update:currentTab', 'close'])
 
 const tabs = computed(() => infoTabs)
+
+// Generated, not written. The old list was typed out by hand and had
+// already drifted — it still advertised keys 1 and 3 for a view toggle
+// that no longer exists.
+const { shortcuts } = useKeymap()
 </script>
 
+<template>
+  <Sheet
+    id="field-guide"
+    :open="show"
+    label="About WikiRealms"
+    :snap-points="[0.5, 0.92]"
+    :snap="1"
+    @close="$emit('close')"
+  >
+    <template #header>
+      <div class="guide__bar">
+        <h2 class="guide__title">About WikiRealms</h2>
+        <button class="guide__close" type="button" aria-label="Close" @click="$emit('close')">
+          <Icon name="close" :size="18" />
+        </button>
+      </div>
+
+      <div class="guide__tabs" role="tablist">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="guide__tab"
+          :class="{ 'guide__tab--active': currentTab === tab.id }"
+          type="button"
+          role="tab"
+          :aria-selected="currentTab === tab.id"
+          @click="$emit('update:currentTab', tab.id)"
+        >
+          <Icon :name="tab.icon" :size="14" />
+          <span class="guide__tab-label">{{ tab.title }}</span>
+        </button>
+      </div>
+    </template>
+
+    <div
+      v-for="tab in tabs"
+      v-show="currentTab === tab.id"
+      :key="tab.id"
+      class="guide__prose"
+      role="tabpanel"
+    >
+      <div v-html="tab.content"></div>
+
+      <dl v-if="tab.id === 'shortcuts'" class="guide__keys">
+        <template v-for="group in shortcuts" :key="group.group">
+          <dt>{{ group.group }}</dt>
+          <dd v-for="item in group.items" :key="item.label">
+            <span>{{ item.label }}</span>
+            <span class="guide__combo">
+              <kbd v-for="combo in item.keys" :key="combo">{{ combo }}</kbd>
+            </span>
+          </dd>
+        </template>
+      </dl>
+    </div>
+  </Sheet>
+</template>
+
 <style scoped>
-.info-hub-overlay {
-  position: fixed;
-  inset: 0;
-  padding: var(--spacing-md);
-  background: rgba(5, 6, 15, 0.66);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.info-hub {
-  background: linear-gradient(135deg, var(--panel-primary), rgba(30, 35, 60, 0.92));
-  border: 1px solid var(--panel-border-accent);
-  border-radius: var(--radius-lg);
-  display: flex;
-  flex-direction: column;
-  max-height: 85vh;
-  width: 90%;
-  max-width: 600px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(127, 223, 255, 0.1);
-  animation: slideUp var(--duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (max-width: 767px) {
-  .info-hub-overlay {
-    align-items: end;
-    padding: 0;
-  }
-
-  .info-hub {
-    width: 100%;
-    max-height: 90vh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  }
-}
-
-/* Header */
-.info-hub__header {
+.guide__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--panel-border);
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
-.info-hub__title {
+.guide__title {
   margin: 0;
-  color: var(--text-primary);
-  font-size: 1.3rem;
-  font-family: 'Cinzel', serif;
+  font-size: var(--text-lg);
 }
 
-.info-hub__close {
+.guide__close {
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
   background: transparent;
-  border: 1px solid var(--panel-border-accent);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 1.5rem;
-  width: var(--size-touch);
-  height: var(--size-touch);
+  color: var(--ink-2);
+}
+
+.guide__close:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
+}
+
+.guide__tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-md);
+  border-bottom: 1px solid var(--edge-hair);
+  overflow-x: auto;
+}
+
+.guide__tab {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  transition: all var(--duration-fast) ease-out;
-}
-
-.info-hub__close:hover {
-  background: rgba(127, 223, 255, 0.1);
-  border-color: rgba(127, 223, 255, 0.6);
-}
-
-/* Tabs */
-.info-hub__tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--panel-border);
+  gap: var(--spacing-sm);
+  min-height: var(--hit);
   padding: 0 var(--spacing-md);
-  background: rgba(5, 6, 15, 0.3);
-}
-
-.info-hub__tab {
-  flex: 1;
-  min-height: var(--size-touch);
-  padding: var(--spacing-sm) 0.75rem;
-  background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  transition: all 0.3s ease;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.info-hub__tab:hover {
-  color: var(--text-primary);
-  background: rgba(127, 223, 255, 0.05);
+.guide__tab:hover {
+  color: var(--ink-1);
 }
 
-.info-hub__tab--active {
+.guide__tab--active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-  background: rgba(127, 223, 255, 0.08);
 }
 
-.info-hub__tab-icon {
-  font-size: 1.1rem;
+.guide__keys {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-md) 0 0;
 }
 
-.info-hub__tab-label {
-  display: none;
-  font-family: 'Cinzel', serif;
+.guide__keys dt {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
 }
 
-@media (min-width: 480px) {
-  .info-hub__tab-label {
-    display: inline;
-  }
+.guide__keys dd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
 }
 
-/* Content */
-.info-hub__content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--spacing-lg);
+.guide__combo {
+  display: flex;
+  gap: var(--spacing-xs);
 }
 
-.info-hub__content-pane {
-  animation: fadeInSlideUp 0.4s ease-out;
+.guide__keys kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--edge-rgb), 0.08);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
-@keyframes fadeInSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/**
+ * :deep throughout, because this content arrives through v-html and so
+ * carries no scope attribute. Without it these rules compile to selectors
+ * that can never match — which is why the guide's prose has been rendering
+ * with nothing but the base element styles until now.
+ */
+.guide__prose :deep(h3) {
+  margin: var(--spacing-lg) 0 var(--spacing-sm);
+  font-size: var(--text-md);
+  color: var(--ink-1);
 }
 
-.info-hub__content-text {
-  color: var(--text-primary);
-  line-height: 1.7;
-  font-size: 0.95rem;
-}
-
-.info-hub__content-text h3 {
-  color: var(--accent);
-  font-family: 'Cinzel', serif;
-  font-size: 1.15rem;
-  margin: 1.5rem 0 0.75rem 0;
-}
-
-.info-hub__content-text h3:first-child {
+.guide__prose :deep(h3:first-child) {
   margin-top: 0;
 }
 
-.info-hub__content-text p {
-  margin: 0.75rem 0;
+.guide__prose :deep(p),
+.guide__prose :deep(li) {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.6;
 }
 
-.info-hub__content-text ol,
-.info-hub__content-text ul {
-  margin: 0.75rem 0;
-  padding-left: 1.5rem;
-  color: var(--text-primary);
-}
-
-.info-hub__content-text li {
-  margin: 0.5rem 0;
-}
-
-.info-hub__content-text strong {
-  color: var(--accent);
-}
-
-.info-hub__content-text a {
-  color: var(--accent);
-  text-decoration: none;
-  transition: opacity 0.2s ease;
-}
-
-.info-hub__content-text a:hover {
-  opacity: 0.8;
-  text-decoration: underline;
-}
-
-.info-hub__features {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 1rem 0;
-}
-
-.info-hub__feature {
-  background: rgba(127, 223, 255, 0.08);
-  border-left: 2px solid var(--accent);
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
-  color: var(--text-primary);
-}
-
-.info-hub__content-text :deep(.info-hub__shortcuts) {
+.guide__prose :deep(ol),
+.guide__prose :deep(ul) {
+  margin: 0 0 var(--spacing-md);
+  padding-left: 1.2em;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.75rem;
-  margin: 1rem 0;
+  gap: var(--spacing-sm);
 }
 
-@media (min-width: 480px) {
-  .info-hub__content-text :deep(.info-hub__shortcuts) {
-    grid-template-columns: 1fr 1fr;
-  }
+.guide__prose :deep(strong) {
+  color: var(--ink-1);
+  font-weight: 500;
 }
 
-.info-hub__content-text :deep(.info-hub__shortcut) {
+.guide__prose :deep(.info-hub__features) {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.guide__prose :deep(.info-hub__feature) {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.guide__prose :deep(.info-hub__shortcuts) {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.guide__prose :deep(.info-hub__shortcut) {
   display: flex;
-  gap: 0.75rem;
   align-items: center;
-  font-size: 0.9rem;
-  padding: 0.5rem;
-  border-radius: 4px;
-  background: rgba(127, 223, 255, 0.05);
+  gap: var(--spacing-sm);
+  font-size: var(--text-sm);
+  color: var(--ink-2);
 }
 
-.info-hub__content-text :deep(.info-hub__shortcut kbd) {
-  background: rgba(120, 140, 255, 0.2);
-  border: 1px solid rgba(127, 223, 255, 0.3);
-  border-radius: 3px;
-  padding: 0.25rem 0.5rem;
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: var(--accent);
-  display: inline-block;
-  white-space: nowrap;
-}
-
-/* Footer */
-.info-hub__footer {
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-top: 1px solid var(--panel-border);
-  background: rgba(5, 6, 15, 0.3);
+.guide__prose :deep(kbd) {
+  min-width: 1.6em;
+  padding: 2px 6px;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--edge-rgb), 0.08);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
   text-align: center;
-}
-
-.info-hub__footer-text {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.info-hub__footer-text kbd {
-  background: rgba(120, 140, 255, 0.15);
-  border: 1px solid rgba(127, 223, 255, 0.25);
-  border-radius: 3px;
-  padding: 0.2rem 0.4rem;
-  font-family: monospace;
-  color: var(--accent);
-  font-size: 0.8rem;
-  display: inline-block;
-}
-
-/* Scrollbar styling */
-.info-hub__content::-webkit-scrollbar {
-  width: 6px;
-}
-
-.info-hub__content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.info-hub__content::-webkit-scrollbar-thumb {
-  background: rgba(127, 223, 255, 0.2);
-  border-radius: 3px;
-}
-
-.info-hub__content::-webkit-scrollbar-thumb:hover {
-  background: rgba(127, 223, 255, 0.4);
-}
-
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity var(--duration-normal) ease;
-}
-
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
 }
 </style>

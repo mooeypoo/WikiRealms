@@ -1,107 +1,54 @@
-import { ref } from 'vue';
+import { ref } from 'vue'
+import { copyText, shareLink } from '../../adapters/shareTarget.js'
+import { realmUrl } from '../../adapters/urlState.js'
 
 /**
- * useShare - Handle sharing functionality
- * Generates shareable URLs and manages clipboard operations
+ * Sharing, as the UI sees it: a link, and a word about what happened.
+ *
+ * The platform work — navigator.share, the clipboard, the legacy fallback —
+ * moved to adapters/shareTarget.js, and the link itself now comes from
+ * adapters/urlState.js, which is also what READS it on arrival. That is the
+ * actual fix here: the link this produces has never worked, because nothing
+ * in the app ever looked at the parameter it wrote.
  */
-export const useShare = () => {
-  const toastMessage = ref('');
-  const toastVisible = ref(false);
+export function useShare() {
+  const toastMessage = ref('')
+  const toastVisible = ref(false)
+  let hideTimer = null
 
-  /**
-   * Generate a share URL for a specific article (current session only, no history)
-   */
-  const generateShareUrl = (articleTitle) => {
-    if (!articleTitle) return '';
-    const baseUrl = window.location.origin;
-    const params = new URLSearchParams();
-    params.set('article', articleTitle);
-    return `${baseUrl}?${params.toString()}`;
-  };
+  function showToast(message) {
+    toastMessage.value = message
+    toastVisible.value = true
+    clearTimeout(hideTimer)
+    hideTimer = setTimeout(() => {
+      toastVisible.value = false
+    }, 2600)
+  }
 
-  /**
-   * Copy text to clipboard and show toast
-   */
-  const copyToClipboard = async (text, message = 'Copied!') => {
-    try {
-      // Try modern Clipboard API first
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        await navigator.clipboard.writeText(text);
-      } else {
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        textArea.style.position = 'fixed';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-      showToast(message);
-      return true;
-    } catch (err) {
-      console.error('Failed to copy to clipboard:', err);
-      showToast('Failed to copy', 'error');
-      return false;
-    }
-  };
+  function hideToast() {
+    clearTimeout(hideTimer)
+    toastVisible.value = false
+  }
 
-  /**
-   * Share current article
-   */
-  const shareArticle = async (articleTitle) => {
-    const shareUrl = generateShareUrl(articleTitle);
+  async function shareArticle(title) {
+    if (!title) return
 
-    // Try navigator.share API first (native share on mobile)
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'WikiRealms',
-          text: `Explore ${articleTitle} as a world on WikiRealms`,
-          url: shareUrl,
-        });
-        return;
-      } catch (err) {
-        // User cancelled or error; fall through to clipboard
-        if (err.name !== 'AbortError') {
-          console.error('Share failed:', err);
-        }
-      }
-    }
+    const outcome = await shareLink({
+      title: 'WikiRealms',
+      text: `Explore ${title} as a world on WikiRealms`,
+      url: realmUrl(title),
+    })
 
-    // Fallback: copy to clipboard
-    await copyToClipboard(shareUrl, 'Link copied!');
-  };
+    // A native share sheet already told the viewer what happened; saying so
+    // again over the top of it is noise.
+    if (outcome === 'copied') showToast('Link copied')
+    else if (outcome === 'failed') showToast('Could not share that link')
+  }
 
-  /**
-   * Show toast notification
-   */
-  const showToast = (message, type = 'success') => {
-    toastMessage.value = message;
-    toastVisible.value = true;
+  async function copyLink(title) {
+    if (!title) return
+    showToast((await copyText(realmUrl(title))) ? 'Link copied' : 'Could not copy that link')
+  }
 
-    // Auto-hide after 2 seconds
-    setTimeout(() => {
-      toastVisible.value = false;
-    }, 2000);
-  };
-
-  /**
-   * Hide toast manually
-   */
-  const hideToast = () => {
-    toastVisible.value = false;
-  };
-
-  return {
-    toastMessage,
-    toastVisible,
-    generateShareUrl,
-    copyToClipboard,
-    shareArticle,
-    showToast,
-    hideToast,
-  };
-};
+  return { toastMessage, toastVisible, shareArticle, copyLink, showToast, hideToast }
+}

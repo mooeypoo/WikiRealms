@@ -2,7 +2,7 @@ export const infoHubContent = {
   whatIsThis: {
     id: 'what-is-this',
     title: 'What is this?',
-    icon: '🗺️',
+    icon: 'map',
     content: `
       <p>WikiRealms turns a Wikipedia article's structure into an explorable landscape.</p>
       <div class="info-hub__features">
@@ -12,12 +12,14 @@ export const infoHubContent = {
         <div class="info-hub__feature"><strong>Portals:</strong> each distinct outbound Wikipedia link becomes a route to another article's world.</div>
       </div>
       <p>Search for any English Wikipedia article to generate its world.</p>
+      <p>To see what the colours and markers of a world mean, open the legend from the
+      key icon beside the view controls, or press <kbd>L</kbd>.</p>
     `,
   },
   howItWorks: {
     id: 'how-it-works',
     title: 'How it works',
-    icon: '⚙️',
+    icon: 'layers',
     content: `
       <h3>How a world is formed</h3>
       <ol>
@@ -35,29 +37,24 @@ export const infoHubContent = {
   about: {
     id: 'about',
     title: 'About',
-    icon: 'ℹ️',
+    icon: 'mark',
     content: `
-      <h3>Created by mooeypoo</h3>
+      <h3>Created by Moriel Schottlender</h3>
       <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
+      <p>It asks the question: What would a Wikipedia article look like if it were a physical place you could explore? How would an article be represented through geography?</p>
+      <p>Now you can explore Wikipedia articles as landscapes, where each section is a peak and every link is a portal to another world.</p>
       <ul>
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
-        <li><a href="https://mooeypoo.com" target="_blank" rel="noopener noreferrer">Personal website</a></li>
+        <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>
       </ul>
     `,
   },
   shortcuts: {
     id: 'shortcuts',
     title: 'Keyboard',
-    icon: '⌨️',
+    icon: 'legend',
     content: `
-      <div class="info-hub__shortcuts">
-        <div class="info-hub__shortcut"><kbd>?</kbd> <kbd>I</kbd><span>Open help</span></div>
-        <div class="info-hub__shortcut"><kbd>S</kbd><span>Open settings</span></div>
-        <div class="info-hub__shortcut"><kbd>H</kbd><span>Hide or show HUD</span></div>
-        <div class="info-hub__shortcut"><kbd>1</kbd> <kbd>3</kbd><span>Switch 2D or 3D</span></div>
-        <div class="info-hub__shortcut"><kbd>Left</kbd> <kbd>Right</kbd><span>Navigate history</span></div>
-        <div class="info-hub__shortcut"><kbd>Esc</kbd><span>Close a modal</span></div>
-      </div>
+      <p data-shortcuts>Every shortcut the app has registered, listed below.</p>
     `,
   },
 }

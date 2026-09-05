@@ -1,8 +1,11 @@
-import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, ref } from 'vue';
 
 /**
- * useUIState - Centralized UI state management
- * Manages: modals, panels, preferences, keyboard shortcuts, preferences persistence
+ * Which surfaces are showing, and the persisted view preferences.
+ *
+ * Keyboard handling used to live here too, in a second window listener that
+ * could not see App.vue's. Both are gone: bindings are declared through
+ * useKeymap, and dismissal belongs to useOverlays.
  */
 export const useUIState = () => {
   // ===== MODAL / PANEL STATE =====
@@ -18,11 +21,22 @@ export const useUIState = () => {
     // choice — both views show the identical generated world, so
     // switching never regenerates terrain.
     worldShape: 'sphere',
+    // How the world is drawn, as opposed to what shape it is: 'high' forces
+    // WebGL, 'low' forces the 2D canvas fallback, 'auto' picks by capability.
+    rendering: 'auto',
+    // How much of the Ledger is showing. Null until the viewer chooses, so
+    // the first visit can differ by screen size without overriding them.
+    ledgerState: null,
+    // The camera dive between worlds. Off is honoured absolutely; on is
+    // still overridden by the system's reduced-motion preference.
+    travelAnimation: true,
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
     showFoliage: true,
-    panelOpacity: 0.9,
+    // solid | translucent | minimal. Replaces panelOpacity, which dimmed
+    // text along with the panel and could be dragged below legibility.
+    chrome: 'translucent',
     autoHideHUD: false,
     firstVisitDone: false,
   });
@@ -47,6 +61,12 @@ export const useUIState = () => {
         // a future build, or hand-edited storage) silently disabling the
         // 3D view — fall back to the flat map.
         if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
+        if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
+        if (!['collapsed', 'peek', 'open', 'full'].includes(parsed.ledgerState)) delete parsed.ledgerState;
+        if (typeof parsed.travelAnimation !== 'boolean') delete parsed.travelAnimation;
+        if (!['solid', 'translucent', 'minimal'].includes(parsed.chrome)) delete parsed.chrome;
+        // The old opacity slider is gone; a stored value must not linger.
+        delete parsed.panelOpacity;
         Object.assign(preferences, parsed);
       }
     } catch (e) {
@@ -77,50 +97,12 @@ export const useUIState = () => {
     showSettings.value = !showSettings.value;
   };
 
-  const closeAllModals = () => {
-    showInfoHub.value = false;
-    showSettings.value = false;
-  };
-
   const setInfoTab = (tab) => {
     currentInfoTab.value = tab;
   };
 
-  // ===== KEYBOARD SHORTCUTS =====
-  const handleKeyDown = (e) => {
-    // Don't trigger shortcuts if typing in an input
-    if (e.target.matches('input, textarea')) {
-      return;
-    }
-
-    // Info Hub toggle: ? or i
-    if (e.key === '?' || e.key === 'i') {
-      e.preventDefault();
-      toggleInfoHub();
-    }
-
-    // Settings toggle: s
-    if (e.key === 's' || e.key === 'S') {
-      e.preventDefault();
-      toggleSettings();
-    }
-
-    // Close modals: Escape
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      closeAllModals();
-    }
-  };
-
-  // ===== LIFECYCLE =====
-  onMounted(() => {
-    loadPreferences();
-    window.addEventListener('keydown', handleKeyDown);
-  });
-
-  onUnmounted(() => {
-    window.removeEventListener('keydown', handleKeyDown);
-  });
+  // Preferences load once, at module use; there is no listener to attach.
+  loadPreferences();
 
   return {
     // Modals
@@ -129,7 +111,6 @@ export const useUIState = () => {
     currentInfoTab,
     toggleInfoHub,
     toggleSettings,
-    closeAllModals,
     setInfoTab,
 
     // Preferences

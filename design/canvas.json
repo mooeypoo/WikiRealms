@@ -1,0 +1,59 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Desktop — 1440 × 900 (lg/xl)", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "PhonePortrait.dc.html", "title": "Phone portrait — 390 × 844 (xs)", "x": 1560, "y": 0, "w": 390, "h": 844 },
+    { "file": "PhoneLandscape.dc.html", "title": "Phone landscape — 844 × 390 (short)", "x": 2070, "y": 0, "w": 844, "h": 390 }
+  ],
+  "annotations": [
+    {
+      "id": "direction",
+      "x": 0,
+      "y": -190,
+      "w": 470,
+      "text": "EXPEDITION INSTRUMENT\n\nSpace Grotesk + IBM Plex Mono with tabular numerals. Hairline rules instead of panel borders, no glass-on-glass. Cyan = interactive / portals. Warm gold = your trail (history), used nowhere else."
+    },
+    {
+      "id": "helm-note",
+      "x": 1050,
+      "y": 950,
+      "w": 330,
+      "text": "HELM — the only persistent control that changes the world. Beside the stage, not among the utility icons, and inside the thumb zone on touch."
+    },
+    {
+      "id": "trail-note",
+      "x": -390,
+      "y": 300,
+      "w": 350,
+      "text": "TRAIL rail, collapsed. Space is reserved now; the panel gets built after traversal becomes a visit graph. The scrim chevron (TRAIL · 4) is its collapsed handle."
+    },
+    {
+      "id": "ledger-note",
+      "x": -390,
+      "y": 600,
+      "w": 350,
+      "text": "LEDGER — shown at OPEN (~40vh). The three-bar meter beside the chevron is the state indicator: peek / open / full."
+    },
+    {
+      "id": "phone-note",
+      "x": 1560,
+      "y": 900,
+      "w": 390,
+      "text": "Ledger at PEEK — title plus four readouts, ~144px. Helm floats clear of it. No fake status bar or home indicator drawn: safe-area insets leave that space to the OS."
+    },
+    {
+      "id": "landscape-note",
+      "x": 2070,
+      "y": 450,
+      "w": 470,
+      "text": "The `short` breakpoint (max-height: 520px) flips the Ledger to a right drawer and the Helm to the left edge. A bottom sheet here would leave the world a letterbox slit — this is the case the current UI has no answer for at all."
+    },
+    {
+      "id": "open-questions",
+      "x": 2620,
+      "y": 450,
+      "w": 300,
+      "text": "STILL UNDRAWN\n\n· Launch screen (no realm yet)\n· Portal preview + travel dive\n· Ledger at FULL\n· Diegetic legend\n\nSay the word and these get their own page."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

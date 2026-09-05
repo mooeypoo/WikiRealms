@@ -1,92 +1,37 @@
-:root {
-  color-scheme: dark;
-  font-family: 'Inter', system-ui, sans-serif;
+@import './ui/design/tokens.css';
 
-  /* COSMIC THEME FOUNDATION */
-  --bg-void: #05060f;
-  --bg-deep: #0b0e1e;
-  --bg-nebula: #14183a;
+/**
+ * Reset and base element styling only. Every value comes from a token;
+ * anything that is a component's business now lives with that component,
+ * and the utility classes that nothing used (.btn-*, .card, .text-*,
+ * .hud__grid) are gone rather than being ported.
+ *
+ * The dead `.taskbar` rules that used to sit here were unreachable: they
+ * targeted a component whose own styles are `scoped`.
+ */
 
-  /* PANEL BACKGROUNDS (by priority) */
-  --panel-primary: rgba(18, 22, 40, 0.85);   /* Primary actions (search, confirm) */
-  --panel-secondary: rgba(18, 22, 40, 0.65); /* Info panels (article, history) */
-  --panel-tertiary: rgba(18, 22, 40, 0.45);  /* Minimal UI (tooltips, hints) */
-  
-  /* BORDERS (improved from 0.28 for better contrast) */
-  --panel-border: rgba(120, 140, 255, 0.35);
-  --panel-border-accent: rgba(127, 223, 255, 0.5);
+html {
+  box-sizing: border-box;
+}
 
-  /* TEXT & LEGIBILITY (improved contrast ratios) */
-  --text-primary: #eef0ff;     /* ~9:1 on dark background (AAA compliant) */
-  --text-secondary: #b8c1e1;   /* ~4.5:1 on deep bg (AA compliant) */
-  --text-muted: #7a85b1;       /* ~3.5:1 on deep bg (AA compliant for secondary) */
-  --text-link: #7fdfff;        /* Interactive text */
-
-  /* ACCENT COLORS */
-  --accent: #7fdfff;           /* Cyan: primary interactive */
-  --accent-warm: #ffd27f;      /* Gold: secondary/alternative */
-  --accent-subtle: rgba(127, 223, 255, 0.3); /* Faded accent for backgrounds */
-
-  /* ERROR / DANGER STATE */
-  --danger-bg: rgba(255, 90, 90, 0.15);
-  --danger-border: rgba(255, 120, 120, 0.4);
-  --danger-text: #ffb3b3;
-
-  /* FONTS */
-  --font-display: 'Cinzel', serif;
-  --font-body: 'Inter', system-ui, sans-serif;
-
-  /* RGB VALUES for rgba() usage */
-  --panel-bg-rgb: 18, 22, 40;
-  --panel-border-rgb: 120, 140, 255;
-  --text-primary-rgb: 238, 240, 255;
-  --text-secondary-rgb: 184, 193, 225;
-  --text-muted-rgb: 122, 133, 177;
-  --accent-rgb: 127, 223, 255;
-  --accent-warm-rgb: 255, 210, 127;
-  --bg-deep-rgb: 11, 14, 30;
-  --bg-void-rgb: 5, 6, 15;
-
-  /* GLOW & EFFECT TOKENS */
-  --glow-accent: drop-shadow(0 0 8px rgba(127, 223, 255, 0.6));
-  --glow-warm: drop-shadow(0 0 8px rgba(255, 210, 127, 0.5));
-  --glow-danger: drop-shadow(0 0 6px rgba(255, 120, 120, 0.6));
-  --glow-subtle: drop-shadow(0 0 4px rgba(127, 223, 255, 0.3));
-
-  /* SPACING SCALE (mobile-first) */
-  --spacing-xs: 0.25rem;   /* 4px */
-  --spacing-sm: 0.5rem;    /* 8px */
-  --spacing-md: 1rem;      /* 16px */
-  --spacing-lg: 1.5rem;    /* 24px */
-  --spacing-xl: 2rem;      /* 32px */
-  --spacing-2xl: 3rem;     /* 48px */
-
-  /* TOUCH TARGET SIZING */
-  --size-touch: 3rem;      /* 48px minimum for mobile touch targets */
-  --size-icon: 1.5rem;     /* 24px for icon size */
-  --size-icon-lg: 2rem;    /* 32px for larger icons */
-
-  /* RESPONSIVE BREAKPOINTS */
-  --breakpoint-mobile: 320px;
-  --breakpoint-tablet: 768px;
-  --breakpoint-desktop: 1200px;
-
-  /* BORDER RADIUS (game aesthetic: slightly rounded, not too rounded) */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-
-  /* TRANSITION TIMING (snappy, not sluggish) */
-  --duration-fast: 150ms;
-  --duration-normal: 250ms;
-  --duration-slow: 400ms;
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
-  background: radial-gradient(ellipse at 20% 15%, var(--bg-nebula) 0%, var(--bg-deep) 45%, var(--bg-void) 100%);
-  color: var(--text-primary);
+  /* dvh, not vh: a mobile address bar collapsing must not shift the stage. */
+  min-height: 100dvh;
+  background: radial-gradient(
+    ellipse at 20% 15%,
+    var(--surface-nebula) 0%,
+    var(--surface-deep) 45%,
+    var(--surface-void) 100%
+  );
+  color: var(--ink-1);
+  font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -94,325 +39,97 @@ body {
 }
 
 #app {
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-/* BUTTON PATTERNS */
-button {
-  cursor: pointer;
-  border: none;
-  font-family: inherit;
-  font-size: 1rem;
-  transition: all var(--duration-fast) ease-out;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* PRIMARY BUTTON (call-to-action) */
-.btn-primary {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background-color: var(--accent);
-  color: var(--bg-deep);
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  min-height: var(--size-touch);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #9feeff;
-  filter: var(--glow-accent);
-}
-
-.btn-primary:active:not(:disabled) {
-  background-color: #5ec9ff;
-  filter: none;
-}
-
-/* SECONDARY BUTTON (less critical) */
-.btn-secondary {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background-color: transparent;
-  color: var(--accent);
-  border: 1px solid var(--panel-border-accent);
-  border-radius: var(--radius-md);
-  font-weight: 500;
-  min-height: var(--size-touch);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: var(--accent-subtle);
-  filter: var(--glow-subtle);
-}
-
-.btn-secondary:active:not(:disabled) {
-  background-color: var(--accent);
-  color: var(--bg-deep);
-  filter: none;
-}
-
-/* ICON BUTTON (toolbar buttons) */
-.btn-icon {
-  width: var(--size-touch);
-  height: var(--size-touch);
-  padding: 0;
-  background-color: transparent;
-  color: var(--text-secondary);
-  border-radius: var(--radius-md);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--size-icon-lg);
-}
-
-.btn-icon:hover:not(:disabled) {
-  background-color: rgba(127, 223, 255, 0.1);
-  color: var(--accent);
-  filter: var(--glow-subtle);
-}
-
-.btn-icon:active:not(:disabled) {
-  background-color: var(--accent-subtle);
-  color: var(--accent);
-}
-
-/* CARD PATTERN */
-.card {
-  background-color: var(--panel-secondary);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
-  backdrop-filter: blur(8px);
-}
-
-.card--primary {
-  background-color: var(--panel-primary);
-  border-color: var(--panel-border-accent);
-}
-
-.card--compact {
-  padding: var(--spacing-md);
-}
-
-/* INPUT FIELDS */
-input[type="text"],
-input[type="search"],
-textarea,
-select {
-  padding: var(--spacing-sm) var(--spacing-md);
-  font-size: 1rem;
-  font-family: inherit;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  background-color: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
-  transition: all var(--duration-fast) ease-out;
-}
-
-input[type="text"]::placeholder,
-input[type="search"]::placeholder,
-textarea::placeholder {
-  color: var(--text-muted);
-}
-
-input[type="text"]:focus,
-input[type="search"]:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  border-color: var(--accent);
-  background-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 3px rgba(127, 223, 255, 0.15);
-}
-
-/* TYPOGRAPHY */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 var(--spacing-md);
   font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--tracking-title);
   line-height: 1.2;
-  margin: 0 0 var(--spacing-md) 0;
+  color: var(--ink-1);
 }
 
 h1 {
-  font-size: 2.5rem;
-  color: var(--accent);
+  font-size: var(--text-xl);
 }
 
 h2 {
-  font-size: 1.875rem;
-  color: var(--text-primary);
+  font-size: var(--text-lg);
 }
 
 h3 {
-  font-size: 1.25rem;
-  color: var(--text-secondary);
+  font-size: var(--text-md);
 }
 
 p {
-  margin: 0 0 var(--spacing-md) 0;
-  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-md);
+  color: var(--ink-2);
 }
 
 a {
   color: var(--accent);
   text-decoration: none;
-  transition: color var(--duration-fast) ease-out;
+  transition: color var(--dur-1) var(--ease-out);
 }
 
 a:hover {
-  color: #9feeff;
+  color: var(--accent-ink);
   text-decoration: underline;
 }
 
-/* UTILITY CLASSES */
-.text-muted {
-  color: var(--text-muted);
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease-out);
 }
 
-.text-secondary {
-  color: var(--text-secondary);
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.text-accent {
-  color: var(--accent);
+input,
+textarea,
+select {
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-family: inherit;
+  font-size: 1rem;
+  color: var(--ink-1);
+  background: rgba(var(--edge-rgb), 0.06);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
 
-.text-accent-warm {
-  color: var(--accent-warm);
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-3);
 }
 
-.text-center {
-  text-align: center;
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(var(--edge-rgb), 0.09);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
-/* RESPONSIVE HELPERS */
-@media (max-width: 767px) {
-  h1 {
-    font-size: 2rem;
-  }
-
-  h2 {
-    font-size: 1.5rem;
-  }
-
-  h3 {
-    font-size: 1.125rem;
-  }
+/* Numbers are readouts: they must not jitter as they change. */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* MOBILE OPTIMIZATION (320px - 767px) */
-@media (max-width: 767px) {
-  :root {
-    --spacing-base: 0.875rem;
-    --spacing-sm: 0.5rem;
-    --spacing-md: 0.875rem;
-    --spacing-lg: 1.25rem;
-    --spacing-xl: 1.75rem;
-  }
-
-  body {
-    padding-bottom: 1rem;
-  }
-
-  /* Panels adapt to narrow screens */
-  .hud {
-    max-width: calc(100vw - 1rem);
-    margin: 0.5rem auto;
-    padding: var(--spacing-md);
-    font-size: 0.95rem;
-  }
-
-  /* Touch targets remain 48px minimum */
-  button {
-    min-height: var(--size-touch);
-    min-width: var(--size-touch);
-    font-size: 1rem;
-  }
-
-  .btn-primary,
-  .btn-secondary {
-    padding: 0.75rem 1rem;
-    font-size: 0.95rem;
-  }
-
-  /* Grid layout stacks on mobile */
-  .hud__grid {
-    grid-template-columns: 1fr;
-    gap: var(--spacing-md);
-  }
-
-  /* Taskbar adapts to small screens */
-  .taskbar {
-    padding: 0.5rem;
-    min-height: 3rem;
-  }
-
-  .taskbar__content {
-    gap: 0.5rem;
-  }
-
-  .taskbar__title {
-    font-size: 1rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .taskbar__button {
-    padding: 0.4rem;
-    font-size: 0.9rem;
-  }
-
-  /* Search dropdown full-width on mobile */
-  .taskbar__search {
-    left: 0.5rem;
-    right: 0.5rem;
-    width: auto;
-    max-width: none;
-    top: 3.5rem;
-  }
-}
-
-/* TABLET OPTIMIZATION (768px - 1199px) */
-@media (min-width: 768px) and (max-width: 1199px) {
-  :root {
-    --spacing-base: 1rem;
-    --spacing-lg: 1.5rem;
-  }
-
-  .hud {
-    max-width: 90vw;
-  }
-
-  .hud__grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* DESKTOP OPTIMIZATION (1200px+) */
-@media (min-width: 1200px) {
-  .hud {
-    max-width: 80vw;
-  }
-
-  .hud__grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* FOCUS VISIBLE ACCESSIBILITY */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
