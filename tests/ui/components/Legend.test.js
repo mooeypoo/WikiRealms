@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import Legend from '../../../src/ui/components/Legend.vue'
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from '../../../src/engine/generation/config.js'
+import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
@@ -62,6 +62,17 @@ describe('Legend', () => {
     expect(text).toContain('how much was written')
     expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.mountainMinHeight * 100)}%`)
     expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.snowMinHeight * 100)}%`)
+  })
+
+  it('says portals are a selection, not every link', () => {
+    // A long article has hundreds of links and a world carrying hundreds of
+    // markers is a world you cannot see. Saying "a portal is a link"
+    // without "some of them" overclaims.
+    mountLegend()
+
+    expect(document.querySelector('.legend__features').textContent).toContain(
+      `Up to ${PORTAL_LIMITS.maxPortals}`,
+    )
   })
 
   it('points at features that are actually on screen', () => {

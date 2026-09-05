@@ -40,7 +40,15 @@ const stats = computed(() => [
   { label: 'Sections', value: countSections(props.article.sections) },
   { label: 'Citations', value: props.article.sections?.citationCount ?? 0 },
   { label: 'Portals', value: props.world?.portals?.length ?? 0, accent: true },
-  { label: 'Links', value: props.article.links?.length ?? 0 },
+  // Was "Links", which read 500 for almost every article — that being the
+  // API's page limit for an anonymous request, which nothing here follows
+  // past. A number that describes our query rather than the article has no
+  // business in an instrument panel, and sitting beside Portals it invited
+  // a comparison between two things that are not comparable.
+  //
+  // Words is uncapped, is a fact about the article, and is the one the
+  // world visibly answers to: length is what sets the waterline.
+  { label: 'Words', value: formatWords(Math.round((props.article.sections?.totalSize ?? 0) / 5.5)) },
 ])
 
 function countSections(tree) {

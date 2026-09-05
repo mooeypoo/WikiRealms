@@ -1,4 +1,4 @@
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../engine/generation/config.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 
@@ -57,7 +57,11 @@ export const FEATURE_LEGEND = [
   {
     id: 'portal',
     label: 'A portal is an outbound link',
-    detail: 'Placed inside the range whose section links there. Taking one starts a new world.',
+    // Not ALL of them: a long article has hundreds, and a world carrying
+    // hundreds of markers is a world you cannot see. Saying "a portal is a
+    // link" without saying "some of them" is the same overclaim the Links
+    // readout was making.
+    detail: `Up to ${PORTAL_LIMITS.maxPortals} of them, spread across the sections rather than taken from the top, and placed in the range whose section links there. Taking one starts a new world.`,
   },
   {
     id: 'water',

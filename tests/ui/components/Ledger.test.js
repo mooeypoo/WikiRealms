@@ -138,8 +138,21 @@ describe('Ledger', () => {
       mountLedger()
       const values = [...document.querySelectorAll('.ledger__stats dd')].map((dd) => dd.textContent.trim())
 
-      // sections counted through the whole tree, citations, portals, links
-      expect(values).toEqual(['3', '24', '3', '2'])
+      // sections through the whole tree, citations, portals, words
+      expect(values).toEqual(['3', '24', '3', '164'])
+    })
+
+    it('counts words rather than links', () => {
+      // "Links" read 500 for nearly every article — the API's page limit
+      // for an anonymous request, which nothing follows past. A number
+      // describing our query rather than the article does not belong in an
+      // instrument panel, and beside Portals it invited a comparison
+      // between two things that are not comparable.
+      mountLedger()
+      const labels = [...document.querySelectorAll('.ledger__stats dt')].map((dt) => dt.textContent.trim())
+
+      expect(labels).toEqual(['Sections', 'Citations', 'Portals', 'Words'])
+      expect(labels).not.toContain('Links')
     })
 
     it('lists top-level sections only, with a reading-length chip', () => {
