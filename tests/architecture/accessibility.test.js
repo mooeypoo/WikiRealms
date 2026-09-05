@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -235,5 +237,41 @@ describe('the phone top bar', () => {
 
     expect(document.querySelector('.tools__list')).toBeNull()
     expect(document.querySelector('.settings__title')).not.toBeNull()
+  })
+})
+
+describe('no emoji anywhere in the interface', () => {
+  const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
+
+  it('carries none in any rendered chrome', async () => {
+    // They cannot take currentColor, share no optical grid, and render
+    // differently on every platform. This was the loudest reason the first
+    // pass read as unfinished, and it took the whole overhaul to finish
+    // removing them.
+    const wrapper = await inAWorld()
+
+    expect(wrapper.text()).not.toMatch(PICTOGRAPHIC)
+    expect(document.body.textContent).not.toMatch(PICTOGRAPHIC)
+  })
+
+  it('carries none in the guide, whichever tab is open', async () => {
+    const wrapper = await inAWorld()
+    await wrapper.find('[aria-label="About WikiRealms"]').trigger('click')
+
+    for (const tab of document.querySelectorAll('[role="tab"]')) {
+      tab.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await flushPromises()
+      expect(document.querySelector('.sheet').textContent).not.toMatch(PICTOGRAPHIC)
+    }
+  })
+
+  it('draws the in-world portal marker rather than typing it', () => {
+    // The last one: an emoji painted to a canvas texture, in the place a
+    // viewer looks most, unable to take the accent colour every other
+    // control uses.
+    const source = readFileSync(resolve(process.cwd(), 'src/ui/components/WorldView3D.vue'), 'utf8')
+
+    expect(source).not.toMatch(PICTOGRAPHIC)
+    expect(source).toContain('ringRatio')
   })
 })

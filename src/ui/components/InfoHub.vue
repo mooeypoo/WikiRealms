@@ -54,7 +54,7 @@ const { shortcuts } = useKeymap()
           :aria-selected="currentTab === tab.id"
           @click="$emit('update:currentTab', tab.id)"
         >
-          <span class="guide__tab-icon" aria-hidden="true">{{ tab.icon }}</span>
+          <Icon :name="tab.icon" :size="14" />
           <span class="guide__tab-label">{{ tab.title }}</span>
         </button>
       </div>
@@ -145,10 +145,6 @@ const { shortcuts } = useKeymap()
 .guide__tab--active {
   color: var(--accent);
   border-bottom-color: var(--accent);
-}
-
-.guide__tab-icon {
-  font-size: 0.95rem;
 }
 
 .guide__keys {

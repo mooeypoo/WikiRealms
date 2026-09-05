@@ -2,7 +2,7 @@ export const infoHubContent = {
   whatIsThis: {
     id: 'what-is-this',
     title: 'What is this?',
-    icon: '🗺️',
+    icon: 'map',
     content: `
       <p>WikiRealms turns a Wikipedia article's structure into an explorable landscape.</p>
       <div class="info-hub__features">
@@ -19,7 +19,7 @@ export const infoHubContent = {
   howItWorks: {
     id: 'how-it-works',
     title: 'How it works',
-    icon: '⚙️',
+    icon: 'layers',
     content: `
       <h3>How a world is formed</h3>
       <ol>
@@ -37,7 +37,7 @@ export const infoHubContent = {
   about: {
     id: 'about',
     title: 'About',
-    icon: 'ℹ️',
+    icon: 'mark',
     content: `
       <h3>Created by Moriel Schottlender</h3>
       <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
@@ -52,7 +52,7 @@ export const infoHubContent = {
   shortcuts: {
     id: 'shortcuts',
     title: 'Keyboard',
-    icon: '⌨️',
+    icon: 'legend',
     content: `
       <p data-shortcuts>Every shortcut the app has registered, listed below.</p>
     `,

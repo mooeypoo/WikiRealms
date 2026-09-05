@@ -142,7 +142,8 @@ function resolveAccentColor() {
  * the terrain colors, especially over bright biomes.
  */
 function makePortalSprite() {
-  const { size, glyphRatio, coreRatio, auraRatio } = PORTAL_MARKERS.texture
+  const { size, coreRatio, auraRatio, ringRatio, innerRingRatio, tickRatio, strokeRatio } =
+    PORTAL_MARKERS.texture
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -160,10 +161,37 @@ function makePortalSprite() {
   ctx.arc(center, center, center, 0, Math.PI * 2)
   ctx.fill()
 
-  ctx.font = `${size * glyphRatio}px serif`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('🌀', center, center + size * 0.02)
+  // An aperture: two rings, four cardinal ticks and a bright core. Drawn
+  // in the accent colour, so it belongs to the same instrument as every
+  // control on screen — which an emoji never could, taking neither the
+  // colour nor a consistent shape from one platform to the next.
+  ctx.lineWidth = size * strokeRatio
+  ctx.lineCap = 'round'
+
+  ctx.strokeStyle = `rgba(${rgb}, 0.9)`
+  ctx.beginPath()
+  ctx.arc(center, center, size * ringRatio, 0, Math.PI * 2)
+  ctx.stroke()
+
+  ctx.strokeStyle = `rgba(${rgb}, 0.55)`
+  ctx.beginPath()
+  ctx.arc(center, center, size * innerRingRatio, 0, Math.PI * 2)
+  ctx.stroke()
+
+  for (let quarter = 0; quarter < 4; quarter += 1) {
+    const angle = (quarter * Math.PI) / 2
+    const from = size * ringRatio
+    const to = from + size * tickRatio
+    ctx.beginPath()
+    ctx.moveTo(center + Math.cos(angle) * from, center + Math.sin(angle) * from)
+    ctx.lineTo(center + Math.cos(angle) * to, center + Math.sin(angle) * to)
+    ctx.stroke()
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+  ctx.beginPath()
+  ctx.arc(center, center, size * coreRatio, 0, Math.PI * 2)
+  ctx.fill()
 
   const material = new THREE.SpriteMaterial({
     map: new THREE.CanvasTexture(canvas),
