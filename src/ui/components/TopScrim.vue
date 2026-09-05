@@ -80,17 +80,21 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
     </button>
 
     <nav class="scrim__utilities" aria-label="Tools">
-      <button class="scrim__button" type="button" aria-label="Search realms" @click="$emit('search')">
+      <button class="scrim__button scrim__tool" type="button" aria-label="Search realms" @click="$emit('search')">
         <Icon name="search" :size="17" />
+        <span class="scrim__label">Search</span>
       </button>
-      <button class="scrim__button" type="button" aria-label="Journey" @click="$emit('journey')">
+      <button class="scrim__button scrim__tool" type="button" aria-label="Journey" @click="$emit('journey')">
         <Icon name="share" :size="17" />
+        <span class="scrim__label">Journey</span>
       </button>
-      <button class="scrim__button" type="button" aria-label="About WikiRealms" @click="$emit('guide')">
+      <button class="scrim__button scrim__tool" type="button" aria-label="About WikiRealms" @click="$emit('guide')">
         <Icon name="guide" :size="17" />
+        <span class="scrim__label">About</span>
       </button>
-      <button class="scrim__button" type="button" aria-label="Settings" @click="$emit('settings')">
+      <button class="scrim__button scrim__tool" type="button" aria-label="Settings" @click="$emit('settings')">
         <Icon name="settings" :size="17" />
+        <span class="scrim__label">Settings</span>
       </button>
     </nav>
   </header>
@@ -214,6 +218,7 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
   place-items: center;
   width: 34px;
   height: 34px;
+  box-sizing: border-box;
   border: 1px solid var(--edge-hair);
   border-radius: var(--radius-md);
   background: rgba(var(--surface-1-rgb), 0.6);
@@ -228,6 +233,34 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
 .scrim__button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/**
+ * An icon alone asks the viewer to guess. There is room for a word on a
+ * desktop, and below md these four collapse into a menu that has room for
+ * one anyway — so the only width where anybody has to guess is the middle
+ * band, where the realm name needs the space more.
+ */
+.scrim__label {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .scrim__tool {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: auto;
+    padding: 0 var(--spacing-sm) 0 9px;
+  }
+
+  .scrim__label {
+    display: inline;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
 }
 
 /* Below md the wordmark goes: the realm name is the useful half of the

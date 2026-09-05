@@ -53,6 +53,24 @@ describe('TopScrim', () => {
     expect(wrapper.emitted('trail')).toHaveLength(1)
   })
 
+  it('names its tools rather than leaving the icon to be guessed', () => {
+    // There is room for a word on a desktop, and below md these four
+    // collapse into a menu that has room for one anyway.
+    const wrapper = mountScrim()
+    const labels = wrapper.findAll('.scrim__label').map((label) => label.text())
+
+    expect(labels).toEqual(['Search', 'Journey', 'About', 'Settings'])
+  })
+
+  it('keeps each visible word inside its accessible name', () => {
+    // WCAG 2.5.3: a viewer saying "click Search" must be able to reach the
+    // control whose accessible name is "Search realms".
+    for (const button of mountScrim().findAll('.scrim__tool')) {
+      const visible = button.find('.scrim__label').text()
+      expect(button.attributes('aria-label')).toContain(visible)
+    }
+  })
+
   it('carries no view control — that belongs beside the world', () => {
     // The old taskbar had a 2D/3D button here, which is what made "Flat"
     // mean two different things. Changing the world is the helm's job.
