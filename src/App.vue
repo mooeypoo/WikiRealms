@@ -45,7 +45,6 @@ const {
   graph,
   current,
   currentNodeId,
-  path,
   canGoBack,
   canGoForward,
   navigateTo,
@@ -248,6 +247,12 @@ function toggleHideHud() {
  * are at the moment it opens rather than tracking them continuously — it
  * is a held explanation, not a HUD.
  */
+/**
+ * Everywhere visited, not the depth of the branch you happen to be on: the
+ * badge and the panel it opens should be counting the same thing.
+ */
+const trailSize = computed(() => Object.keys(graph.value.nodes).length)
+
 function toggleLegend() {
   if (showLegend.value) {
     showLegend.value = false
@@ -416,7 +421,7 @@ watch([graph, articleCache], () => {
     <TopScrim
       v-if="!showHudHidden"
       :realm="article?.title"
-      :trail-length="path.length"
+      :trail-length="trailSize"
       :can-go-back="canGoBack"
       :can-go-forward="canGoForward"
       @back="goBack"
@@ -540,7 +545,7 @@ watch([graph, articleCache], () => {
       @close="showTools = false"
     />
 
-    <TrailMenu :show="showTrail" :path="path" @select="onTrailSelect" @close="showTrail = false" />
+    <TrailMenu :show="showTrail" :graph="graph" @select="onTrailSelect" @close="showTrail = false" />
 
     <JourneyMenu
       :show="showJourney"

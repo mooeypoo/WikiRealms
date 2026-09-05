@@ -1160,3 +1160,52 @@ describe('App legend affordance', () => {
     expect(document.querySelector('.legend')).not.toBeNull()
   })
 })
+
+describe('App trail', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('shows the branch you left, and walks back into it', async () => {
+    // The end-to-end version of the thing the flat list could not show.
+    const articles = {
+      Saturn: { articleId: 'en:1', title: 'Saturn', summary: '.', latestRevisionId: 1, categories: [], links: ['Titan'], images: [], sections: { lead: { ownSize: 10, links: ['Titan'] }, totalSize: 10, sections: [] } },
+      Titan: { articleId: 'en:2', title: 'Titan', summary: '.', latestRevisionId: 2, categories: [], links: [], images: [], sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] } },
+    }
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
+    expect(ledgerTitle()).toBe('Titan')
+
+    await wrapper.find('[aria-label="Back"]').trigger('click')
+    await flushPromises()
+
+    wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    // Both stops are listed, the abandoned branch included.
+    const names = [...document.querySelectorAll('.trail__name')].map((n) => n.textContent)
+    expect(names).toEqual(['Saturn', 'Titan'])
+
+    // And it is reachable again.
+    const titan = [...document.querySelectorAll('.trail__stop')].find((s) => s.textContent.includes('Titan'))
+    titan.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ledgerTitle()).toBe('Titan')
+  })
+})

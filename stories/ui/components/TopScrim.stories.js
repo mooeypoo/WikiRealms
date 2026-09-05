@@ -2,6 +2,7 @@ import { h, ref } from 'vue'
 import JourneyMenu from '../../../src/ui/components/JourneyMenu.vue'
 import TopScrim from '../../../src/ui/components/TopScrim.vue'
 import TrailMenu from '../../../src/ui/components/TrailMenu.vue'
+import { createVisitGraph, goBack, jump, visit } from '../../../src/core/traversal/visitGraph.js'
 
 /**
  * The scrim replaced two shells: a fixed taskbar and a floating panel that
@@ -18,11 +19,14 @@ export default {
 
 const asStory = (build) => () => ({ setup: () => build })
 
-const PATH = [
-  { id: 'n1', title: 'Saturn' },
-  { id: 'n2', title: 'Rings of Saturn' },
-  { id: 'n3', title: 'Cassini Division' },
-]
+/** Saturn → Titan, back, → Rings of Saturn → Cassini Division. */
+function forkedJourney() {
+  let graph = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
+  graph = visit(goBack(graph), 'Rings of Saturn')
+  return visit(graph, 'Cassini Division')
+}
+
+const GRAPH = forkedJourney()
 
 export const WithRealm = {
   render: asStory(() =>
@@ -58,14 +62,14 @@ export const WithMenus = {
         h('div', {}, [
           h(TopScrim, {
             realm: 'Cassini Division',
-            trailLength: PATH.length,
+            trailLength: 3,
             canGoBack: true,
             onTrail: () => (trail.value = true),
             onJourney: () => (journey.value = true),
           }),
           h(TrailMenu, {
             show: trail.value,
-            path: PATH,
+            graph: GRAPH,
             onSelect: () => (trail.value = false),
             onClose: () => (trail.value = false),
           }),

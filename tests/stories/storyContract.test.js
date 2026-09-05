@@ -11,6 +11,7 @@ import * as scrimStories from '../../stories/ui/components/TopScrim.stories.js'
 import * as launchStories from '../../stories/ui/components/Launch.stories.js'
 import * as legendStories from '../../stories/ui/components/Legend.stories.js'
 import * as toolsStories from '../../stories/ui/components/ToolsMenu.stories.js'
+import * as trailStories from '../../stories/ui/components/TrailMenu.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -77,6 +78,7 @@ describe('Storybook story contract', () => {
     ['Launch', launchStories],
     ['Legend', legendStories],
     ['ToolsMenu', toolsStories],
+    ['TrailMenu', trailStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 
