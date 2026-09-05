@@ -719,20 +719,20 @@ watch([graph, articleCache], () => {
 }
 
 .cosmos__empty {
-  color: var(--text-muted);
+  color: var(--ink-3);
   font-style: italic;
 }
 
 .hud {
   position: absolute;
-  background: var(--panel-secondary);
-  border: 1px solid var(--panel-border);
+  background: var(--surface-1);
+  border: 1px solid var(--edge-hair);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   padding: var(--spacing-lg) var(--spacing-xl);
   z-index: 1;
-  transition: opacity var(--duration-normal) ease-out;
+  transition: opacity var(--dur-2) ease-out;
 }
 
 .hud--alert {
@@ -746,7 +746,7 @@ watch([graph, articleCache], () => {
   top: 6.5rem;
   left: 50%;
   transform: translateX(-50%);
-  color: var(--text-muted);
+  color: var(--ink-3);
 }
 
 .app__status {
@@ -758,9 +758,9 @@ watch([graph, articleCache], () => {
 .app__alert {
   padding: var(--spacing-md) var(--spacing-lg);
   border-radius: var(--radius-md);
-  background: var(--danger-bg);
-  color: var(--danger-text);
-  border: 1px solid var(--danger-border);
+  background: var(--danger-wash);
+  color: var(--danger);
+  border: 1px solid var(--danger-edge);
   font-weight: 600;
 }
 
@@ -776,7 +776,7 @@ watch([graph, articleCache], () => {
   border-radius: 6px;
   background: rgba(18, 22, 40, 0.95);
   box-shadow: 0 0 14px rgba(127, 223, 255, 0.25);
-  color: var(--text-primary);
+  color: var(--ink-1);
 }
 
 .toast-enter-active,

@@ -86,7 +86,7 @@ watch(() => props.world, draw, { flush: 'post' })
   width: 100%;
   height: 100%;
   overflow: auto;
-  box-shadow: inset 0 0 12vw 4vw var(--bg-void, #05060f);
+  box-shadow: inset 0 0 12vw 4vw var(--surface-void);
 }
 
 .world-view__stage {

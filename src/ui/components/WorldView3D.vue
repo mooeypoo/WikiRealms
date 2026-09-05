@@ -1184,7 +1184,7 @@ watch(
 }
 
 .world-view-3d__fallback {
-  color: var(--text-muted, #999);
+  color: var(--ink-3);
   text-align: center;
   padding: 2rem;
 }
@@ -1192,12 +1192,12 @@ watch(
 .world-view-3d__tooltip {
   position: absolute;
   transform: translate(-50%, calc(-100% - 12px));
-  background: var(--panel-bg, rgba(18, 22, 40, 0.85));
-  border: 1px solid var(--panel-border, rgba(120, 140, 255, 0.28));
+  background: var(--surface-1-solid));
+  border: 1px solid var(--edge-hair));
   border-radius: 6px;
   padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
-  color: var(--text-primary, #eef0ff);
+  color: var(--ink-1);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -1209,7 +1209,7 @@ watch(
 
 .world-view-3d__tooltip span {
   margin-top: 0.1rem;
-  color: var(--text-muted, #9aa3c7);
+  color: var(--ink-3);
   font-size: 0.72rem;
 }
 </style>

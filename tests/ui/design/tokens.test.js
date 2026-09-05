@@ -132,16 +132,16 @@ describe('design tokens', () => {
       expect(dangling).toEqual([])
     })
 
-    it('carries no dead entries in the legacy alias ledger', () => {
-      // The ledger exists to be emptied (tokens.css explains why). An alias
-      // nothing references any more is one that should have been deleted
-      // with the component that used it.
-      const { used } = scanSrc()
-      const ledger = TOKENS.split('LEGACY ALIASES')[1] ?? ''
-      const aliases = [...ledger.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((match) => match[1])
+    it('carries no legacy aliases at all any more', () => {
+      // The ledger existed to be emptied, and is. Every component now names
+      // the token it means rather than one that forwards to it, so a reader
+      // of any stylesheet sees the real system and not a translation of the
+      // one it replaced.
+      expect(TOKENS).not.toContain('LEGACY ALIASES')
 
-      expect(aliases.length).toBeGreaterThan(0)
-      expect(aliases.filter((name) => !used.has(name))).toEqual([])
+      for (const retired of ['--panel-secondary', '--text-primary', '--danger-bg', '--duration-normal']) {
+        expect(TOKENS, `${retired} should be gone`).not.toMatch(new RegExp(`^\\s*${retired}\\s*:`, 'm'))
+      }
     })
   })
 
