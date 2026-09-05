@@ -27,6 +27,9 @@ export const useUIState = () => {
     // How much of the Ledger is showing. Null until the viewer chooses, so
     // the first visit can differ by screen size without overriding them.
     ledgerState: null,
+    // The camera dive between worlds. Off is honoured absolutely; on is
+    // still overridden by the system's reduced-motion preference.
+    travelAnimation: true,
     // Marker layer toggles — each is an independent on/off.
     showSections: true,
     showPortals: true,
@@ -58,6 +61,7 @@ export const useUIState = () => {
         if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
         if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
         if (!['collapsed', 'peek', 'open', 'full'].includes(parsed.ledgerState)) delete parsed.ledgerState;
+        if (typeof parsed.travelAnimation !== 'boolean') delete parsed.travelAnimation;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

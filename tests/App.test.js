@@ -36,6 +36,20 @@ import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/
  * tree. These read it the way a viewer would find it — by its accessible
  * name and its content — rather than by a class that a rewrite can rename.
  */
+/**
+ * Travel is a transition now, not an instant swap: the preview card asks,
+ * and the world is replaced behind a wash. These wait it out.
+ */
+function travelButton() {
+  return [...document.querySelectorAll('.preview__go')][0]
+}
+
+async function settleTravel() {
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(1200)
+  await flushPromises()
+}
+
 function press(key, target = document.body) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
   Object.defineProperty(event, 'target', { value: target })
@@ -203,11 +217,10 @@ describe('App', () => {
     await wrapper.find('.world-view__portal').trigger('click')
     await flushPromises()
 
-    // Confirm the portal navigation via modal
-    const confirmButton = wrapper.find('.app__portal-modal-confirm')
-    expect(confirmButton.exists()).toBe(true)
-    await confirmButton.trigger('click')
-    await flushPromises()
+    // The preview card names the destination and IS the confirmation.
+    expect(document.querySelector('.preview__title').textContent).toBe('Physics')
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
     expect(ledgerTitle()).toBe('Physics')
@@ -336,11 +349,8 @@ describe('App', () => {
     expect(document.body.textContent).not.toContain('Updated on Wikipedia') // first visit, nothing to compare against
 
     await wrapper.find('.world-view__portal').trigger('click') // navigate to Physics
-      // Confirm the portal navigation via modal
-      const confirmButton = wrapper.find('.app__portal-modal-confirm')
-      expect(confirmButton.exists()).toBe(true)
-      await confirmButton.trigger('click')
-      await flushPromises()
+      travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await settleTravel()
 
     await flushPromises()
 
@@ -837,9 +847,8 @@ describe('App shell', () => {
 
     await wrapper.find('.world-view__portal').trigger('click')
     await flushPromises()
-    const confirm = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Go'))
-    confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await settleTravel()
 
     expect(ledgerTitle()).toBe('Titan')
 
@@ -980,5 +989,102 @@ describe('App returning to the opening screen', () => {
     await flushPromises()
 
     expect(document.querySelector('.launch')).toBeNull()
+  })
+})
+
+describe('App travel', () => {
+  const articles = {
+    Saturn: { articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1, categories: [], links: ['Titan'], images: [], sections: { lead: { ownSize: 10, links: ['Titan'] }, totalSize: 10, sections: [] } },
+    Titan: { articleId: 'en:2', title: 'Titan', summary: 'A moon.', latestRevisionId: 2, categories: [], links: [], images: [], sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] } },
+  }
+
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('asks at the marker, naming where the portal goes', async () => {
+    // The old confirm was a centred dialog with no destination context,
+    // dropped away from whatever the viewer had just tapped.
+    const wrapper = await arrive()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    expect(document.querySelector('.preview__title').textContent).toBe('Titan')
+    expect(document.querySelector('.preview__leader')).not.toBeNull()
+  })
+
+  it('lets the viewer stay', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    document.querySelector('.preview__stay').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.preview')).toBeNull()
+    expect(ledgerTitle()).toBe('Saturn')
+  })
+
+  it('replaces the world behind a wash rather than during the motion', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    // Diving: nothing fetched yet, because a ~120ms synchronous generate
+    // would stutter the camera.
+    expect(document.querySelector('.app__wash')).not.toBeNull()
+    expect(fetchWikipediaArticle).not.toHaveBeenCalledWith('Titan')
+
+    await settleTravel()
+
+    expect(ledgerTitle()).toBe('Titan')
+    expect(document.querySelector('.app__wash')).toBeNull()
+  })
+
+  it('can be cut short with Escape', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    press('Escape')
+    await flushPromises()
+
+    expect(document.querySelector('.app__wash')).toBeNull()
+  })
+
+  it('arrives without any transition when the setting is off', async () => {
+    localStorage.setItem('wikirealms:preferences', JSON.stringify({ travelAnimation: false }))
+    const wrapper = await arrive()
+
+    await wrapper.find('.world-view__portal').trigger('click')
+    await flushPromises()
+    travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(0)
+    await flushPromises()
+
+    expect(ledgerTitle()).toBe('Titan')
   })
 })

@@ -169,18 +169,14 @@
  */
 :root {
   --bg-void: var(--surface-void);
-  --bg-deep: var(--surface-deep);
 
-  --panel-primary: var(--surface-2);
   --panel-secondary: var(--surface-1);
   --panel-bg: var(--surface-1-solid);
   --panel-border: var(--edge-hair);
-  --panel-border-accent: var(--edge-accent);
 
   --text-primary: var(--ink-1);
   --text-secondary: var(--ink-2);
   --text-muted: var(--ink-3);
-  --accent-warm: var(--trail);
 
   --danger-bg: var(--danger-wash);
   --danger-border: var(--danger-edge);
@@ -188,8 +184,5 @@
 
   --panel-border-rgb: var(--edge-rgb);
 
-  --size-touch: var(--hit);
-
-  --duration-fast: var(--dur-1);
   --duration-normal: var(--dur-2);
 }

@@ -28,6 +28,7 @@ function reset() {
   emit('update:preferences', {
     worldShape: 'sphere',
     rendering: 'auto',
+    travelAnimation: true,
     showSections: true,
     showPortals: true,
     showFoliage: true,
@@ -72,6 +73,24 @@ function reset() {
           </button>
         </div>
       </div>
+    </fieldset>
+
+    <fieldset class="settings__group">
+      <legend>Motion</legend>
+      <label class="settings__row">
+        <span>
+          <strong>Travel animation</strong>
+          <small>
+            The dive between worlds. Turn it off for an immediate arrival — the system's
+            reduced-motion setting already does this on its own.
+          </small>
+        </span>
+        <input
+          type="checkbox"
+          :checked="preferences.travelAnimation !== false"
+          @change="update('travelAnimation', $event.target.checked)"
+        />
+      </label>
     </fieldset>
 
     <fieldset class="settings__group">

@@ -11,6 +11,7 @@ const PREFERENCES = {
   showFoliage: true,
   panelOpacity: 0.9,
   rendering: 'auto',
+  travelAnimation: true,
 }
 
 function mountSettings(preferences = {}) {
@@ -73,9 +74,23 @@ describe('SettingsModal', () => {
     wrapper.unmount()
   })
 
+  it('lets the travel animation be turned off outright', async () => {
+    // Not everyone wants a camera dive every time they take a portal, and
+    // some people cannot comfortably watch one.
+    const wrapper = mountSettings()
+    const checkbox = document.querySelectorAll('input[type="checkbox"]')[0]
+
+    checkbox.checked = false
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ travelAnimation: false }])
+    wrapper.unmount()
+  })
+
   it('toggles a map layer', async () => {
     const wrapper = mountSettings()
-    const checkbox = document.querySelectorAll('input[type="checkbox"]')[1]
+    const checkbox = document.querySelectorAll('input[type="checkbox"]')[2]
 
     checkbox.checked = false
     checkbox.dispatchEvent(new Event('change', { bubbles: true }))

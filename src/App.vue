@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Launch from './ui/components/Launch.vue'
 import CommandPalette from './ui/components/CommandPalette.vue'
+import PortalPreview from './ui/components/PortalPreview.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
 import Icon from './ui/design/Icon.vue'
@@ -22,6 +23,7 @@ import { useKeymap } from './ui/design/useKeymap.js'
 import { onHistoryPop, pushRealm, readRealm } from './adapters/urlState.js'
 import { supportsWebGL } from './ui/rendering/webglSupport.js'
 import { useViewport } from './ui/design/useViewport.js'
+import { useTravel } from './ui/design/useTravel.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 
@@ -54,10 +56,15 @@ const { errorMessage: snapshotErrorMessage, exportSnapshot, importSnapshot, pers
 const { showInfoHub, showSettings, currentInfoTab, setInfoTab, preferences, updatePreferences } = useUIState()
 const { shareArticle, toastMessage, toastVisible } = useShare()
 const viewport = useViewport()
+const travel = useTravel({
+  prefersReducedMotion: () =>
+    preferences.travelAnimation === false ||
+    (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true),
+})
 
 const articleCache = ref({})
 const isStale = ref(false)
-const portalConfirmation = ref(null)  // { targetArticleId, targetTitle }
+const portalPreview = ref(null)  // { portal, anchor }
 const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
@@ -104,9 +111,14 @@ function onSelect(result) {
   jumpTo(result.title)
 }
 
-function onPortalClick(portal) {
-  // First click shows confirmation, second click navigates
-  portalConfirmation.value = { targetArticleId: portal.targetArticleId, targetTitle: portal.targetTitle }
+function onPortalClick({ portal, anchor }) {
+  // The preview IS the confirmation: naming the destination is most of what
+  // a confirm step was ever for, and asking at the marker beats asking in
+  // the middle of the screen, away from what was tapped.
+  portalPreview.value = anchor ? { portal, anchor } : null
+  // No anchor means the marker could not be placed on screen; travel
+  // directly rather than silently doing nothing.
+  if (!anchor) confirmTravel(portal)
 }
 
 function onSectionClick(target) {
@@ -137,15 +149,23 @@ function setLedgerState(state) {
   updatePreferences({ ledgerState: state })
 }
 
-function confirmPortal() {
-  if (portalConfirmation.value) {
-    navigateTo(portalConfirmation.value.targetArticleId)
-    portalConfirmation.value = null
-  }
+function confirmTravel(portal) {
+  portalPreview.value = null
+  travel.travel(portal, {
+    onDive: () => worldViewRef.value?.diveTo?.(portal),
+    // Behind the wash: navigateTo triggers the fetch and the ~120ms
+    // synchronous generate, which would stutter anything still moving.
+    onArrive: () => navigateTo(portal.targetArticleId),
+  })
 }
 
-function cancelPortal() {
-  portalConfirmation.value = null
+function onCancelTravel() {
+  travel.cancel()
+  worldViewRef.value?.cancelDive?.()
+}
+
+function dismissPreview() {
+  portalPreview.value = null
 }
 
 function onExportClick() {
@@ -206,6 +226,18 @@ function onShareClick() {
 const { register } = useKeymap()
 
 register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
+register({
+  keys: 'escape',
+  // Above the overlay stack's own Escape: a viewer cutting a transition
+  // short means the transition, not whatever is behind it.
+  priority: 2000,
+  allowInField: true,
+  enabled: () => travel.isTravelling.value,
+  run: () => {
+    travel.cancel()
+    worldViewRef.value?.cancelDive?.()
+  },
+})
 register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
 register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
 register({
@@ -374,18 +406,29 @@ watch([graph, articleCache], () => {
       @share="onShareClick"
     />
 
-    <Transition name="fade">
-      <div v-if="portalConfirmation" class="app__portal-modal" @click="cancelPortal">
-        <div class="app__portal-modal-content" @click.stop>
-          <p class="app__portal-modal-label">Portal to</p>
-          <h3 class="app__portal-modal-title">{{ portalConfirmation.targetTitle }}</h3>
-          <div class="app__portal-modal-actions">
-            <button class="app__portal-modal-cancel" @click="cancelPortal">Cancel</button>
-            <button class="app__portal-modal-confirm" @click="confirmPortal">Go →</button>
-          </div>
-        </div>
+    <PortalPreview
+      :portal="portalPreview?.portal ?? null"
+      :anchor="portalPreview?.anchor ?? null"
+      @travel="confirmTravel"
+      @dismiss="dismissPreview"
+    />
+
+    <!-- The static beat. generateWorld blocks for ~120ms on a laptop and
+         more on a phone, so the work happens here, where a frozen frame and
+         a held one look the same. Clicking cuts it short. -->
+    <Transition name="wash">
+      <div
+        v-if="travel.isTravelling.value"
+        class="app__wash"
+        :class="`app__wash--${travel.phase.value}`"
+        @click="onCancelTravel"
+      >
+        <p v-if="travel.target.value" class="app__wash-label">
+          {{ travel.target.value.targetTitle }}
+        </p>
       </div>
     </Transition>
+
     <Launch
       v-if="!current || showLaunch"
       :dismissible="Boolean(current)"
@@ -437,6 +480,46 @@ watch([graph, articleCache], () => {
 </template>
 
 <style scoped>
+/* The wash: an opaque hold with the destination's name on it. Deliberately
+   still — the world generation that runs behind it blocks the main thread,
+   and a frozen frame is only invisible when nothing was moving. */
+.app__wash {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlays);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(var(--accent-rgb), 0.16) 0%,
+    rgba(var(--surface-1-rgb), 0.97) 55%
+  );
+  cursor: pointer;
+}
+
+.app__wash-label {
+  margin: 0;
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* Arriving fades in over the dive; leaving lifts off the new world. */
+.wash-enter-active {
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+.wash-leave-active {
+  transition: opacity var(--dur-3) var(--ease-out);
+}
+
+.wash-enter-from,
+.wash-leave-to {
+  opacity: 0;
+}
+
 /* The one thing left on screen in immersive mode: without it, hiding the
    interface would hide its own way back. */
 .app__reveal {
@@ -563,136 +646,6 @@ watch([graph, articleCache], () => {
   font-weight: 600;
 }
 
-.app__portal-modal {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  animation: fadeIn var(--duration-normal) ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.app__portal-modal-content {
-  background: linear-gradient(135deg, var(--panel-primary), rgba(18, 22, 40, 0.9));
-  border: 1px solid var(--panel-border-accent);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-2xl);
-  max-width: 420px;
-  text-align: center;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(127, 223, 255, 0.1);
-  animation: slideUp var(--duration-normal) cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.app__portal-modal-label {
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin: 0 0 var(--spacing-md) 0;
-  font-weight: 600;
-}
-
-.app__portal-modal-title {
-  color: var(--text-primary);
-  font-family: var(--font-display);
-  font-size: 1.75rem;
-  margin: 0 0 var(--spacing-2xl) 0;
-  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.app__portal-modal-actions {
-  display: flex;
-  gap: var(--spacing-lg);
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.app__portal-modal-cancel,
-.app__portal-modal-confirm {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--panel-border);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--duration-fast) ease-out;
-  min-height: var(--size-touch);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app__portal-modal-cancel {
-  background: transparent;
-  color: var(--text-secondary);
-  border-color: var(--panel-border);
-}
-
-.app__portal-modal-cancel:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-primary);
-  border-color: var(--panel-border-accent);
-}
-
-.app__portal-modal-cancel:active {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.app__portal-modal-confirm {
-  background: linear-gradient(135deg, var(--accent), #5ec9ff);
-  color: var(--bg-deep);
-  border-color: var(--accent);
-  font-weight: 700;
-}
-
-.app__portal-modal-confirm:hover {
-  background: linear-gradient(135deg, #9feeff, #7fd9ff);
-  filter: var(--glow-accent);
-  border-color: #9feeff;
-}
-
-.app__portal-modal-confirm:active {
-  background: linear-gradient(135deg, #5ec9ff, #3dbfff);
-  filter: none;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 .app__toast {
   position: fixed;
   z-index: 2100;
@@ -728,28 +681,5 @@ watch([graph, articleCache], () => {
 
   .app__toast {
     bottom: 1.5rem;
-  }
-}
-
-@media (max-width: 640px) {
-
-  .app__portal-modal-content {
-    width: calc(100vw - 2rem);
-    box-sizing: border-box;
-    padding: var(--spacing-lg);
-  }
-
-  .app__portal-modal-title {
-    font-size: 1.5rem;
-  }
-
-  .app__portal-modal-actions {
-    flex-direction: column;
-    gap: var(--spacing-sm);
-  }
-
-  .app__portal-modal-cancel,
-  .app__portal-modal-confirm {
-    width: 100%;
   }
 }</style>

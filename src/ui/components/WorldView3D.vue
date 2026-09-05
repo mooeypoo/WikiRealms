@@ -30,6 +30,7 @@ import {
   resolveSectionAnchor,
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
+import { facesCamera, shouldShowCard } from '../rendering/anchorPlacement.js'
 import SectionTooltip from './SectionTooltip.vue'
 import {
   PORTAL_MARKERS,
@@ -533,6 +534,39 @@ function updateHalos(nowSeconds) {
  * children are draped over the terrain, so none of them sits at the
  * summit any more.
  */
+const occlusionCameraLocal = new THREE.Vector3()
+
+/**
+ * Whether a point on the world is on the FAR side of it.
+ *
+ * Projection alone cannot answer this: a marker behind the planet still
+ * lands at valid screen coordinates, so its label used to appear on top of
+ * the markers actually in front of it. Only the sphere occludes — the flat
+ * map is seen from above, where nothing hides behind anything.
+ */
+function isOccluded(localPoint) {
+  if (!projection.isSpherical || !camera) return false
+
+  occlusionCameraLocal.copy(camera.position)
+  worldGroup.worldToLocal(occlusionCameraLocal)
+  // A small bias also drops the grazing band at the limb, where a label is
+  // technically visible and practically unreadable.
+  return !facesCamera(localPoint, occlusionCameraLocal, 0.12)
+}
+
+/** Where a marker sits on screen, for a card that has to point at it. */
+function screenPositionOf(localPoint) {
+  if (!camera || !renderer) return null
+
+  const vector = new THREE.Vector3().copy(localPoint)
+  worldGroup.localToWorld(vector)
+  vector.project(camera)
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  const projected = projectClipToScreen(vector, { width: rect.width, height: rect.height })
+  return { x: rect.left + projected.screenX, y: rect.top + projected.screenY }
+}
+
 function updateSectionTooltip() {
   const hoveredIdx = hoverState.sectionIndex.value
   if (hoveredIdx === null || hoveredIdx < 0 || !haloGroup || !camera || !renderer) {
@@ -549,12 +583,13 @@ function updateSectionTooltip() {
 
   // Local summit -> world (via worldGroup's rotation) -> NDC.
   summitProjectionVec.copy(peakGroup.userData.summitLocal)
+  const occluded = isOccluded(peakGroup.userData.summitLocal)
   worldGroup.localToWorld(summitProjectionVec)
   summitProjectionVec.project(camera)
 
   const rect = renderer.domElement.getBoundingClientRect()
   const projected = projectClipToScreen(summitProjectionVec, { width: rect.width, height: rect.height })
-  if (projected.isBehindCamera) {
+  if (!shouldShowCard(projected, occluded)) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
   }
@@ -691,7 +726,10 @@ function onPointerClick(event) {
   if (portalGroup) {
     const [portalHit] = raycaster.intersectObjects(portalGroup.children)
     if (portalHit?.object?.userData?.portal) {
-      emit('portal-click', portalHit.object.userData.portal)
+      emit('portal-click', {
+        portal: portalHit.object.userData.portal,
+        anchor: screenPositionOf(portalHit.object.position),
+      })
       return
     }
   }
@@ -879,6 +917,8 @@ function resizeToContainer() {
 function animate() {
   animationFrameId = requestAnimationFrame(animate)
 
+  advanceDive()
+
   const nowSec = performance.now() * 0.001
   const peaks = props.world?.terrain?.peaks
   const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
@@ -983,11 +1023,63 @@ onBeforeUnmount(() => {
  * prop would need a counter or a flag to say it happened twice.
  */
 function recenter() {
+  cancelDive()
   if (!props.world) return
   frameCamera(props.world.terrain, currentHeightScale)
 }
 
-defineExpose({ recenter })
+/* ── the dive ──────────────────────────────────────────────────────────
+ * The cheap half of the travel transition: a camera tween and nothing
+ * else, which is why it can run as motion at all. The expensive half —
+ * fetching and generating the next world — happens afterwards, behind a
+ * static wash, because it blocks the main thread and would stutter this.
+ */
+
+let dive = null
+
+function diveTo(portal) {
+  const sprite = portalGroup?.children.find((child) => child.userData.portal?.portalId === portal?.portalId)
+  if (!sprite || !camera) return
+
+  const destination = sprite.getWorldPosition(new THREE.Vector3())
+  dive = {
+    from: camera.position.clone(),
+    // Not all the way in: stopping short of the marker leaves the wash to
+    // cover the last of the distance, and going through it would clip the
+    // near plane through the terrain.
+    to: camera.position.clone().lerp(destination, 0.72),
+    lookFrom: controls ? controls.target.clone() : new THREE.Vector3(),
+    lookTo: destination,
+    startedAt: performance.now(),
+    duration: 260,
+  }
+  if (controls) controls.enabled = false
+}
+
+function cancelDive() {
+  dive = null
+  if (controls) controls.enabled = true
+}
+
+function advanceDive() {
+  if (!dive) return
+
+  const elapsed = (performance.now() - dive.startedAt) / dive.duration
+  const t = Math.min(1, Math.max(0, elapsed))
+  // Ease-in: the camera gathers speed toward the portal rather than
+  // drifting off at a constant rate.
+  const eased = t * t
+
+  camera.position.lerpVectors(dive.from, dive.to, eased)
+  if (controls) {
+    controls.target.lerpVectors(dive.lookFrom, dive.lookTo, eased)
+    controls.update()
+  }
+
+  if (t >= 1) cancelDive()
+}
+
+defineExpose({ recenter, diveTo, cancelDive })
 
 watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
 
