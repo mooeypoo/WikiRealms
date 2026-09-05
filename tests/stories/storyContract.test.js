@@ -8,6 +8,7 @@ import * as sheetStories from '../../stories/ui/design/Sheet.stories.js'
 import * as helmStories from '../../stories/ui/components/Helm.stories.js'
 import * as ledgerStories from '../../stories/ui/components/Ledger.stories.js'
 import * as scrimStories from '../../stories/ui/components/TopScrim.stories.js'
+import * as launchStories from '../../stories/ui/components/Launch.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -71,6 +72,7 @@ describe('Storybook story contract', () => {
     ['Helm', helmStories],
     ['Ledger', ledgerStories],
     ['TopScrim', scrimStories],
+    ['Launch', launchStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 

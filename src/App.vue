@@ -1,6 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import SearchBar from './ui/components/SearchBar.vue'
+import Launch from './ui/components/Launch.vue'
+import CommandPalette from './ui/components/CommandPalette.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
 import Icon from './ui/design/Icon.vue'
@@ -8,7 +9,6 @@ import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
 import TrailMenu from './ui/components/TrailMenu.vue'
 import JourneyMenu from './ui/components/JourneyMenu.vue'
-import Sheet from './ui/design/Sheet.vue'
 import Ledger from './ui/components/Ledger.vue'
 import InfoHub from './ui/components/InfoHub.vue'
 import SettingsModal from './ui/components/SettingsModal.vue'
@@ -201,6 +201,15 @@ const { register } = useKeymap()
 register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
 register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
 register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
+register({
+  keys: ['mod+k', '/'],
+  label: 'Search for a realm',
+  group: 'Travel',
+  // Only once there is somewhere to leave: before that the launch screen
+  // already has the field, focused.
+  enabled: () => Boolean(current.value),
+  run: () => (isSearchOpen.value = true),
+})
 register({ keys: 'v', label: 'Switch between planet and flat', group: 'View', run: toggleWorldShape })
 register({ keys: 'c', label: 'Recentre the view', group: 'View', run: recenterView })
 register({
@@ -303,9 +312,6 @@ watch([graph, articleCache], () => {
     <div class="cosmos__field" aria-hidden="true"></div>
 
     <div class="cosmos__stage">
-      <p v-if="!current && status === 'idle'" class="app__empty-state cosmos__empty">
-        No world yet — search for an article above to generate one.
-      </p>
       <p v-if="status === 'loading'" class="app__status hud hud--status"><Spinner /> Loading article…</p>
       <p v-else-if="worldStatus === 'loading' && article" class="app__status hud hud--status">
         <Spinner /> Generating world…
@@ -372,24 +378,9 @@ watch([graph, articleCache], () => {
         </div>
       </div>
     </Transition>
-    <!-- Search is a summoned surface now, not a permanent fixture. The
-         command palette replaces this sheet in the next commit, along with
-         the launch screen that makes the empty state a place rather than a
-         sentence. -->
-    <Sheet
-      id="search"
-      :open="isSearchOpen || !current"
-      label="Search Wikipedia"
-      :dismissible="Boolean(current)"
-      :snap-points="[0.5, 0.9]"
-      :snap="0"
-      @close="isSearchOpen = false"
-    >
-      <template #header>
-        <h2 class="app__sheet-title">Find a realm</h2>
-      </template>
-      <SearchBar @select="onSelect" />
-    </Sheet>
+    <Launch v-if="!current" @select="onSelect" @guide="showInfoHub = true" />
+
+    <CommandPalette :show="isSearchOpen" @select="onSelect" @close="isSearchOpen = false" />
 
     <TrailMenu :show="showTrail" :path="path" @select="onTrailSelect" @close="showTrail = false" />
 

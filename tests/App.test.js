@@ -36,6 +36,12 @@ import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/
  * tree. These read it the way a viewer would find it — by its accessible
  * name and its content — rather than by a class that a rewrite can rename.
  */
+function press(key, target = document.body) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'target', { value: target })
+  window.dispatchEvent(event)
+}
+
 function searchField() {
   return document.querySelector('.search-bar input')
 }
@@ -120,7 +126,7 @@ describe('App', () => {
       sections: { lead: { ownSize: 100, links: ['Physics', 'Nobel Prize in Physics'] }, totalSize: 100, sections: [] },
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
@@ -143,7 +149,7 @@ describe('App', () => {
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
     fetchWikipediaArticle.mockRejectedValue(new Error('boom'))
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
@@ -182,7 +188,7 @@ describe('App', () => {
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
     fetchWikipediaArticle.mockImplementation(async (title) => articles[title])
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
@@ -227,7 +233,7 @@ describe('App', () => {
       images: [],
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
@@ -264,7 +270,7 @@ describe('App', () => {
       images: [],
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
@@ -273,10 +279,14 @@ describe('App', () => {
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
   })
 
-  it('shows an empty-state prompt before any article has been selected', () => {
-    const wrapper = mount(App)
+  it('opens on the launch screen, which says what this is', () => {
+    // The empty state used to be one italic sentence pointing at a search
+    // box that, below 1024px, was neither above nor visible.
+    mount(App, { attachTo: document.body })
 
-    expect(wrapper.find('.app__empty-state').exists()).toBe(true)
+    expect(document.querySelector('.launch')).not.toBeNull()
+    expect(document.body.textContent).toContain('Every Wikipedia article is a world')
+    expect(document.querySelector('.launch .search-bar input')).not.toBeNull()
     expect(ledgerTitle()).toBeNull()
   })
 
@@ -314,7 +324,7 @@ describe('App', () => {
         sections: { lead: { ownSize: 100, links: ['Physics'] }, totalSize: 100, sections: [] },
       })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
 
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
@@ -527,12 +537,6 @@ describe('App section focus', () => {
 })
 
 describe('App keyboard', () => {
-  function press(key, target = document.body) {
-    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
-    Object.defineProperty(event, 'target', { value: target })
-    window.dispatchEvent(event)
-  }
-
   afterEach(() => {
     resetOverlays()
     resetKeymap()
@@ -606,7 +610,7 @@ describe('App URL state', () => {
       sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
     })
 
-    mount(App)
+    mount(App, { attachTo: document.body })
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenCalledWith('Saturn')
@@ -636,7 +640,7 @@ describe('App URL state', () => {
       sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
     })
 
-    mount(App)
+    mount(App, { attachTo: document.body })
     await flushPromises()
 
     expect(fetchWikipediaArticle).toHaveBeenLastCalledWith('Saturn')
@@ -655,7 +659,7 @@ describe('App URL state', () => {
       sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
     })
 
-    const wrapper = mount(App)
+    const wrapper = mount(App, { attachTo: document.body })
     await typeSearch('Ein')
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
@@ -852,5 +856,67 @@ describe('App shell', () => {
     // Returning is not travelling: forward is still available, and the
     // journey has not grown a duplicate.
     expect(wrapper.find('[aria-label="Forward"]').attributes('disabled')).toBeUndefined()
+  })
+})
+
+describe('App search inversion', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('puts search away once there is a realm', async () => {
+    // It held 30rem of the top bar on desktop before, for the thing least
+    // needed after arriving: from here on the way onward is portals.
+    await arrive()
+
+    expect(document.querySelector('.launch')).toBeNull()
+    expect(document.querySelector('.search-bar input')).toBeNull()
+  })
+
+  it('brings it back on the palette shortcut, but not before', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    // On the launch screen the field is already there and focused, so the
+    // shortcut has nothing to do.
+    const before = document.querySelectorAll('.search-bar').length
+    press('/')
+    await flushPromises()
+    expect(document.querySelectorAll('.search-bar')).toHaveLength(before)
+
+    wrapper.unmount()
+
+    await arrive()
+    press('/')
+    await flushPromises()
+
+    expect(document.querySelector('.search-bar input')).not.toBeNull()
+  })
+
+  it('says plainly that searching leaves the world you are in', async () => {
+    await arrive()
+    press('/')
+    await flushPromises()
+
+    expect(document.body.textContent).toContain('starts a new journey')
   })
 })
