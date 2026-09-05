@@ -30,7 +30,7 @@ function looped() {
 }
 
 function mountTrail(graph = looped()) {
-  return mount(TrailMenu, { props: { show: true, graph }, attachTo: document.body })
+  return mount(TrailMenu, { props: { show: true, graph, canShare: true }, attachTo: document.body })
 }
 
 const names = () => [...document.querySelectorAll('.trail__name')].map((name) => name.textContent.trim())
@@ -190,5 +190,49 @@ describe('TrailMenu', () => {
     mountTrail(journey)
 
     expect(names()).toContain('Titan')
+  })
+})
+
+describe('the journey actions', () => {
+  it('live on the panel that shows the journey', () => {
+    // They were a separate "Journey" surface with its own button in the top
+    // bar, which put two things called the journey one click apart and
+    // spent a primary control on end-of-session actions.
+    mountTrail()
+    const actions = document.querySelector('.trail__actions')
+
+    expect(actions).not.toBeNull()
+    for (const label of ['Somewhere new', 'Share', 'Save', 'Load']) {
+      expect(actions.textContent).toContain(label)
+    }
+  })
+
+  it('asks its owner to perform each of them', async () => {
+    const wrapper = mountTrail()
+    const click = (text) =>
+      [...document.querySelectorAll('.trail__actions button')]
+        .find((button) => button.textContent.includes(text))
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    click('Somewhere new')
+    click('Share')
+    click('Save')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('home')).toHaveLength(1)
+    expect(wrapper.emitted('share')).toHaveLength(1)
+    expect(wrapper.emitted('export')).toHaveLength(1)
+  })
+
+  it('cannot share a realm that is not there, but can still load one', () => {
+    // Loading a journey is precisely what someone does from an empty one,
+    // so the actions stay; only the one with nothing to act on goes quiet.
+    mount(TrailMenu, { props: { show: true, graph: createVisitGraph(), canShare: false }, attachTo: document.body })
+
+    const share = [...document.querySelectorAll('.trail__actions button')].find((button) =>
+      button.textContent.includes('Share'),
+    )
+    expect(share.disabled).toBe(true)
+    expect(document.querySelector('.trail__actions').textContent).toContain('Load')
   })
 })

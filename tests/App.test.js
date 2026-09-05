@@ -971,12 +971,12 @@ describe('App returning to the opening screen', () => {
     expect(ledgerTitle()).toBe('Saturn')
   })
 
-  it('is reachable from the journey menu too', async () => {
+  it('is reachable from the trail, where the journey actions live', async () => {
     const wrapper = await arrive()
 
-    await wrapper.find('[aria-label="Journey"]').trigger('click')
+    wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
-    ;[...document.querySelectorAll('.journey__action')]
+    ;[...document.querySelectorAll('.trail__actions button')]
       .find((action) => action.textContent.includes('Somewhere new'))
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()

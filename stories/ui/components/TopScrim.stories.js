@@ -1,5 +1,4 @@
 import { h, ref } from 'vue'
-import JourneyMenu from '../../../src/ui/components/JourneyMenu.vue'
 import TopScrim from '../../../src/ui/components/TopScrim.vue'
 import TrailMenu from '../../../src/ui/components/TrailMenu.vue'
 import { createVisitGraph, goBack, jump, visit } from '../../../src/core/traversal/visitGraph.js'
@@ -51,12 +50,11 @@ export const Empty = {
   render: asStory(() => h(TopScrim, { realm: null, trailLength: 0 })),
 }
 
-/** The scrim with the two surfaces it summons, wired up. */
+/** The scrim with the trail it summons, wired up. */
 export const WithMenus = {
   render: () => ({
     setup() {
       const trail = ref(false)
-      const journey = ref(false)
 
       return () =>
         h('div', {}, [
@@ -65,18 +63,13 @@ export const WithMenus = {
             trailLength: 3,
             canGoBack: true,
             onTrail: () => (trail.value = true),
-            onJourney: () => (journey.value = true),
           }),
           h(TrailMenu, {
             show: trail.value,
             graph: GRAPH,
+            canShare: true,
             onSelect: () => (trail.value = false),
             onClose: () => (trail.value = false),
-          }),
-          h(JourneyMenu, {
-            show: journey.value,
-            canShare: true,
-            onClose: () => (journey.value = false),
           }),
         ])
     },

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import TopScrim from '../../../src/ui/components/TopScrim.vue'
@@ -21,9 +23,12 @@ describe('TopScrim', () => {
     expect(wrapper.find('[aria-label="Settings"]').exists()).toBe(true)
   })
 
-  it('offers the trail only once there is more than one stop on it', () => {
-    expect(mountScrim({ trailLength: 1 }).find('.scrim__trail').exists()).toBe(false)
-    expect(mountScrim({ trailLength: 2 }).find('.scrim__trail').exists()).toBe(true)
+  it('offers the trail as soon as there is a realm', () => {
+    // It used to appear only from the second stop. The journey actions live
+    // on that panel now, so a control that arrives late would strand Share
+    // for anyone who had visited exactly one realm.
+    expect(mountScrim({ trailLength: 1 }).find('.scrim__trail').exists()).toBe(true)
+    expect(mountScrim({ realm: null, trailLength: 0 }).find('.scrim__trail').exists()).toBe(false)
   })
 
   it('disables travel it cannot do', () => {
@@ -41,7 +46,6 @@ describe('TopScrim', () => {
       ['Back', 'back'],
       ['Forward', 'forward'],
       ['Search realms', 'search'],
-      ['Journey', 'journey'],
       ['About WikiRealms', 'guide'],
       ['Settings', 'settings'],
     ]) {
@@ -59,7 +63,10 @@ describe('TopScrim', () => {
     const wrapper = mountScrim()
     const labels = wrapper.findAll('.scrim__label').map((label) => label.text())
 
-    expect(labels).toEqual(['Search', 'Journey', 'About', 'Settings'])
+    // Journey is absent on purpose: those actions live on the trail panel,
+    // which is the journey, rather than spending a primary control on
+    // end-of-session actions.
+    expect(labels).toEqual(['Search', 'About', 'Settings'])
   })
 
   it('keeps each visible word inside its accessible name', () => {
@@ -69,6 +76,17 @@ describe('TopScrim', () => {
       const visible = button.find('.scrim__label').text()
       expect(button.attributes('aria-label')).toContain(visible)
     }
+  })
+
+  it('hides the overflow control behind the buttons it replaces', () => {
+    // Both are single-class selectors, so ordering decides: the hide rule
+    // sat before .scrim__button and lost, and the ⋯ showed at every width
+    // beside the very controls it exists to stand in for.
+    const styles = readFileSync(resolve(process.cwd(), 'src/ui/components/TopScrim.vue'), 'utf8')
+    const hideAt = styles.indexOf('.scrim__more {')
+    const buttonAt = styles.indexOf('.scrim__button {')
+
+    expect(hideAt).toBeGreaterThan(buttonAt)
   })
 
   it('carries no view control — that belongs beside the world', () => {

@@ -10,7 +10,6 @@ import Icon from './ui/design/Icon.vue'
 import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
 import TrailMenu from './ui/components/TrailMenu.vue'
-import JourneyMenu from './ui/components/JourneyMenu.vue'
 import ToolsMenu from './ui/components/ToolsMenu.vue'
 import Ledger from './ui/components/Ledger.vue'
 import { clearsLedger, ledgerClearance } from './ui/components/ledgerStates.js'
@@ -71,7 +70,6 @@ const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showTrail = ref(false)
-const showJourney = ref(false)
 const showTools = ref(false)
 const showLaunch = ref(false)
 const showLegend = ref(false)
@@ -224,7 +222,6 @@ function onExportClick() {
 }
 
 function onImportFile(file) {
-  showJourney.value = false
   const reader = new FileReader()
   reader.onload = () => {
     try {
@@ -273,7 +270,7 @@ function fromTools(open) {
 }
 
 function onHomeClick() {
-  showJourney.value = false
+  showTrail.value = false
   showLaunch.value = true
 }
 
@@ -283,7 +280,6 @@ function onTrailSelect(nodeId) {
 }
 
 function onShareClick() {
-  showJourney.value = false
   if (article.value?.title) {
     shareArticle(article.value.title)
   }
@@ -430,7 +426,6 @@ watch([graph, articleCache], () => {
       @trail="showTrail = true"
       @search="isSearchOpen = true"
       @tools="showTools = true"
-      @journey="showJourney = true"
       @guide="showInfoHub = true"
       @settings="showSettings = true"
     />
@@ -539,23 +534,23 @@ watch([graph, articleCache], () => {
     <ToolsMenu
       :show="showTools"
       @search="fromTools(() => (isSearchOpen = true))"
-      @journey="fromTools(() => (showJourney = true))"
       @guide="fromTools(() => (showInfoHub = true))"
       @settings="fromTools(() => (showSettings = true))"
       @close="showTools = false"
     />
 
-    <TrailMenu :show="showTrail" :graph="graph" @select="onTrailSelect" @close="showTrail = false" />
-
-    <JourneyMenu
-      :show="showJourney"
+    <TrailMenu
+      :show="showTrail"
+      :graph="graph"
       :can-share="Boolean(article)"
+      @select="onTrailSelect"
       @home="onHomeClick"
       @share="onShareClick"
       @export="onExportClick"
       @import="onImportFile"
-      @close="showJourney = false"
+      @close="showTrail = false"
     />
+
 
     <button
       v-if="showHudHidden"

@@ -116,6 +116,8 @@ describe('accessibility', () => {
   })
 
   it('gives every summonable surface a visible way in', async () => {
+    // The trail is included because the journey actions moved onto it: it
+    // is now the only route to Share.
     // The rule from §4.2, tested. The legend shipped reachable only by `L`,
     // which is how it went unfound — and it was the second control to do
     // that, after the Ledger's collapse-to-nothing.
@@ -123,7 +125,6 @@ describe('accessibility', () => {
 
     for (const label of [
       'Search realms',
-      'Journey',
       'About WikiRealms',
       'Settings',
       'What am I looking at?',
@@ -212,9 +213,12 @@ describe('the phone top bar', () => {
     const menu = document.querySelector('.tools__list')
 
     expect(menu).not.toBeNull()
-    for (const label of ['Search realms', 'Journey', 'About WikiRealms', 'Settings']) {
+    // Journey is not among them: those actions live on the trail panel,
+    // whose chevron is on the bar at every width.
+    for (const label of ['Search realms', 'About WikiRealms', 'Settings']) {
       expect(menu.textContent).toContain(label)
     }
+    expect(menu.textContent).not.toContain('Journey')
   })
 
   it('keeps identity and the trail on the bar itself', async () => {

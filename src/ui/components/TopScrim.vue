@@ -20,7 +20,7 @@ defineProps({
   canGoForward: { type: Boolean, default: false },
 })
 
-defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings', 'tools'])
+defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 'tools'])
 </script>
 
 <template>
@@ -38,8 +38,10 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
         <span class="scrim__rule" aria-hidden="true" />
         <h1 class="scrim__realm">{{ realm }}</h1>
 
+        <!-- Always, once there is a realm: the trail panel is where the
+             journey actions live now, so it cannot be a control that only
+             appears after the second stop. -->
         <button
-          v-if="trailLength > 1"
           class="scrim__trail"
           type="button"
           :aria-label="`Your trail, ${trailLength} realms`"
@@ -83,10 +85,6 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
       <button class="scrim__button scrim__tool" type="button" aria-label="Search realms" @click="$emit('search')">
         <Icon name="search" :size="17" />
         <span class="scrim__label">Search</span>
-      </button>
-      <button class="scrim__button scrim__tool" type="button" aria-label="Journey" @click="$emit('journey')">
-        <Icon name="share" :size="17" />
-        <span class="scrim__label">Journey</span>
       </button>
       <button class="scrim__button scrim__tool" type="button" aria-label="About WikiRealms" @click="$emit('guide')">
         <Icon name="guide" :size="17" />
@@ -201,10 +199,6 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
   background: var(--trail-wash);
 }
 
-.scrim__more {
-  display: none;
-}
-
 .scrim__travel,
 .scrim__utilities {
   display: flex;
@@ -233,6 +227,13 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', '
 .scrim__button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* After .scrim__button, not before it: both are single-class selectors, so
+   the later one wins and the overflow control was showing at every width —
+   beside the very buttons it exists to replace. */
+.scrim__more {
+  display: none;
 }
 
 /**

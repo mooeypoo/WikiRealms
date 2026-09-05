@@ -22,9 +22,16 @@ import { NODE_HEIGHT, NODE_WIDTH, layoutJourney } from '../rendering/trailLayout
 const props = defineProps({
   show: Boolean,
   graph: { type: Object, default: null },
+  canShare: { type: Boolean, default: false },
 })
 
-defineEmits(['select', 'close'])
+const emit = defineEmits(['select', 'home', 'share', 'export', 'import', 'close'])
+
+function onFile(event) {
+  const file = event.target.files?.[0]
+  event.target.value = '' // let the same file be chosen again later
+  if (file) emit('import', file)
+}
 
 const layout = computed(() => layoutJourney(props.graph))
 
@@ -153,6 +160,32 @@ function pathFor(link) {
           </button>
         </li>
       </ul>
+    </template>
+
+    <!-- What you can do WITH a journey, on the panel that shows it. They
+         were a separate "Journey" surface reached from its own button in
+         the top bar, which put two things called the journey one click
+         apart and spent a primary control on end-of-session actions. -->
+    <template #footer>
+      <div class="trail__actions">
+        <button type="button" @click="$emit('home')">
+          <Icon name="mark" :size="15" />
+          <span>Somewhere new</span>
+        </button>
+        <button type="button" :disabled="!canShare" @click="$emit('share')">
+          <Icon name="share" :size="15" />
+          <span>Share</span>
+        </button>
+        <button type="button" @click="$emit('export')">
+          <Icon name="download" :size="15" />
+          <span>Save</span>
+        </button>
+        <label>
+          <Icon name="upload" :size="15" />
+          <span>Load</span>
+          <input type="file" accept="application/json" @change="onFile" />
+        </label>
+      </div>
     </template>
   </Sheet>
 </template>
@@ -363,5 +396,51 @@ function pathFor(link) {
 .trail__here {
   flex: none;
   color: var(--trail);
+}
+
+.trail__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--spacing-xs);
+}
+
+.trail__actions button,
+.trail__actions label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--hit);
+  padding: var(--spacing-sm) var(--spacing-xs);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.trail__actions button:hover:not(:disabled),
+.trail__actions label:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
+}
+
+.trail__actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The input covers its label, so the whole tile is the target. */
+.trail__actions input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 </style>
