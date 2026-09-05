@@ -63,6 +63,7 @@ const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showTrail = ref(false)
 const showJourney = ref(false)
+const showLaunch = ref(false)
 // Section anchor id currently focused via a map click (or null). Used to
 // scroll the article panel's section list into view + flash the card.
 const focusedSectionAnchor = ref(null)
@@ -97,6 +98,7 @@ const rendersInWebGL = computed(() => {
 
 function onSelect(result) {
   isSearchOpen.value = false
+  showLaunch.value = false
   // A search is not travel: it starts a journey rather than pretending the
   // result was reached from wherever the viewer happened to be standing.
   jumpTo(result.title)
@@ -179,6 +181,11 @@ function onImportFile(file) {
 
 function toggleHideHud() {
   showHudHidden.value = !showHudHidden.value
+}
+
+function onHomeClick() {
+  showJourney.value = false
+  showLaunch.value = true
 }
 
 function onTrailSelect(nodeId) {
@@ -303,6 +310,7 @@ watch([graph, articleCache], () => {
       :can-go-forward="canGoForward"
       @back="goBack"
       @forward="goForward"
+      @home="showLaunch = true"
       @trail="showTrail = true"
       @search="isSearchOpen = true"
       @journey="showJourney = true"
@@ -378,7 +386,13 @@ watch([graph, articleCache], () => {
         </div>
       </div>
     </Transition>
-    <Launch v-if="!current" @select="onSelect" @guide="showInfoHub = true" />
+    <Launch
+      v-if="!current || showLaunch"
+      :dismissible="Boolean(current)"
+      @select="onSelect"
+      @guide="showInfoHub = true"
+      @close="showLaunch = false"
+    />
 
     <CommandPalette :show="isSearchOpen" @select="onSelect" @close="isSearchOpen = false" />
 
@@ -387,6 +401,7 @@ watch([graph, articleCache], () => {
     <JourneyMenu
       :show="showJourney"
       :can-share="Boolean(article)"
+      @home="onHomeClick"
       @share="onShareClick"
       @export="onExportClick"
       @import="onImportFile"

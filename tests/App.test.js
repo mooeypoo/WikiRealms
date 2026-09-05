@@ -920,3 +920,65 @@ describe('App search inversion', () => {
     expect(document.body.textContent).toContain('starts a new journey')
   })
 })
+
+describe('App returning to the opening screen', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  async function arrive() {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    return wrapper
+  }
+
+  it('comes back from the mark, and leaves again', async () => {
+    const wrapper = await arrive()
+    expect(document.querySelector('.launch')).toBeNull()
+
+    await wrapper.find('[aria-label="Opening screen"]').trigger('click')
+    expect(document.querySelector('.launch')).not.toBeNull()
+
+    press('Escape')
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).toBeNull()
+    expect(ledgerTitle()).toBe('Saturn')
+  })
+
+  it('is reachable from the journey menu too', async () => {
+    const wrapper = await arrive()
+
+    await wrapper.find('[aria-label="Journey"]').trigger('click')
+    await flushPromises()
+    ;[...document.querySelectorAll('.journey__action')]
+      .find((action) => action.textContent.includes('Somewhere new'))
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).not.toBeNull()
+  })
+
+  it('dismisses itself when a realm is chosen from it', async () => {
+    const wrapper = await arrive()
+    await wrapper.find('[aria-label="Opening screen"]').trigger('click')
+
+    document.querySelector('.launch__realms button').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(document.querySelector('.launch')).toBeNull()
+  })
+})

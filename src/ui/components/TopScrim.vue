@@ -20,14 +20,19 @@ defineProps({
   canGoForward: { type: Boolean, default: false },
 })
 
-defineEmits(['back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings'])
+defineEmits(['home', 'back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings'])
 </script>
 
 <template>
   <header class="scrim">
     <div class="scrim__identity">
-      <Icon name="mark" :size="18" class="scrim__mark" />
-      <span class="scrim__wordmark">WikiRealms</span>
+      <!-- The mark is the way home, as it is everywhere else on the web.
+           The wordmark hides below md, so the affordance has to be the mark
+           rather than the pair. -->
+      <button class="scrim__home" type="button" aria-label="Opening screen" @click="$emit('home')">
+        <Icon name="mark" :size="18" />
+        <span class="scrim__wordmark">WikiRealms</span>
+      </button>
 
       <template v-if="realm">
         <span class="scrim__rule" aria-hidden="true" />
@@ -120,8 +125,24 @@ defineEmits(['back', 'forward', 'trail', 'search', 'journey', 'guide', 'settings
   min-width: 0;
 }
 
-.scrim__mark {
+.scrim__home {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-height: 34px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--accent);
+}
+
+.scrim__home:hover {
+  filter: var(--glow-subtle);
+}
+
+.scrim__home:hover .scrim__wordmark {
+  color: var(--ink-1);
 }
 
 .scrim__wordmark {

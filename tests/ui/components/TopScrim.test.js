@@ -37,6 +37,7 @@ describe('TopScrim', () => {
     const wrapper = mountScrim({ canGoBack: true, canGoForward: true })
 
     for (const [label, event] of [
+      ['Opening screen', 'home'],
       ['Back', 'back'],
       ['Forward', 'forward'],
       ['Search realms', 'search'],

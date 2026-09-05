@@ -2,10 +2,17 @@ import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import Launch from '../../../src/ui/components/Launch.vue'
 import { CURATED_REALMS, randomRealm } from '../../../src/ui/content/realms.js'
+import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
+import { resetOverlays, useOverlays } from '../../../src/ui/design/useOverlays.js'
 
 vi.mock('../../../src/adapters/wikipediaSearchAdapter.js', () => ({ searchWikipediaTitles: vi.fn() }))
 
 enableAutoUnmount(afterEach)
+
+afterEach(() => {
+  resetOverlays()
+  resetKeymap()
+})
 
 describe('Launch', () => {
   it('says what the app is before asking for anything', () => {
@@ -51,6 +58,37 @@ describe('Launch', () => {
 
   it('takes the field, since typing is the point of the screen', () => {
     expect(mount(Launch).find('input').attributes('data-autofocus')).toBeDefined()
+  })
+
+  describe('summoned again over a live world', () => {
+    it('offers a way back, which a first visit does not', () => {
+      // On a first visit there is nowhere to dismiss TO, and choosing is
+      // the point. Once there is a world behind it, leaving must be possible.
+      expect(mount(Launch).find('[aria-label="Back to the world"]').exists()).toBe(false)
+      expect(
+        mount(Launch, { props: { dismissible: true } }).find('[aria-label="Back to the world"]').exists(),
+      ).toBe(true)
+    })
+
+    it('asks to be closed rather than closing itself', async () => {
+      const wrapper = mount(Launch, { props: { dismissible: true } })
+
+      await wrapper.find('[aria-label="Back to the world"]').trigger('click')
+
+      expect(wrapper.emitted('close')).toHaveLength(1)
+    })
+
+    it('takes its turn in the overlay stack, so Escape works on it too', () => {
+      mount(Launch, { props: { dismissible: true } })
+
+      expect(useOverlays().isOpen('launch')).toBe(true)
+    })
+
+    it('stays out of the stack on a first visit', () => {
+      mount(Launch)
+
+      expect(useOverlays().isOpen('launch')).toBe(false)
+    })
   })
 })
 

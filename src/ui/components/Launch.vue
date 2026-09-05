@@ -1,7 +1,9 @@
 <script setup>
+import { onBeforeUnmount, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
+import { useOverlays } from '../design/useOverlays.js'
 import { CURATED_REALMS, randomRealm } from '../content/realms.js'
 
 /**
@@ -16,9 +18,32 @@ import { CURATED_REALMS, randomRealm } from '../content/realms.js'
  * Search is the hero here and only here. Once a realm exists it steps aside
  * into the command palette, because from then on the way onward is portals.
  */
-const emit = defineEmits(['select', 'guide'])
+const props = defineProps({
+  /**
+   * True when there is already a world to go back TO. On a first visit
+   * there is nowhere to dismiss to, so the screen has no way out but
+   * choosing — which is the point of it.
+   */
+  dismissible: { type: Boolean, default: false },
+})
+
+const emit = defineEmits(['select', 'guide', 'close'])
 
 const { query, results, status, errorMessage, setQuery } = useArticleSearch()
+const overlays = useOverlays()
+
+// Summoned over a live world it is a surface like any other: Escape closes
+// it, and it takes its turn in the stack rather than inventing a dismissal.
+watch(
+  () => props.dismissible,
+  (canDismiss) => {
+    if (canDismiss) overlays.open('launch', { onClose: () => emit('close') })
+    else overlays.close('launch')
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => overlays.close('launch'))
 
 function choose(title) {
   emit('select', { title })
@@ -31,6 +56,15 @@ function choose(title) {
       <div class="launch__identity">
         <Icon name="mark" :size="34" class="launch__mark" />
         <h1 class="launch__wordmark">WikiRealms</h1>
+        <button
+          v-if="dismissible"
+          class="launch__close"
+          type="button"
+          aria-label="Back to the world"
+          @click="$emit('close')"
+        >
+          <Icon name="close" :size="18" />
+        </button>
       </div>
 
       <p class="launch__pitch">
@@ -106,6 +140,23 @@ function choose(title) {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
+}
+
+.launch__close {
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  margin-left: auto;
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.launch__close:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
 }
 
 .launch__mark {

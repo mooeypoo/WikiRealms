@@ -16,7 +16,7 @@ defineProps({
   canShare: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['share', 'export', 'import', 'close'])
+const emit = defineEmits(['home', 'share', 'export', 'import', 'close'])
 
 function onFile(event) {
   const file = event.target.files?.[0]
@@ -32,6 +32,14 @@ function onFile(event) {
     </template>
 
     <div class="journey__actions">
+      <button class="journey__action" type="button" @click="$emit('home')">
+        <Icon name="mark" :size="18" />
+        <span>
+          <strong>Somewhere new</strong>
+          <small>The opening screen, with suggestions and what all this is.</small>
+        </span>
+      </button>
+
       <button class="journey__action" type="button" :disabled="!canShare" @click="$emit('share')">
         <Icon name="share" :size="18" />
         <span>
