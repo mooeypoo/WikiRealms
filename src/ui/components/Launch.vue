@@ -56,11 +56,20 @@ function choose(title) {
 </script>
 
 <template>
-  <div class="launch">
+  <div
+    class="launch"
+    :role="dismissible ? 'dialog' : undefined"
+    :aria-modal="dismissible ? 'true' : undefined"
+    :aria-label="dismissible ? 'Opening screen' : undefined"
+  >
     <div class="launch__panel">
       <div class="launch__identity">
         <Icon name="mark" :size="34" class="launch__mark" />
-        <h1 class="launch__wordmark">WikiRealms</h1>
+        <!-- On arrival this IS the page, so it is the h1. Summoned over a
+             world, the realm in the scrim is the h1 and this is a dialog
+             inside it — two h1s would leave a screen reader with two
+             answers to "what is this page". -->
+        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark">WikiRealms</component>
         <button
           v-if="dismissible"
           class="launch__close"

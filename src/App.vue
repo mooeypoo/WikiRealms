@@ -77,6 +77,20 @@ const legendAnchors = ref({})
 // Section anchor id currently focused via a map click (or null). Used to
 // scroll the article panel's section list into view + flash the card.
 const focusedSectionAnchor = ref(null)
+/**
+ * The one thing said aloud. Kept to arrivals and failures: a live region
+ * that narrates every state change is noise, and the interesting event is
+ * "there is a world now", not "there is a spinner".
+ */
+const announcement = computed(() => {
+  if (status.value === 'error') return errorMessage.value ?? 'Could not load that article'
+  if (worldStatus.value === 'error') return worldErrorMessage.value ?? 'Could not build that world'
+  if (worldStatus.value === 'success' && article.value) {
+    return `Arrived in ${article.value.title}`
+  }
+  return ''
+})
+
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
 /**
@@ -420,12 +434,20 @@ watch([graph, articleCache], () => {
     />
 
 
-    <p v-if="snapshotErrorMessage" class="app__alert app__alert--error hud hud--alert">
+    <!-- Everything that happens without being asked for, said out loud
+         once. A world takes a visible moment to arrive and a spinner says
+         nothing to a screen reader; announcing the ARRIVAL rather than the
+         wait is what a sighted viewer gets from the world appearing. -->
+    <p class="app__announce" role="status" aria-live="polite">{{ announcement }}</p>
+
+    <p v-if="snapshotErrorMessage" class="app__alert app__alert--error hud hud--alert" role="alert">
       ⚠️ {{ snapshotErrorMessage }}
     </p>
-    <p v-else-if="status === 'error'" class="app__alert app__alert--error hud hud--alert">⚠️ {{ errorMessage }}</p>
-    <p v-else-if="worldStatus === 'error'" class="app__alert app__alert--error hud hud--alert">
-      ⚠️ {{ worldErrorMessage }}
+    <p v-else-if="status === 'error'" class="app__alert app__alert--error hud hud--alert" role="alert">
+      <Icon name="alert" :size="16" /> {{ errorMessage }}
+    </p>
+    <p v-else-if="worldStatus === 'error'" class="app__alert app__alert--error hud hud--alert" role="alert">
+      <Icon name="alert" :size="16" /> {{ worldErrorMessage }}
     </p>
 
     <Ledger
@@ -515,6 +537,19 @@ watch([graph, articleCache], () => {
 </template>
 
 <style scoped>
+/* Announced, never shown: the visual equivalent is the world appearing. */
+.app__announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The wash: an opaque hold with the destination's name on it. Deliberately
    still — the world generation that runs behind it blocks the main thread,
    and a frozen frame is only invisible when nothing was moving. */
