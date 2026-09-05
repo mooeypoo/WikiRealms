@@ -20,9 +20,21 @@ function extractLinks(sectionEl) {
   const titles = new Set()
 
   for (const anchor of sectionEl.querySelectorAll('a[rel="mw:WikiLink"]')) {
+    // Red links: an article nobody has written yet. MediaWiki marks them
+    // class="new" and points them at the edit form rather than at a page,
+    // so travelling to one would arrive nowhere.
+    if (anchor.classList.contains('new')) continue
+
     const href = anchor.getAttribute('href') ?? ''
     const raw = href.replace(/^\.\//, '').split('#')[0]
     if (!raw || NON_ARTICLE_NAMESPACE.test(raw)) continue
+
+    // A query string is the other half of the same signal, and the half
+    // that actually showed: the href is "./Politics_South?action=edit&
+    // redlink=1", and splitting on "#" alone left the whole query inside
+    // the title. A "?" in a real title is percent-encoded as %3F, so a
+    // literal one here is always a query and never part of the name.
+    if (raw.includes('?')) continue
 
     titles.add(decodeURIComponent(raw).replace(/_/g, ' '))
   }
