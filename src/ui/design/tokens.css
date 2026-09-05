@@ -126,6 +126,26 @@
   --z-toast: 300;
 }
 
+/**
+ * How present the chrome is, replacing the old panel-opacity slider.
+ *
+ * That slider applied `opacity` to the panel ELEMENT, so it dimmed the text
+ * along with the surface, and it let a viewer walk their own interface below
+ * legibility — it shipped at 0.9 and went to 0.5. These three change the
+ * surface and nothing else, and none of them drops below the contrast floor
+ * derived above.
+ */
+:root[data-chrome='solid'] {
+  --surface-1: var(--surface-1-solid);
+  --surface-2: #10141c;
+}
+
+:root[data-chrome='minimal'] {
+  --shadow-panel: none;
+  --shadow-float: none;
+  --edge-hair: rgba(163, 184, 205, 0.1);
+}
+
 /* Coarse pointers need a larger target than a mouse does. */
 @media (pointer: coarse) {
   :root {

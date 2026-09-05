@@ -9,7 +9,7 @@ const PREFERENCES = {
   showSections: true,
   showPortals: true,
   showFoliage: true,
-  panelOpacity: 0.9,
+  chrome: 'translucent',
   rendering: 'auto',
   travelAnimation: true,
 }
@@ -52,7 +52,8 @@ describe('SettingsModal', () => {
 
   it('marks the active rendering quality', () => {
     const wrapper = mountSettings({ rendering: 'low' })
-    const checked = [...document.querySelectorAll('[role="radio"]')].filter(
+    const group = document.querySelector('[aria-label="Rendering quality"]')
+    const checked = [...group.querySelectorAll('[role="radio"]')].filter(
       (button) => button.getAttribute('aria-checked') === 'true',
     )
 
@@ -63,14 +64,28 @@ describe('SettingsModal', () => {
 
   it('asks the owner to change a preference rather than mutating it', async () => {
     const wrapper = mountSettings()
-    const high = [...document.querySelectorAll('[role="radio"]')].find((button) =>
-      button.textContent.includes('High'),
+    const high = [...document.querySelectorAll('[aria-label="Rendering quality"] [role="radio"]')].find(
+      (button) => button.textContent.includes('High'),
     )
 
     high.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ rendering: 'high' }])
+    wrapper.unmount()
+  })
+
+  it('offers panel presence as three named choices, not an opacity slider', async () => {
+    // The slider applied opacity to the element, so it dimmed text with the
+    // panel, and it went down to 0.5 — a viewer could walk their own
+    // interface below legibility.
+    const wrapper = mountSettings()
+
+    expect(document.querySelector('input[type="range"]')).toBeNull()
+    const presence = [...document.querySelectorAll('[role="radio"]')].filter((button) =>
+      ['Solid', 'Translucent', 'Minimal'].includes(button.textContent.trim()),
+    )
+    expect(presence).toHaveLength(3)
     wrapper.unmount()
   })
 

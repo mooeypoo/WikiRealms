@@ -1079,7 +1079,36 @@ function advanceDive() {
   if (t >= 1) cancelDive()
 }
 
-defineExpose({ recenter, diveTo, cancelDive })
+/**
+ * Screen anchors for a couple of features the viewer can actually SEE, so
+ * the legend can point at the real thing rather than at a diagram of it.
+ * Occluded and off-screen candidates are skipped: pointing at something
+ * behind the planet is how the tooltips became unreadable in the first
+ * place, and a legend repeating that mistake would be worse.
+ */
+function legendAnchors() {
+  const anchors = {}
+
+  const range = haloGroup?.children.find(
+    (child) => child.userData.summitLocal && !isOccluded(child.userData.summitLocal),
+  )
+  if (range) {
+    const point = screenPositionOf(range.userData.summitLocal)
+    const peak = props.world?.terrain?.peaks?.[range.userData.peakIndex]
+    if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
+  }
+
+  const portal = portalGroup?.children.find((sprite) => sprite.visible && !isOccluded(sprite.position))
+  if (portal) {
+    const point = screenPositionOf(portal.position)
+    const title = portal.userData.portal?.targetTitle
+    if (point) anchors.portal = { ...point, label: title ? `A portal to ${title}` : undefined }
+  }
+
+  return anchors
+}
+
+defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
 
 watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
 

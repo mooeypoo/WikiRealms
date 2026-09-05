@@ -50,14 +50,7 @@ export const infoHubContent = {
     title: 'Keyboard',
     icon: '⌨️',
     content: `
-      <div class="info-hub__shortcuts">
-        <div class="info-hub__shortcut"><kbd>?</kbd> <kbd>I</kbd><span>Open help</span></div>
-        <div class="info-hub__shortcut"><kbd>S</kbd><span>Open settings</span></div>
-        <div class="info-hub__shortcut"><kbd>H</kbd><span>Hide or show HUD</span></div>
-        <div class="info-hub__shortcut"><kbd>1</kbd> <kbd>3</kbd><span>Switch 2D or 3D</span></div>
-        <div class="info-hub__shortcut"><kbd>Left</kbd> <kbd>Right</kbd><span>Navigate history</span></div>
-        <div class="info-hub__shortcut"><kbd>Esc</kbd><span>Close a modal</span></div>
-      </div>
+      <p data-shortcuts>Every shortcut the app has registered, listed below.</p>
     `,
   },
 }

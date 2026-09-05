@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import { infoTabs } from '../content/infoHub.js'
+import { useKeymap } from '../design/useKeymap.js'
 
 /**
  * Ported onto <Sheet>: the overlay, backdrop, transitions, Escape handling
@@ -18,6 +19,11 @@ defineProps({
 defineEmits(['update:currentTab', 'close'])
 
 const tabs = computed(() => infoTabs)
+
+// Generated, not written. The old list was typed out by hand and had
+// already drifted — it still advertised keys 1 and 3 for a view toggle
+// that no longer exists.
+const { shortcuts } = useKeymap()
 </script>
 
 <template>
@@ -60,8 +66,21 @@ const tabs = computed(() => infoTabs)
       :key="tab.id"
       class="guide__prose"
       role="tabpanel"
-      v-html="tab.content"
-    />
+    >
+      <div v-html="tab.content"></div>
+
+      <dl v-if="tab.id === 'shortcuts'" class="guide__keys">
+        <template v-for="group in shortcuts" :key="group.group">
+          <dt>{{ group.group }}</dt>
+          <dd v-for="item in group.items" :key="item.label">
+            <span>{{ item.label }}</span>
+            <span class="guide__combo">
+              <kbd v-for="combo in item.keys" :key="combo">{{ combo }}</kbd>
+            </span>
+          </dd>
+        </template>
+      </dl>
+    </div>
   </Sheet>
 </template>
 
@@ -130,6 +149,45 @@ const tabs = computed(() => infoTabs)
 
 .guide__tab-icon {
   font-size: 0.95rem;
+}
+
+.guide__keys {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-md) 0 0;
+}
+
+.guide__keys dt {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.guide__keys dd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.guide__combo {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.guide__keys kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--edge-rgb), 0.08);
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 
 /**

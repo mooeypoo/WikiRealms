@@ -34,7 +34,9 @@ export const useUIState = () => {
     showSections: true,
     showPortals: true,
     showFoliage: true,
-    panelOpacity: 0.9,
+    // solid | translucent | minimal. Replaces panelOpacity, which dimmed
+    // text along with the panel and could be dragged below legibility.
+    chrome: 'translucent',
     autoHideHUD: false,
     firstVisitDone: false,
   });
@@ -62,6 +64,9 @@ export const useUIState = () => {
         if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
         if (!['collapsed', 'peek', 'open', 'full'].includes(parsed.ledgerState)) delete parsed.ledgerState;
         if (typeof parsed.travelAnimation !== 'boolean') delete parsed.travelAnimation;
+        if (!['solid', 'translucent', 'minimal'].includes(parsed.chrome)) delete parsed.chrome;
+        // The old opacity slider is gone; a stored value must not linger.
+        delete parsed.panelOpacity;
         Object.assign(preferences, parsed);
       }
     } catch (e) {

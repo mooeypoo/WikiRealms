@@ -65,6 +65,22 @@ describe('InfoHub', () => {
     wrapper.unmount()
   })
 
+  it('lists shortcuts from the registry rather than from a copy of them', async () => {
+    // The hand-written list had already drifted: it advertised 1 and 3 for
+    // a view toggle that no longer exists.
+    const { registerBinding, resetKeymap } = await import('../../../src/ui/design/useKeymap.js')
+    resetKeymap()
+    registerBinding({ keys: 'z', run: () => {}, label: 'Do the thing', group: 'Testing' })
+
+    const wrapper = mountGuide({ currentTab: 'shortcuts' })
+    const list = document.querySelector('.guide__keys')
+
+    expect(list.textContent).toContain('Do the thing')
+    expect(list.textContent).toContain('Testing')
+    expect(document.body.textContent).not.toContain('Switch 2D or 3D')
+    wrapper.unmount()
+  })
+
   it('renders the guide prose', () => {
     const wrapper = mountGuide({ currentTab: 'what-is-this' })
 

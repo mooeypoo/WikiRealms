@@ -9,6 +9,7 @@ import * as helmStories from '../../stories/ui/components/Helm.stories.js'
 import * as ledgerStories from '../../stories/ui/components/Ledger.stories.js'
 import * as scrimStories from '../../stories/ui/components/TopScrim.stories.js'
 import * as launchStories from '../../stories/ui/components/Launch.stories.js'
+import * as legendStories from '../../stories/ui/components/Legend.stories.js'
 import * as tokenStories from '../../stories/ui/design/Tokens.stories.js'
 
 /**
@@ -73,6 +74,7 @@ describe('Storybook story contract', () => {
     ['Ledger', ledgerStories],
     ['TopScrim', scrimStories],
     ['Launch', launchStories],
+    ['Legend', legendStories],
   ])('%s stories', (_name, module) => {
     const cases = storiesWithRender(module)
 
@@ -85,9 +87,16 @@ describe('Storybook story contract', () => {
 
       expect(isVNode(produced), 'render must return a component definition, not a vnode').toBe(false)
 
-      const html = mount(produced).html()
+      document.body.innerHTML = ''
+      const wrapper = mount(produced, { attachTo: document.body })
+      // A story whose content teleports leaves only a placeholder in its own
+      // tree, so the document is what has to be inspected.
+      const html = wrapper.html() + document.body.innerHTML
+
       expect(html).not.toContain('[object Object]')
       expect(html.length).toBeGreaterThan(50)
+      wrapper.unmount()
+      document.body.innerHTML = ''
     })
   })
 })

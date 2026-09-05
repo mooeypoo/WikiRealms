@@ -1088,3 +1088,46 @@ describe('App travel', () => {
     expect(ledgerTitle()).toBe('Titan')
   })
 })
+
+describe('App legend', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('is offered only once there is a world to explain', async () => {
+    const wrapper = mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    press('l')
+    await flushPromises()
+    expect(document.querySelector('.legend')).toBeNull()
+
+    wrapper.unmount()
+
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+    mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    press('l')
+    await flushPromises()
+
+    expect(document.querySelector('.legend')).not.toBeNull()
+    expect(document.body.textContent).toContain('citation density')
+
+    press('l')
+    await flushPromises()
+    expect(document.querySelector('.legend')).toBeNull()
+  })
+})

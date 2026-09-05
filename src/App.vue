@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import Launch from './ui/components/Launch.vue'
 import CommandPalette from './ui/components/CommandPalette.vue'
 import PortalPreview from './ui/components/PortalPreview.vue'
+import Legend from './ui/components/Legend.vue'
 import WorldView from './ui/components/WorldView.vue'
 import Spinner from './ui/components/Spinner.vue'
 import Icon from './ui/design/Icon.vue'
@@ -71,6 +72,8 @@ const isSearchOpen = ref(false)
 const showTrail = ref(false)
 const showJourney = ref(false)
 const showLaunch = ref(false)
+const showLegend = ref(false)
+const legendAnchors = ref({})
 // Section anchor id currently focused via a map click (or null). Used to
 // scroll the article panel's section list into view + flash the card.
 const focusedSectionAnchor = ref(null)
@@ -203,6 +206,20 @@ function toggleHideHud() {
   showHudHidden.value = !showHudHidden.value
 }
 
+/**
+ * The legend points at real features, so it asks the renderer where they
+ * are at the moment it opens rather than tracking them continuously — it
+ * is a held explanation, not a HUD.
+ */
+function toggleLegend() {
+  if (showLegend.value) {
+    showLegend.value = false
+    return
+  }
+  legendAnchors.value = worldViewRef.value?.legendAnchors?.() ?? {}
+  showLegend.value = true
+}
+
 function onHomeClick() {
   showJourney.value = false
   showLaunch.value = true
@@ -226,6 +243,13 @@ function onShareClick() {
 const { register } = useKeymap()
 
 register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
+register({
+  keys: 'l',
+  label: 'What am I looking at?',
+  group: 'View',
+  enabled: () => Boolean(world.value),
+  run: toggleLegend,
+})
 register({
   keys: 'escape',
   // Above the overlay stack's own Escape: a viewer cutting a transition
@@ -270,6 +294,14 @@ register({
 // the browser initiated is not written straight back to it.
 let replayingHistory = false
 let stopHistoryListener = null
+
+watch(
+  () => preferences.chrome,
+  (chrome) => {
+    document.documentElement.dataset.chrome = chrome ?? 'translucent'
+  },
+  { immediate: true },
+)
 
 onMounted(() => {
   const restored = loadPersisted()
@@ -332,7 +364,7 @@ watch([graph, articleCache], () => {
   <div
     class="cosmos"
     :class="{ 'cosmos--hud-hidden': showHudHidden }"
-    :style="{ '--hud-opacity': preferences.panelOpacity, '--citation-atmosphere': citationAtmosphere }"
+    :style="{ '--citation-atmosphere': citationAtmosphere }"
   >
     <TopScrim
       v-if="!showHudHidden"
@@ -428,6 +460,8 @@ watch([graph, articleCache], () => {
         </p>
       </div>
     </Transition>
+
+    <Legend :show="showLegend" :anchors="legendAnchors" @close="showLegend = false" />
 
     <Launch
       v-if="!current || showLaunch"
@@ -613,7 +647,6 @@ watch([graph, articleCache], () => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   padding: var(--spacing-lg) var(--spacing-xl);
   z-index: 1;
-  opacity: var(--hud-opacity, 1);
   transition: opacity var(--duration-normal) ease-out;
 }
 

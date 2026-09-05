@@ -14,6 +14,12 @@ defineProps({
 
 const emit = defineEmits(['update:preferences', 'close'])
 
+const CHROME = [
+  { value: 'solid', label: 'Solid' },
+  { value: 'translucent', label: 'Translucent' },
+  { value: 'minimal', label: 'Minimal' },
+]
+
 const RENDERING = [
   { value: 'high', label: 'High' },
   { value: 'auto', label: 'Auto' },
@@ -32,7 +38,7 @@ function reset() {
     showSections: true,
     showPortals: true,
     showFoliage: true,
-    panelOpacity: 0.9,
+    chrome: 'translucent',
     autoHideHUD: false,
   })
 }
@@ -120,20 +126,31 @@ function reset() {
       </label>
     </fieldset>
 
-    <label class="settings__row settings__row--range">
-      <span>
-        <strong>Panel opacity</strong>
-        <small>{{ Math.round(preferences.panelOpacity * 100) }}%</small>
-      </span>
-      <input
-        type="range"
-        min="0.5"
-        max="1"
-        step="0.05"
-        :value="preferences.panelOpacity"
-        @input="update('panelOpacity', Number($event.target.value))"
-      />
-    </label>
+    <fieldset class="settings__group">
+      <legend>Panels</legend>
+      <div class="settings__row settings__row--stacked">
+        <span>
+          <strong>{{ CHROME.find((option) => option.value === (preferences.chrome ?? 'translucent')).label }}</strong>
+          <small>
+            How present the panels are over the world. Text stays at full contrast in all
+            three — the old opacity slider dimmed the words along with the panel.
+          </small>
+        </span>
+        <div class="settings__segmented" role="radiogroup" aria-label="Panel presence">
+          <button
+            v-for="option in CHROME"
+            :key="option.value"
+            type="button"
+            role="radio"
+            :aria-checked="(preferences.chrome ?? 'translucent') === option.value"
+            :class="['settings__segment', { 'is-active': (preferences.chrome ?? 'translucent') === option.value }]"
+            @click="update('chrome', option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+      </div>
+    </fieldset>
 
     <template #footer>
       <button type="button" class="settings__reset" @click="reset">Reset defaults</button>
