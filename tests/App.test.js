@@ -855,16 +855,19 @@ describe('App shell', () => {
     // Open the trail and step back to the first realm.
     wrapper.find('.scrim__trail').element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
-    const stops = [...document.querySelectorAll('.trail__stop')]
-    expect(stops.map((stop) => stop.textContent.trim())).toEqual(['Saturn', 'Titan'])
+    const stops = [...document.querySelectorAll('.trail__name')].map((name) => name.textContent)
+    expect(stops).toEqual(['Saturn', 'Titan'])
 
-    stops[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    const saturn = [...document.querySelectorAll('.trail__stop')].find((stop) =>
+      stop.textContent.includes('Saturn'),
+    )
+    saturn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
 
     expect(ledgerTitle()).toBe('Saturn')
-    // Returning is not travelling: forward is still available, and the
-    // journey has not grown a duplicate.
-    expect(wrapper.find('[aria-label="Forward"]').attributes('disabled')).toBeUndefined()
+    // Returning to a realm is a move like any other: it goes into history,
+    // so back reaches where you just were.
+    expect(wrapper.find('[aria-label="Back"]').attributes('disabled')).toBeUndefined()
   })
 })
 

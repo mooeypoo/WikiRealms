@@ -412,10 +412,11 @@ add if the story set proves worth guarding.
 
 ## 10. Deferred, but designed for now
 
-- **Visit graph + Trail panel.** Replace the two stacks with `{ nodes, edges, currentId }` plus a
-  linear-history projection, so a branch survives going back and taking a different portal.
-  Breadcrumb clicks rewind instead of rewriting. Snapshot format v2 with migration. Land the model
-  before the shell hardens around the stacks; the left rail is reserved from Phase 2.
+- ~~**Visit graph + Trail panel.**~~ Done, and twice: the model landed first as a tree of arrivals,
+  which real journeys disproved. A realm reached by two routes appeared twice, and a loop —
+  `Spacetime → Template talk → Physics → Spacetime` — could not be held at all. It is now a graph of
+  realms with a separate history for back and forward, which is the split a browser makes, and the
+  panel draws that graph. Snapshot 3.0, reading 2.0 and 1.0.
 - **Section reader** (D3 reversed). Ledger `full` is built as a scroll surface, so a `Read` tab can
   drop in without re-architecting if the product ever wants prose in-app.
 - **Journey share links** encoding a whole path, not just a realm — a natural extension of Phase 3's

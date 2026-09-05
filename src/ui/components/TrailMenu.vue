@@ -2,87 +2,158 @@
 import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
-import { layoutTrail } from '../rendering/trailLayout.js'
+import { NODE_HEIGHT, NODE_WIDTH, layoutJourney } from '../rendering/trailLayout.js'
 
 /**
- * Everywhere you have been, and the way back to any of it.
+ * The map of where you have been.
  *
- * It showed a flat list — the path from the start to here — which is a lie
- * by omission the moment a journey forks. Going back and leaving a
- * different way is the thing the visit graph was built to remember, and it
- * was the one thing the panel could not show.
+ * It was a flat list, then an indented tree, and real journeys broke both:
+ * a realm reached by two routes appeared twice, and a loop could not be
+ * drawn at all. One node per realm now, with an edge for every portal
+ * actually taken — which is what the app has claimed all along, since two
+ * arrivals at one article generate the byte-identical world.
  *
- * Drawn like a commit graph: a gutter of lanes with a dot per stop, text
- * beside it. A journey tree IS a commit graph — one history that forks when
- * you double back — and the idiom is already legible to anyone who has seen
- * one. It stays a list, so it scrolls rather than needing pan and zoom, and
- * the rows stay real buttons for the keyboard and for a screen reader.
+ * SVG rather than the 3D scene. The third axis would carry no information
+ * for a graph like this; titles have to stay real, selectable text; and a
+ * canvas is opaque to a screen reader, which is the wrong trade for the
+ * one panel that exists to navigate. The node list beneath the map is not
+ * a fallback — it is how this is read without a pointer.
  */
 const props = defineProps({
   show: Boolean,
-  /** The visit graph itself, not a projection of it. */
   graph: { type: Object, default: null },
 })
 
 defineEmits(['select', 'close'])
 
-const layout = computed(() => layoutTrail(props.graph))
+const layout = computed(() => layoutJourney(props.graph))
 
-/** A separator before each journey after the first. */
-function startsAJourney(row, index) {
-  return index > 0 && layout.value.rows[index - 1].journey !== row.journey
+const viewBox = computed(() => `0 0 ${layout.value.width} ${layout.value.height}`)
+
+const nodeById = computed(() => new Map(layout.value.nodes.map((node) => [node.id, node])))
+
+/**
+ * A curve rather than a line, and a wide detour for an edge that runs back
+ * up the ranks: a straight line between distant rows reads as a mistake,
+ * where a bowed one reads as a return.
+ */
+function pathFor(link) {
+  const from = nodeById.value.get(link.from)
+  const to = nodeById.value.get(link.to)
+  if (!from || !to) return ''
+
+  const x1 = from.x + NODE_WIDTH / 2
+  const y1 = from.y + NODE_HEIGHT
+  const x2 = to.x + NODE_WIDTH / 2
+  const y2 = to.y
+
+  if (!link.isBackEdge) {
+    const bend = (y2 - y1) / 2
+    return `M ${x1} ${y1} C ${x1} ${y1 + bend}, ${x2} ${y2 - bend}, ${x2} ${y2}`
+  }
+
+  const sweep = Math.max(70, Math.abs(y1 - y2) * 0.45)
+  return `M ${x1} ${from.y} C ${x1 - sweep} ${from.y}, ${x2 - sweep} ${y2 + NODE_HEIGHT}, ${x2} ${y2 + NODE_HEIGHT}`
 }
 </script>
 
 <template>
-  <Sheet id="trail" :open="show" label="Your trail" :snap-points="[0.55, 0.9]" :snap="0" @close="$emit('close')">
+  <Sheet id="trail" :open="show" label="Your trail" :snap-points="[0.6, 0.92]" :snap="1" @close="$emit('close')">
     <template #header>
       <div class="trail__bar">
         <h2 class="trail__title">Your trail</h2>
         <span class="trail__count tabular">
-          {{ layout.rows.length }}<template v-if="layout.journeys > 1"> · {{ layout.journeys }} journeys</template>
+          {{ layout.nodes.length }} realms · {{ layout.links.length }} portals
         </span>
       </div>
     </template>
 
-    <p v-if="layout.rows.length === 0" class="trail__empty">Nowhere yet.</p>
+    <p v-if="layout.nodes.length === 0" class="trail__empty">Nowhere yet.</p>
 
-    <ol v-else class="trail__list">
-      <template v-for="(row, index) in layout.rows" :key="row.id">
-        <li v-if="startsAJourney(row, index)" class="trail__break" aria-hidden="true" />
+    <template v-else>
+      <div class="trail__map">
+        <!-- Hidden from assistive technology on purpose: the list below is
+             the same map in a form a screen reader and a keyboard can walk,
+             and exposing both would announce every realm twice. The shapes
+             are a pointer affordance, so they take clicks but no tab stop. -->
+        <svg :viewBox="viewBox" :width="layout.width" :height="layout.height" aria-hidden="true">
+          <g class="trail__links">
+            <path
+              v-for="link in layout.links"
+              :key="`${link.from}->${link.to}`"
+              :d="pathFor(link)"
+              :class="{ 'is-return': link.isBackEdge }"
+            />
+          </g>
 
-        <li>
+          <g
+            v-for="node in layout.nodes"
+            :key="node.id"
+            class="trail__node"
+            :class="{
+              'is-current': node.isCurrent,
+              'is-junction': node.routesIn > 1,
+              'is-start': node.isStart,
+            }"
+            @click="$emit('select', node.id)"
+          >
+            <!-- A cap on a realm nothing leads to: it was searched for, or
+                 opened from a link. Unmarked, an unconnected box reads as a
+                 drawing that failed rather than as a journey beginning. -->
+            <line
+              v-if="node.isStart"
+              class="trail__cap"
+              :x1="node.x + 10"
+              :y1="node.y - 5"
+              :x2="node.x + NODE_WIDTH - 10"
+              :y2="node.y - 5"
+            />
+            <rect :x="node.x" :y="node.y" :width="NODE_WIDTH" :height="NODE_HEIGHT" rx="6" />
+            <text :x="node.x + NODE_WIDTH / 2" :y="node.y + NODE_HEIGHT / 2 + 4">
+              {{ node.title.length > 16 ? `${node.title.slice(0, 15)}…` : node.title }}
+              <title>{{ node.title }}</title>
+            </text>
+
+            <!-- A count, not a heavier border. Two routes in and three
+                 routes in are different facts, and a stroke width cannot
+                 say which — nor can anyone read 1.5px against 2px. -->
+            <g v-if="node.routesIn > 1" class="trail__badge">
+              <circle :cx="node.x + NODE_WIDTH - 8" :cy="node.y" r="8" />
+              <text :x="node.x + NODE_WIDTH - 8" :y="node.y + 3.5">{{ node.routesIn }}</text>
+            </g>
+          </g>
+        </svg>
+      </div>
+
+      <p class="trail__key">
+        <span><span class="trail__key-mark is-current" /> where you are</span>
+        <span><span class="trail__key-mark is-junction" /> more than one way in</span>
+        <span><span class="trail__key-mark is-start" /> searched for, not walked to</span>
+      </p>
+
+      <!-- The same map, reachable without a pointer. Ordered by rank so it
+           reads down the way the drawing does. -->
+      <ul class="trail__list">
+        <li v-for="node in layout.nodes" :key="node.id">
           <button
             class="trail__stop"
-            :class="{ 'trail__stop--current': row.isCurrent }"
+            :class="{ 'trail__stop--current': node.isCurrent }"
             type="button"
-            :aria-current="row.isCurrent ? 'true' : undefined"
-            @click="$emit('select', row.id)"
+            :aria-current="node.isCurrent ? 'true' : undefined"
+            @click="$emit('select', node.id)"
           >
-            <!-- The gutter: one lane per ancestor still carrying a branch,
-                 then this stop's own elbow and dot. -->
-            <span class="trail__gutter" aria-hidden="true">
-              <span v-for="(carries, lane) in row.rails" :key="lane" class="trail__lane">
-                <span v-if="carries" class="trail__through" />
-              </span>
-
-              <span v-if="row.depth > 0" class="trail__lane">
-                <span class="trail__elbow" :class="{ 'trail__elbow--tee': !row.isLastChild }" />
-              </span>
-
-              <span class="trail__lane trail__lane--dot">
-                <span class="trail__dot" :class="{ 'trail__dot--fork': row.isBranchPoint }" />
-              </span>
-            </span>
-
-            <span class="trail__name">{{ row.title }}</span>
-
-            <Icon v-if="row.isCurrent" name="crosshair" :size="13" class="trail__here" />
-            <span v-else-if="row.isBranchPoint" class="trail__ways tabular">{{ row.childCount }} ways</span>
+            <span class="trail__dot" :class="{ 'is-junction': node.routesIn > 1 }" />
+            <span class="trail__name">{{ node.title }}</span>
+            <!-- Independent facts: the realm you are standing in may well
+                 be the one several routes led to, and that is the more
+                 interesting half. -->
+            <span v-if="node.routesIn > 1" class="trail__routes tabular">{{ node.routesIn }} ways in</span>
+            <span v-else-if="node.isStart" class="trail__routes tabular">searched</span>
+            <Icon v-if="node.isCurrent" name="crosshair" :size="13" class="trail__here" />
           </button>
         </li>
-      </template>
-    </ol>
+      </ul>
+    </template>
   </Sheet>
 </template>
 
@@ -100,7 +171,7 @@ function startsAJourney(row, index) {
 }
 
 .trail__count,
-.trail__ways {
+.trail__routes {
   color: var(--ink-3);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -112,18 +183,131 @@ function startsAJourney(row, index) {
   font-size: var(--text-sm);
 }
 
+.trail__map {
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  overflow: auto;
+  border-bottom: 1px solid var(--edge-hair);
+}
+
+.trail__links path {
+  fill: none;
+  stroke: rgba(var(--trail-rgb), 0.45);
+  stroke-width: 1.2;
+}
+
+/* A loop closing. Dashed, because it is a return rather than a step. */
+.trail__links path.is-return {
+  stroke: rgba(var(--trail-rgb), 0.3);
+  stroke-dasharray: 4 4;
+}
+
+.trail__node {
+  cursor: pointer;
+}
+
+.trail__node:hover rect {
+  fill: var(--surface-1-solid);
+  stroke: var(--trail);
+}
+
+.trail__node:hover text {
+  fill: var(--ink-1);
+}
+
+.trail__node rect {
+  fill: var(--surface-2);
+  stroke: rgba(var(--trail-rgb), 0.35);
+  stroke-width: 1;
+}
+
+.trail__node text {
+  fill: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+/* The one you are standing in: filled, so it differs in KIND from every
+   other node rather than by a stroke width nobody can measure by eye. */
+.trail__node.is-current rect {
+  fill: var(--trail);
+  stroke: var(--trail);
+}
+
+.trail__node.is-current text {
+  fill: var(--surface-void);
+}
+
+/* More than one route leads here — the thing a flat list could never show.
+   Said with a number, because two ways in and five ways in are different
+   facts and a border can only say "some". */
+.trail__cap {
+  stroke: rgba(var(--trail-rgb), 0.55);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.trail__badge circle {
+  fill: var(--trail);
+  stroke: var(--surface-1-solid);
+  stroke-width: 1.5;
+}
+
+.trail__badge text {
+  fill: var(--surface-void);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-anchor: middle;
+}
+
+.trail__key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin: 0 0 var(--spacing-sm);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.trail__key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trail__key-mark {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--trail);
+  border-radius: 2px;
+}
+
+.trail__key-mark.is-current {
+  background: var(--trail);
+}
+
+.trail__key-mark.is-junction {
+  border-radius: 50%;
+  background: var(--trail);
+}
+
+.trail__key-mark.is-start {
+  height: 2px;
+  border: none;
+  border-radius: 1px;
+  background: rgba(var(--trail-rgb), 0.55);
+}
+
 .trail__list {
   display: grid;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-/* A gap between journeys, since a search starts one rather than continuing. */
-.trail__break {
-  height: var(--spacing-md);
-  margin: var(--spacing-xs) 0;
-  border-top: 1px solid var(--edge-hair);
 }
 
 .trail__stop {
@@ -132,7 +316,7 @@ function startsAJourney(row, index) {
   gap: var(--spacing-sm);
   width: 100%;
   min-height: 34px;
-  padding: 0 var(--spacing-sm) 0 0;
+  padding: 0 var(--spacing-sm);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -147,67 +331,15 @@ function startsAJourney(row, index) {
   color: var(--ink-1);
 }
 
-.trail__gutter {
-  display: flex;
-  flex: none;
-  align-self: stretch;
-}
-
-.trail__lane {
-  position: relative;
-  flex: none;
-  width: 15px;
-}
-
-.trail__lane--dot {
-  display: grid;
-  place-items: center;
-  width: 17px;
-}
-
-/* A branch passing this row on its way further down. */
-.trail__through {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 1px;
-  background: rgba(var(--trail-rgb), 0.32);
-}
-
-/* Down from the parent, then across into this row's dot. `--tee` keeps
-   going below, because a sibling is still waiting there. */
-.trail__elbow {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 9px;
-  height: 50%;
-  border-bottom: 1px solid rgba(var(--trail-rgb), 0.45);
-  border-left: 1px solid rgba(var(--trail-rgb), 0.45);
-  border-bottom-left-radius: 4px;
-}
-
-.trail__elbow--tee::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: -1px;
-  height: 100vh;
-  border-left: 1px solid rgba(var(--trail-rgb), 0.32);
-}
-
-/* Gold is the trail's colour and nothing else's, so a glance reads as
-   "this is me, and this is where I have been". */
 .trail__dot {
+  flex: none;
   width: 8px;
   height: 8px;
   border: 1px solid var(--trail);
   border-radius: 50%;
 }
 
-/* A fork is filled: it is the one row a viewer is looking for. */
-.trail__dot--fork {
+.trail__dot.is-junction {
   background: rgba(var(--trail-rgb), 0.45);
 }
 

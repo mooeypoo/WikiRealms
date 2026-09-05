@@ -21,9 +21,9 @@ const asStory = (build) => () => ({ setup: () => build })
 
 /** Saturn → Titan, back, → Rings of Saturn → Cassini Division. */
 function forkedJourney() {
-  let graph = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
-  graph = visit(goBack(graph), 'Rings of Saturn')
-  return visit(graph, 'Cassini Division')
+  let journey = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
+  journey = visit(goBack(journey), 'Rings of Saturn')
+  return visit(journey, 'Cassini Division')
 }
 
 const GRAPH = forkedJourney()

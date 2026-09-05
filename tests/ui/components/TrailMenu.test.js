@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import TrailMenu from '../../../src/ui/components/TrailMenu.vue'
-import { createVisitGraph, goBack, jump, visit } from '../../../src/core/traversal/visitGraph.js'
+import { createVisitGraph, goBack, jump, realmId, visit } from '../../../src/core/traversal/visitGraph.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
 import { resetOverlays } from '../../../src/ui/design/useOverlays.js'
 
@@ -20,94 +20,175 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-/** Saturn → Titan, back, → Rings of Saturn → Cassini Division. */
-function forked() {
-  let graph = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
-  graph = visit(goBack(graph), 'Rings of Saturn')
-  return visit(graph, 'Cassini Division')
+/** The journey that disproved the tree. */
+function looped() {
+  let journey = jump(createVisitGraph(), 'Spacetime diagram')
+  journey = visit(journey, 'Spacetime')
+  journey = visit(journey, 'Template talk: Spacetime')
+  journey = visit(journey, 'Physics')
+  return visit(journey, 'Spacetime')
 }
 
-function mountTrail(graph = forked()) {
+function mountTrail(graph = looped()) {
   return mount(TrailMenu, { props: { show: true, graph }, attachTo: document.body })
 }
 
-const stops = () => [...document.querySelectorAll('.trail__stop')]
-const labels = () => stops().map((stop) => stop.querySelector('.trail__name').textContent)
+const names = () => [...document.querySelectorAll('.trail__name')].map((name) => name.textContent.trim())
+const boxes = () => [...document.querySelectorAll('.trail__node')]
 
 describe('TrailMenu', () => {
-  it('shows every stop, not just the way you came', () => {
-    // The flat list was a lie by omission the moment a journey forked: the
-    // branch you left was simply absent.
+  it('draws one node per realm, however many times it was reached', () => {
+    // The whole reason the model changed: two arrivals at Spacetime generate
+    // the byte-identical world, so they are one place.
     mountTrail()
 
-    expect(labels()).toEqual(['Saturn', 'Titan', 'Rings of Saturn', 'Cassini Division'])
+    expect(boxes()).toHaveLength(4)
+    expect(names().filter((title) => title === 'Spacetime')).toHaveLength(1)
   })
 
-  it('draws a lane per ancestor still carrying a branch', () => {
+  it('draws an edge for every portal actually taken', () => {
     mountTrail()
-    const gutters = stops().map((stop) => stop.querySelectorAll('.trail__lane').length)
 
-    // root: dot only; depth 1: elbow + dot; depth 2: one lane + elbow + dot.
-    expect(gutters).toEqual([1, 2, 2, 3])
+    expect(document.querySelectorAll('.trail__links path')).toHaveLength(4)
   })
 
-  it('keeps the line going past a stop with a sibling below it', () => {
+  it('says HOW MANY routes lead to a realm, rather than just that some do', () => {
+    // A border can only say "several". Two ways in and five ways in are
+    // different facts, and nobody can read 1.5px against 2px anyway.
     mountTrail()
-    const titan = stops()[1]
+    const badges = [...document.querySelectorAll('.trail__badge text')]
 
-    expect(titan.querySelector('.trail__elbow--tee')).not.toBeNull()
-    expect(stops()[2].querySelector('.trail__elbow--tee')).toBeNull()
+    expect(badges).toHaveLength(1)
+    expect(badges[0].textContent.trim()).toBe('2')
+    expect(document.body.textContent).toContain('2 ways in')
   })
 
-  it('fills the dot at a fork, which is what the panel is for', () => {
+  it('distinguishes where you are by fill, not by stroke width', () => {
     mountTrail()
 
-    expect(stops()[0].querySelector('.trail__dot--fork')).not.toBeNull()
-    expect(stops()[1].querySelector('.trail__dot--fork')).toBeNull()
-    expect(stops()[0].textContent).toContain('2 ways')
+    expect(document.querySelectorAll('.trail__node.is-current')).toHaveLength(1)
   })
 
-  it('says where the viewer is standing, to assistive tech as well', () => {
+  it('says what its marks mean', () => {
+    // The panel encoded two things visually and explained neither, which is
+    // the failing the world's legend exists to fix.
     mountTrail()
-    const current = stops().filter((stop) => stop.getAttribute('aria-current') === 'true')
+    const key = document.querySelector('.trail__key')
 
+    expect(key.textContent).toContain('where you are')
+    expect(key.textContent).toContain('more than one way in')
+  })
+
+  it('draws a loop closing differently from a step forward', () => {
+    // A straight line between distant rows reads as a mistake; a bowed,
+    // dashed one reads as a return.
+    mountTrail()
+
+    expect(document.querySelectorAll('.trail__links path.is-return')).toHaveLength(1)
+  })
+
+  it('says where the viewer is standing, in the map and in the list', () => {
+    mountTrail()
+
+    expect(document.querySelectorAll('.trail__node.is-current')).toHaveLength(1)
+    const current = [...document.querySelectorAll('.trail__stop')].filter(
+      (stop) => stop.getAttribute('aria-current') === 'true',
+    )
     expect(current).toHaveLength(1)
-    expect(current[0].textContent).toContain('Cassini Division')
+    expect(current[0].textContent).toContain('Spacetime')
   })
 
-  it('separates journeys rather than running them together', () => {
-    // A search starts a new one; presenting it as a continuation would
-    // claim the viewer walked somewhere they jumped.
-    let graph = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
-    graph = visit(jump(graph, 'Jazz'), 'Bebop')
-    mountTrail(graph)
+  it('is navigable without a pointer', () => {
+    // The list is not a fallback for the drawing — it is how a keyboard and
+    // a screen reader read the same map.
+    mountTrail()
 
-    expect(document.querySelectorAll('.trail__break')).toHaveLength(1)
-    expect(document.querySelector('.trail__count').textContent).toContain('2 journeys')
+    expect(document.querySelectorAll('.trail__stop')).toHaveLength(4)
+    for (const stop of document.querySelectorAll('.trail__stop')) {
+      expect(stop.tagName).toBe('BUTTON')
+      expect(stop.textContent.trim()).not.toBe('')
+    }
+  })
+
+  it('keeps the full title reachable wherever the drawing truncates one', () => {
+    mountTrail()
+    const truncated = [...document.querySelectorAll('.trail__node text')].filter((text) =>
+      text.textContent.includes('…'),
+    )
+
+    expect(truncated.length).toBeGreaterThan(0)
+    for (const label of truncated) {
+      const full = label.querySelector('title').textContent
+      expect(full).not.toContain('…')
+      // And the same title in full, in the list a reader can actually use.
+      expect(names()).toContain(full)
+    }
+  })
+
+  it('travels from the drawing as well as from the list', async () => {
+    const wrapper = mountTrail()
+
+    boxes()[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('select')[0][0]).toBe(realmId('Spacetime diagram'))
+  })
+
+  it('keeps the drawing out of the accessibility tree', () => {
+    // The list below is the same map in a form a screen reader can walk.
+    // Exposing both would announce every realm twice, and give the keyboard
+    // two tab stops for one place.
+    mountTrail()
+
+    expect(document.querySelector('.trail__map svg').getAttribute('aria-hidden')).toBe('true')
+    for (const node of boxes()) {
+      expect(node.getAttribute('tabindex')).toBeNull()
+    }
   })
 
   it('asks its owner to travel rather than travelling', async () => {
     const wrapper = mountTrail()
 
-    stops()[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    document.querySelectorAll('.trail__stop')[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await wrapper.vm.$nextTick()
 
-    const [[nodeId]] = wrapper.emitted('select')
-    expect(typeof nodeId).toBe('string')
+    expect(wrapper.emitted('select')[0][0]).toBe(realmId('Spacetime diagram'))
   })
 
-  it('lists both arrivals when a realm was reached twice', () => {
-    let graph = visit(visit(jump(createVisitGraph(), 'Saturn'), 'Titan'), 'Atmosphere')
-    graph = visit(visit(goBack(goBack(graph)), 'Rings of Saturn'), 'Atmosphere')
-    mountTrail(graph)
+  it('counts what it is showing', () => {
+    mountTrail()
 
-    expect(labels().filter((title) => title === 'Atmosphere')).toHaveLength(2)
+    expect(document.querySelector('.trail__count').textContent).toContain('4 realms')
+    expect(document.querySelector('.trail__count').textContent).toContain('4 portals')
+  })
+
+  it('shows a jumped-to realm with no road leading to it, and says why', () => {
+    // A search is a teleport; drawing an edge would put a road on the map
+    // where none exists. But an unmarked unconnected box reads as a drawing
+    // that failed rather than as a journey beginning.
+    const journey = jump(visit(jump(createVisitGraph(), 'Saturn'), 'Titan'), 'Jazz')
+    mountTrail(journey)
+
+    expect(boxes()).toHaveLength(3)
+    expect(document.querySelectorAll('.trail__links path')).toHaveLength(1)
+    // Saturn and Jazz were both arrived at rather than walked to.
+    expect(document.querySelectorAll('.trail__cap')).toHaveLength(2)
+    expect(document.body.textContent).toContain('searched')
   })
 
   it('says so plainly when there is nowhere yet', () => {
     mountTrail(createVisitGraph())
 
     expect(document.querySelector('.trail__empty').textContent).toContain('Nowhere yet')
-    expect(stops()).toHaveLength(0)
+    expect(boxes()).toHaveLength(0)
+  })
+
+  it('still shows a realm whose branch was abandoned', () => {
+    // History moved on; the map remembers.
+    let journey = visit(jump(createVisitGraph(), 'Saturn'), 'Titan')
+    journey = visit(goBack(journey), 'Rings of Saturn')
+    mountTrail(journey)
+
+    expect(names()).toContain('Titan')
   })
 })

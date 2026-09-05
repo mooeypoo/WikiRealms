@@ -1,217 +1,262 @@
 /**
- * The journey as a tree of visits.
+ * The journey: which realms you have been to, how they connect, and the
+ * order you moved between them.
  *
- * Traversal used to be two flat stacks, which lost information the moment a
- * viewer backtracked: going back and taking a different portal discarded the
- * forward stack outright, so the branch they had already explored simply
- * ceased to exist. There was no way to render "the path we took" because the
- * path was not being kept.
+ * THIS WAS A TREE, AND THE TREE WAS WRONG.
  *
- * A node is one ARRIVAL, not one article. Visiting the same title twice from
- * different parents makes two nodes, because they are two different places in
- * the journey — the tree is the shape of where the viewer went, not a
- * deduplicated index of what they saw. Revisiting a title from the SAME
- * parent reuses that child, so bouncing back and forth does not grow it.
+ * A node used to be one ARRIVAL, so reaching a realm by two routes made two
+ * nodes. Real journeys disprove it immediately: Spacetime diagram → Spacetime,
+ * and later Physics → Spacetime, is one realm reached twice, not two places.
+ * The app already says so — worldId derives from articleId, revision and
+ * engine version, so both arrivals generate the byte-identical world. A model
+ * that calls them different contradicts the generator.
  *
- * Pure and serializable: every function takes a state and returns a new one,
- * and the whole thing round-trips through JSON for the session snapshot.
- * This is domain logic and lives in core/ accordingly — it knows nothing
- * about Vue, the URL, or how a trail might be drawn.
+ * Real journeys also LOOP: Spacetime → Template talk → Physics → Spacetime.
+ * A tree cannot hold a cycle at all, so the old model was not merely
+ * redundant, it was unable to record what happened.
+ *
+ * So there are two structures here, which is the split a browser makes:
+ *
+ *   - a GRAPH of realms and the transitions between them: where you have
+ *     been and how those places connect. Cycles are ordinary.
+ *   - a HISTORY: the order you actually moved, which is what back and
+ *     forward walk. A graph has no unique "previous"; a history does.
+ *
+ * Pure and serializable: every function takes a journey and returns a new
+ * one, and the whole thing round-trips through JSON.
  */
 
 /**
- * @typedef {object} VisitNode
+ * @typedef {object} Realm
  * @property {string} id
  * @property {string} title
- * @property {string|null} parentId
- * @property {string|null} lastChildId the child to return to on "forward"
+ * @property {number} order when it was first reached, for stable layout
  */
 
 /**
- * @typedef {object} VisitGraph
- * @property {Record<string, VisitNode>} nodes
- * @property {string[]} rootIds journeys, in the order they were started
- * @property {string|null} currentId
- * @property {number} nextId
+ * @typedef {object} Journey
+ * @property {Record<string, Realm>} realms
+ * @property {Array<{from: string, to: string}>} edges transitions taken, once each
+ * @property {string[]} history realm ids in the order they were visited
+ * @property {number} cursor index into history; back and forward move it
+ * @property {number} nextOrder
  */
 
-/** @returns {VisitGraph} */
+/** @returns {Journey} */
 export function createVisitGraph() {
-  return { nodes: {}, rootIds: [], currentId: null, nextId: 1 }
+  return { realms: {}, edges: [], history: [], cursor: -1, nextOrder: 1 }
 }
 
-function clone(graph) {
+function clone(journey) {
   return {
-    nodes: { ...graph.nodes },
-    rootIds: [...graph.rootIds],
-    currentId: graph.currentId,
-    nextId: graph.nextId,
+    realms: { ...journey.realms },
+    edges: [...journey.edges],
+    history: [...journey.history],
+    cursor: journey.cursor,
+    nextOrder: journey.nextOrder,
   }
 }
 
-export function currentNode(graph) {
-  return graph.currentId ? (graph.nodes[graph.currentId] ?? null) : null
+/**
+ * A realm's identity is its title. Two arrivals at the same title are the
+ * same place, because they generate the same world.
+ */
+export function realmId(title) {
+  return `r:${title}`
 }
 
-export function currentTitle(graph) {
-  return currentNode(graph)?.title ?? null
+export function currentRealm(journey) {
+  const id = journey.history[journey.cursor]
+  return id ? (journey.realms[id] ?? null) : null
 }
 
-export function childrenOf(graph, nodeId) {
-  return Object.values(graph.nodes).filter((node) => node.parentId === nodeId)
+export function currentTitle(journey) {
+  return currentRealm(journey)?.title ?? null
+}
+
+/** Kept for callers that speak in node ids; a realm id IS the node id now. */
+export function currentId(journey) {
+  return journey.history[journey.cursor] ?? null
+}
+
+export function realmsOf(journey) {
+  return Object.values(journey.realms).sort((a, b) => a.order - b.order)
+}
+
+export function neighboursOf(journey, id) {
+  return journey.edges.filter((edge) => edge.from === id).map((edge) => journey.realms[edge.to])
+}
+
+function ensureRealm(journey, title) {
+  const id = realmId(title)
+  if (journey.realms[id]) return id
+
+  journey.realms[id] = { id, title, order: journey.nextOrder }
+  journey.nextOrder += 1
+  return id
+}
+
+function pushHistory(journey, id) {
+  // Moving after going back discards what was ahead, exactly as a browser
+  // does — the forward path is no longer where you are going.
+  journey.history = [...journey.history.slice(0, journey.cursor + 1), id]
+  journey.cursor = journey.history.length - 1
+}
+
+function connect(journey, from, to) {
+  if (!from || from === to) return
+  if (journey.edges.some((edge) => edge.from === from && edge.to === to)) return
+  journey.edges.push({ from, to })
 }
 
 /**
- * A viewer arriving somewhere new, from where they are. This is portal
- * travel: the destination hangs off the current node.
+ * Travel: arriving somewhere through a portal from where you are. Records
+ * both the realm and the connection, which is what makes the graph a map
+ * of the part of Wikipedia this session has walked.
  */
-export function visit(graph, title) {
-  if (!title) return graph
-  if (currentTitle(graph) === title) return graph
-  if (!graph.currentId) return jump(graph, title)
+export function visit(journey, title) {
+  if (!title) return journey
+  if (currentTitle(journey) === title) return journey
 
-  // Already been here from here? Step back onto that branch rather than
-  // growing a duplicate every time the viewer paces between two realms.
-  const existing = childrenOf(graph, graph.currentId).find((node) => node.title === title)
-  if (existing) return goTo(graph, existing.id)
+  const next = clone(journey)
+  const from = currentId(journey)
+  const to = ensureRealm(next, title)
 
-  const next = clone(graph)
-  const id = `n${next.nextId}`
-  next.nextId += 1
-  next.nodes[id] = { id, title, parentId: graph.currentId, lastChildId: null }
-  next.nodes[graph.currentId] = { ...next.nodes[graph.currentId], lastChildId: id }
-  next.currentId = id
+  connect(next, from, to)
+  pushHistory(next, to)
   return next
 }
 
 /**
- * A viewer starting somewhere unconnected — a search, a shared link, a
- * random realm. That begins a new journey rather than pretending the new
- * realm was reached from wherever they happened to be standing.
+ * A jump: a search, a shared link, a curated realm. It records no edge,
+ * because no portal was taken — claiming a connection that does not exist
+ * would put a road on the map where there is none.
  */
-export function jump(graph, title) {
-  if (!title) return graph
+export function jump(journey, title) {
+  if (!title) return journey
 
-  const next = clone(graph)
-  const id = `n${next.nextId}`
-  next.nextId += 1
-  next.nodes[id] = { id, title, parentId: null, lastChildId: null }
-  next.rootIds.push(id)
-  next.currentId = id
+  const next = clone(journey)
+  pushHistory(next, ensureRealm(next, title))
   return next
 }
 
 /**
- * Moves to a node already in the journey — a breadcrumb, a trail click, the
- * browser's back button.
+ * Returning to a realm already on the map — a trail click, a breadcrumb.
  *
- * Note what this does NOT do: the old breadcrumb called navigateTo, which
- * pushed a new entry and wiped the forward stack, so clicking your own
- * history rewrote it. Returning somewhere is not the same as going
- * somewhere, and the tree is left exactly as it was.
+ * It moves history forward, because going somewhere is going somewhere
+ * even when you have been before. It records no edge: the viewer teleported
+ * rather than walking a link.
  */
-export function goTo(graph, nodeId) {
-  if (!graph.nodes[nodeId]) return graph
+export function goTo(journey, id) {
+  if (!journey.realms[id] || currentId(journey) === id) return journey
 
-  const next = clone(graph)
-  next.currentId = nodeId
-
-  // Remember the branch we came down, so "forward" knows which child to
-  // return to when there is more than one.
-  const node = next.nodes[nodeId]
-  for (const child of childrenOf(graph, nodeId)) {
-    if (child.id === graph.currentId) {
-      next.nodes[nodeId] = { ...node, lastChildId: child.id }
-      break
-    }
-  }
-
+  const next = clone(journey)
+  pushHistory(next, id)
   return next
 }
 
-export function canGoBack(graph) {
-  return Boolean(currentNode(graph)?.parentId)
+export function canGoBack(journey) {
+  return journey.cursor > 0
 }
 
-export function canGoForward(graph) {
-  const node = currentNode(graph)
-  return Boolean(node?.lastChildId && graph.nodes[node.lastChildId])
+export function canGoForward(journey) {
+  return journey.cursor >= 0 && journey.cursor < journey.history.length - 1
 }
 
-export function goBack(graph) {
-  const node = currentNode(graph)
-  if (!node?.parentId) return graph
-  return goTo(graph, node.parentId)
+export function goBack(journey) {
+  if (!canGoBack(journey)) return journey
+  return { ...clone(journey), cursor: journey.cursor - 1 }
 }
 
-export function goForward(graph) {
-  const node = currentNode(graph)
-  if (!node?.lastChildId) return graph
-  return goTo(graph, node.lastChildId)
+export function goForward(journey) {
+  if (!canGoForward(journey)) return journey
+  return { ...clone(journey), cursor: journey.cursor + 1 }
 }
 
-/** Root → current, the breadcrumb trail. */
-export function pathToCurrent(graph) {
-  const path = []
-  let node = currentNode(graph)
-  while (node) {
-    path.unshift(node)
-    node = node.parentId ? graph.nodes[node.parentId] : null
-  }
-  return path
+/** Titles behind the cursor, oldest first. */
+export function backTitles(journey) {
+  return journey.history.slice(0, Math.max(0, journey.cursor)).map((id) => journey.realms[id]?.title)
+}
+
+/** Titles ahead of the cursor, nearest first. */
+export function forwardTitles(journey) {
+  return journey.history.slice(journey.cursor + 1).map((id) => journey.realms[id]?.title)
 }
 
 /**
- * The ancestor titles, oldest first — the flat "backstack" the rest of the
- * app still speaks in.
- */
-export function backTitles(graph) {
-  return pathToCurrent(graph)
-    .slice(0, -1)
-    .map((node) => node.title)
-}
-
-/** The remembered forward chain, nearest first. */
-export function forwardTitles(graph) {
-  const titles = []
-  let node = currentNode(graph)
-  const seen = new Set()
-  while (node?.lastChildId && graph.nodes[node.lastChildId] && !seen.has(node.lastChildId)) {
-    seen.add(node.lastChildId)
-    node = graph.nodes[node.lastChildId]
-    titles.push(node.title)
-  }
-  return titles
-}
-
-/**
- * Rebuilds a graph from a linear history — the shape every session saved
- * before the tree existed. The result is one journey with no branches, which
- * is exactly what those sessions recorded.
+ * Rebuilds a journey from a linear history — every session saved before the
+ * graph existed.
+ *
+ * NO EDGES. A 1.0 snapshot recorded only "these articles, in this order":
+ * it had no concept of search versus portal, because the app it came from
+ * had none either. Chaining consecutive entries — which this used to do —
+ * invents a portal between anything that merely happened to follow
+ * something else, and it produced visibly false claims: an article reached
+ * by searching appeared linked to whatever the viewer had been reading.
+ *
+ * An edge is a claim about WIKIPEDIA (a link exists between these two
+ * articles). A history is a claim about the SESSION (I was here, then
+ * there). This shape knows the second and not the first, so it asserts only
+ * the second. The map fills in properly from the next portal taken.
  */
 export function fromLinearHistory({ current = null, backstack = [], forwardstack = [] } = {}) {
   const chain = [...backstack, ...(current ? [current] : []), ...forwardstack]
   if (chain.length === 0) return createVisitGraph()
 
-  let graph = jump(createVisitGraph(), chain[0])
-  for (const title of chain.slice(1)) graph = visit(graph, title)
+  let journey = createVisitGraph()
+  for (const title of chain) journey = jump(journey, title)
 
-  // Wind back to where the viewer actually was, leaving the forward chain
-  // reachable rather than discarding it.
-  for (let step = 0; step < forwardstack.length; step += 1) graph = goBack(graph)
+  for (let step = 0; step < forwardstack.length; step += 1) journey = goBack(journey)
 
-  return graph
+  return journey
 }
 
-/** Guards a graph read back from JSON, so a hand-edited file cannot poison it. */
+/**
+ * Rebuilds from the 2.0 per-arrival tree. Realms merge by title, parent
+ * links become edges, and the history is the path to where the viewer was —
+ * the best that shape can say about the order things happened, since it
+ * recorded structure rather than sequence.
+ */
+export function fromVisitTree(tree) {
+  if (!tree?.nodes) return createVisitGraph()
+
+  let journey = createVisitGraph()
+  const ordered = Object.values(tree.nodes).sort((a, b) => order(a.id) - order(b.id))
+
+  for (const node of ordered) {
+    const next = clone(journey)
+    const to = ensureRealm(next, node.title)
+    const parent = node.parentId ? tree.nodes[node.parentId] : null
+    if (parent) connect(next, realmId(parent.title), to)
+    journey = next
+  }
+
+  const path = []
+  let cursor = tree.currentId ? tree.nodes[tree.currentId] : null
+  while (cursor) {
+    path.unshift(cursor.title)
+    cursor = cursor.parentId ? tree.nodes[cursor.parentId] : null
+  }
+
+  journey.history = path.map(realmId)
+  journey.cursor = journey.history.length - 1
+  return journey
+}
+
+function order(id) {
+  const value = Number(String(id).replace(/^\D+/, ''))
+  return Number.isFinite(value) ? value : 0
+}
+
+/** Guards a journey read back from JSON. */
 export function isVisitGraph(value) {
   return Boolean(
     value &&
       typeof value === 'object' &&
-      value.nodes &&
-      typeof value.nodes === 'object' &&
-      Array.isArray(value.rootIds) &&
-      typeof value.nextId === 'number' &&
-      (value.currentId === null || typeof value.currentId === 'string'),
+      value.realms &&
+      typeof value.realms === 'object' &&
+      Array.isArray(value.edges) &&
+      Array.isArray(value.history) &&
+      typeof value.cursor === 'number',
   )
 }

@@ -251,7 +251,7 @@ function toggleHideHud() {
  * Everywhere visited, not the depth of the branch you happen to be on: the
  * badge and the panel it opens should be counting the same thing.
  */
-const trailSize = computed(() => Object.keys(graph.value.nodes).length)
+const trailSize = computed(() => Object.keys(graph.value.realms).length)
 
 function toggleLegend() {
   if (showLegend.value) {
@@ -371,7 +371,7 @@ onMounted(() => {
 
   stopHistoryListener = onHistoryPop((state, realm) => {
     replayingHistory = true
-    if (state.nodeId && graph.value.nodes[state.nodeId]) goToNode(state.nodeId)
+    if (state.nodeId && graph.value.realms[state.nodeId]) goToNode(state.nodeId)
     else if (realm) jumpTo(realm)
     replayingHistory = false
   })

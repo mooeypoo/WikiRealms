@@ -18,12 +18,11 @@ export function useTraversal() {
   const graph = ref(trail.createVisitGraph())
 
   const current = computed(() => trail.currentTitle(graph.value))
-  const currentNodeId = computed(() => graph.value.currentId)
+  const currentNodeId = computed(() => trail.currentId(graph.value))
   const backstack = computed(() => trail.backTitles(graph.value))
   const forwardstack = computed(() => trail.forwardTitles(graph.value))
   const canGoBack = computed(() => trail.canGoBack(graph.value))
   const canGoForward = computed(() => trail.canGoForward(graph.value))
-  const path = computed(() => trail.pathToCurrent(graph.value))
 
   /** Arriving somewhere from where you are — portal travel. */
   function navigateTo(title) {
@@ -57,14 +56,13 @@ export function useTraversal() {
    * history older snapshots stored.
    */
   function restore(state = {}) {
-    graph.value = trail.isVisitGraph(state?.graph)
-      ? state.graph
-      : trail.fromLinearHistory(state)
+    if (trail.isVisitGraph(state?.graph)) graph.value = state.graph
+    else if (state?.graph?.nodes) graph.value = trail.fromVisitTree(state.graph)
+    else graph.value = trail.fromLinearHistory(state)
   }
 
   return {
     graph,
-    path,
     current,
     currentNodeId,
     backstack,

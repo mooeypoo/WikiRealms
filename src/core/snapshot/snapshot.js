@@ -4,12 +4,17 @@
  * validates plain JSON-serializable snapshot objects.
  */
 import { APP_VERSION } from '../../appInfo.js'
-import { createVisitGraph, fromLinearHistory, isVisitGraph } from '../traversal/visitGraph.js'
+import {
+  createVisitGraph,
+  fromLinearHistory,
+  fromVisitTree,
+  isVisitGraph,
+} from '../traversal/visitGraph.js'
 
-export const SCHEMA_VERSION = '2.0'
+export const SCHEMA_VERSION = '3.0'
 
 /** Read, migrated, and never written again. */
-const LEGACY_SCHEMA_VERSIONS = ['1.0']
+const LEGACY_SCHEMA_VERSIONS = ['1.0', '2.0']
 export { APP_VERSION }
 
 export class SnapshotInvalidError extends Error {
@@ -93,6 +98,16 @@ export function restoreSnapshot(snapshot) {
   const articleCache = { ...(snapshot.articleCache ?? {}) }
 
   if (isLegacy) {
+    // 2.0 stored a tree of ARRIVALS, which recorded the same realm twice
+    // when it was reached twice and could not hold a loop at all. Realms
+    // merge by title on the way in.
+    if (schemaVersion === '2.0') {
+      if (!snapshot.navigation.graph?.nodes) {
+        throw new SnapshotInvalidError('Snapshot "navigation" is missing a visit tree')
+      }
+      return { graph: fromVisitTree(snapshot.navigation.graph), articleCache }
+    }
+
     const { current, backstack, forwardstack } = snapshot.navigation
     if (!Array.isArray(backstack) || !Array.isArray(forwardstack)) {
       throw new SnapshotInvalidError('Snapshot "navigation" backstack/forwardstack must be arrays')
@@ -101,7 +116,7 @@ export function restoreSnapshot(snapshot) {
   }
 
   if (!isVisitGraph(snapshot.navigation.graph)) {
-    throw new SnapshotInvalidError('Snapshot "navigation" is missing a valid visit graph')
+    throw new SnapshotInvalidError('Snapshot "navigation" is missing a valid journey')
   }
 
   return { graph: snapshot.navigation.graph, articleCache }

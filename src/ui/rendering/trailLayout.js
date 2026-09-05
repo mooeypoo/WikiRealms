@@ -1,131 +1,187 @@
 /**
- * Turning a visit graph into drawable rows.
+ * Placing a journey's realms so the map can be drawn.
  *
- * The shape a git client draws: a gutter of vertical rails with a dot per
- * stop, and text beside it. A journey tree is structurally a commit graph —
- * one history that forks when you go back and leave a different way — and
- * that idiom already solves branching legibly.
+ * This laid out an indented tree until real journeys broke it: a realm
+ * reached by two routes appeared twice, and a loop — Spacetime → Template
+ * talk → Physics → Spacetime — could not be represented at all. A tree
+ * cannot hold a cycle, so the shape was not merely redundant, it was unable
+ * to record what happened.
  *
- * Deliberately not a node-link diagram in the 3D scene. The third axis
- * would carry no information here, article titles are text that should stay
- * selectable and readable to a screen reader, and the stage belongs to the
- * world rather than to the session (docs/ux-vision.md §3). Rows also scroll,
- * where a diagram would need pan and zoom the moment a journey got long.
+ * So this places a GRAPH. Layered rather than force-directed: ranks come
+ * from how far a realm is from where the journey started, which is a fact
+ * about the journey rather than an artefact of a simulation, and the same
+ * journey therefore lays out the same way every time it is opened. A
+ * force-directed graph would settle differently on each open, which for a
+ * record of where you have been is the wrong kind of alive.
  *
- * Pure: numbers and booleans in, numbers and booleans out. No Vue, no DOM.
+ * Pure numbers: no Vue, no DOM, no three.js. Rendering it in the 3D scene
+ * was considered and declined — the third axis carries no information here,
+ * titles need to stay real selectable text, and a canvas is opaque to a
+ * screen reader (docs/ux-vision.md §3).
  */
 
-import { childrenOf } from '../../core/traversal/visitGraph.js'
+export const NODE_WIDTH = 132
+export const NODE_HEIGHT = 34
+export const RANK_GAP = 62
+export const COLUMN_GAP = 18
 
 /**
- * @typedef {object} TrailRow
+ * @typedef {object} PlacedRealm
  * @property {string} id
  * @property {string} title
- * @property {number} depth how far from the start of its journey
- * @property {number} journey which root this belongs to, 0-based
+ * @property {number} rank how many portals from the start of the journey
+ * @property {number} x
+ * @property {number} y
  * @property {boolean} isCurrent
- * @property {boolean} isLastChild draws an elbow rather than a tee
- * @property {boolean} isBranchPoint more than one way was taken from here
- * @property {boolean[]} rails one entry per ANCESTOR LANE, oldest first —
- *   whether that ancestor still has siblings below this row, and so whether
- *   a line passes through the gutter beside it. Length is depth - 1: a row
- *   at depth 1 has none, because the root's lane is never drawn
- * @property {number} childCount
+ * @property {number} routesIn how many different ways lead here
+ * @property {boolean} isStart nothing leads here — a search, a shared link,
+ *   or the first realm of the session
  */
 
 /**
- * Depth-first, in the order the journeys were made.
- *
- * Order matters: a viewer reads this to remember what they did, and visit
- * order is the order they did it in. Sorting by title or size would be a
- * different document about the same data.
- *
- * @param {object} graph
- * @returns {{ rows: TrailRow[], journeys: number, maxDepth: number }}
+ * @param {object} journey
+ * @returns {{ nodes: PlacedRealm[], links: object[], width: number, height: number }}
  */
-export function layoutTrail(graph) {
-  if (!graph?.nodes) return { rows: [], journeys: 0, maxDepth: 0 }
+export function layoutJourney(journey) {
+  if (!journey?.realms || Object.keys(journey.realms).length === 0) {
+    return { nodes: [], links: [], width: 0, height: 0 }
+  }
 
-  const rows = []
+  const ranks = rankRealms(journey)
+  const byRank = groupByRank(journey, ranks)
+  const positions = place(byRank)
 
-  graph.rootIds.forEach((rootId, journey) => {
-    if (!graph.nodes[rootId]) return
-    walk(graph, rootId, { depth: 0, journey, rails: [], isLastChild: true, rows })
-  })
+  const currentId = journey.history[journey.cursor] ?? null
+  const routesIn = countRoutesIn(journey)
+
+  const nodes = Object.values(journey.realms).map((realm) => ({
+    id: realm.id,
+    title: realm.title,
+    rank: ranks.get(realm.id) ?? 0,
+    ...positions.get(realm.id),
+    isCurrent: realm.id === currentId,
+    routesIn: routesIn.get(realm.id) ?? 0,
+    // Nothing leads here, so the viewer arrived by searching or by opening
+    // a link. Worth marking: an unconnected node otherwise reads as a
+    // drawing that failed rather than as a journey that began.
+    isStart: (routesIn.get(realm.id) ?? 0) === 0,
+  }))
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+  const links = journey.edges
+    .filter((edge) => nodeById.has(edge.from) && nodeById.has(edge.to))
+    .map((edge) => ({
+      from: edge.from,
+      to: edge.to,
+      // An edge running back up the ranks is a loop closing. Worth knowing:
+      // it is drawn differently, because a straight line between distant
+      // ranks reads as a mistake.
+      isBackEdge: (nodeById.get(edge.to).rank ?? 0) <= (nodeById.get(edge.from).rank ?? 0),
+    }))
 
   return {
-    rows,
-    journeys: graph.rootIds.length,
-    maxDepth: rows.reduce((deepest, row) => Math.max(deepest, row.depth), 0),
+    nodes,
+    links,
+    width: Math.max(...nodes.map((node) => node.x + NODE_WIDTH)) + COLUMN_GAP,
+    height: Math.max(...nodes.map((node) => node.y + NODE_HEIGHT)) + COLUMN_GAP,
   }
 }
 
-function walk(graph, nodeId, { depth, journey, rails, isLastChild, rows }) {
-  const node = graph.nodes[nodeId]
-  if (!node) return
-
-  const children = orderedChildren(graph, nodeId)
-
-  rows.push({
-    id: node.id,
-    title: node.title,
-    depth,
-    journey,
-    isCurrent: graph.currentId === node.id,
-    isLastChild,
-    // A fork: the viewer came back here and left a different way. This is
-    // the whole reason the panel exists, so it is worth marking.
-    isBranchPoint: children.length > 1,
-    rails: [...rails],
-    childCount: children.length,
-  })
-
-  children.forEach((child, index) => {
-    const last = index === children.length - 1
-    walk(graph, child.id, {
-      depth: depth + 1,
-      journey,
-      // The child inherits this row's ancestor lanes, plus one for THIS row
-      // — a line passing beside the child wherever this row still has
-      // siblings waiting below it. A root contributes no lane, because a
-      // journey's start has nothing beside it to draw.
-      rails: depth === 0 ? [] : [...rails, !isLastChild],
-      isLastChild: last,
-      rows,
-    })
-  })
-}
-
 /**
- * Children in the order they were first visited, which the id encodes: ids
- * are handed out in sequence, so n2 was reached before n7.
+ * Breadth-first from every realm that was jumped to rather than walked to —
+ * the starts of journeys. Anything unreachable from one (which the edges
+ * being one-directional can produce) starts its own rank 0.
  */
-function orderedChildren(graph, nodeId) {
-  return childrenOf(graph, nodeId).sort((a, b) => idOrder(a.id) - idOrder(b.id))
-}
+function rankRealms(journey) {
+  const ranks = new Map()
+  const outgoing = new Map()
+  for (const edge of journey.edges) {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, [])
+    outgoing.get(edge.from).push(edge.to)
+  }
 
-function idOrder(id) {
-  const value = Number(String(id).replace(/^n/, ''))
-  return Number.isFinite(value) ? value : 0
-}
+  const hasIncoming = new Set(journey.edges.map((edge) => edge.to))
+  const ordered = Object.values(journey.realms).sort((a, b) => a.order - b.order)
+  const starts = ordered.filter((realm) => !hasIncoming.has(realm.id))
 
-/**
- * The rows between the start of a journey and a given node — what to
- * highlight when the viewer is deciding where to jump back to.
- */
-export function ancestryOf(rows, nodeId) {
-  const index = rows.findIndex((row) => row.id === nodeId)
-  if (index < 0) return []
+  const queue = [...(starts.length > 0 ? starts : ordered.slice(0, 1))].map((realm) => realm.id)
+  for (const id of queue) ranks.set(id, 0)
 
-  const line = new Set([nodeId])
-  let depth = rows[index].depth
-
-  for (let cursor = index - 1; cursor >= 0 && depth > 0; cursor -= 1) {
-    if (rows[cursor].depth < depth) {
-      line.add(rows[cursor].id)
-      depth = rows[cursor].depth
+  while (queue.length > 0) {
+    const id = queue.shift()
+    for (const next of outgoing.get(id) ?? []) {
+      if (ranks.has(next)) continue // a shorter route already claimed it
+      ranks.set(next, ranks.get(id) + 1)
+      queue.push(next)
     }
   }
 
-  return [...line]
+  // Anything the walk never reached — an island left by a jump.
+  for (const realm of ordered) {
+    if (!ranks.has(realm.id)) ranks.set(realm.id, 0)
+  }
+
+  return ranks
+}
+
+function groupByRank(journey, ranks) {
+  const byRank = new Map()
+  for (const realm of Object.values(journey.realms).sort((a, b) => a.order - b.order)) {
+    const rank = ranks.get(realm.id)
+    if (!byRank.has(rank)) byRank.set(rank, [])
+    byRank.get(rank).push(realm)
+  }
+  return byRank
+}
+
+/** Ranks run down the panel; realms within a rank sit side by side. */
+function place(byRank) {
+  const positions = new Map()
+  const widest = Math.max(...[...byRank.values()].map((realms) => realms.length))
+
+  for (const [rank, realms] of byRank) {
+    const rowWidth = realms.length * NODE_WIDTH + (realms.length - 1) * COLUMN_GAP
+    const fullWidth = widest * NODE_WIDTH + (widest - 1) * COLUMN_GAP
+    // Centred, so a journey that narrows reads as narrowing rather than as
+    // drifting left.
+    const offset = (fullWidth - rowWidth) / 2
+
+    realms.forEach((realm, index) => {
+      positions.set(realm.id, {
+        x: offset + index * (NODE_WIDTH + COLUMN_GAP),
+        y: rank * (NODE_HEIGHT + RANK_GAP),
+      })
+    })
+  }
+
+  return positions
+}
+
+function countRoutesIn(journey) {
+  const counts = new Map()
+  for (const edge of journey.edges) {
+    counts.set(edge.to, (counts.get(edge.to) ?? 0) + 1)
+  }
+  return counts
+}
+
+/** The realms on the way to one, following edges backwards. */
+export function routeInto(journey, id) {
+  const incoming = new Map()
+  for (const edge of journey.edges) {
+    if (!incoming.has(edge.to)) incoming.set(edge.to, [])
+    incoming.get(edge.to).push(edge.from)
+  }
+
+  const seen = new Set([id])
+  const queue = [id]
+  while (queue.length > 0) {
+    for (const previous of incoming.get(queue.shift()) ?? []) {
+      if (seen.has(previous)) continue
+      seen.add(previous)
+      queue.push(previous)
+    }
+  }
+
+  return [...seen]
 }
