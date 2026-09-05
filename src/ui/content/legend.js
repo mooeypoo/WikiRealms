@@ -1,4 +1,4 @@
-import { CITATION_LUSHNESS } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from '../../engine/generation/config.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 
@@ -66,8 +66,16 @@ export const FEATURE_LEGEND = [
   },
   {
     id: 'snow',
-    label: 'Snow and ice are altitude',
-    detail: 'Height alone, plus the polar caps every world has.',
+    // "Altitude" alone left the chain broken in the middle: it named the
+    // cause of the snow without saying what causes the altitude, so the
+    // reader was told a fact about a fictional mountain rather than
+    // something about their article.
+    label: 'Rock and snow are how much was written',
+    detail: `A section's own prose is what raises its peak. Push past ${percent(
+      BIOME_THRESHOLDS.mountainMinHeight,
+    )} of the world's height and the ground goes to bare rock; past ${percent(
+      BIOME_THRESHOLDS.snowMinHeight,
+    )} and it takes snow. The polar ice is the exception — every world has it.`,
   },
 ]
 

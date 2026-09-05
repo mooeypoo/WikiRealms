@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import Legend from '../../../src/ui/components/Legend.vue'
-import { CITATION_LUSHNESS } from '../../../src/engine/generation/config.js'
+import { BIOME_THRESHOLDS, CITATION_LUSHNESS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 
@@ -46,6 +46,18 @@ describe('Legend', () => {
 
     expect(text).toContain(`${Math.round(CITATION_LUSHNESS.desertThreshold * 100)}%`)
     expect(text).toContain(`${Math.round(CITATION_LUSHNESS.woodlandThreshold * 100)}%`)
+  })
+
+  it('says what causes the height, not just what sits on it', () => {
+    // "Snow is altitude" names the cause of the snow without saying what
+    // causes the altitude — a fact about a fictional mountain rather than
+    // something about the reader's article.
+    mountLegend()
+    const text = document.querySelector('.legend__features').textContent
+
+    expect(text).toContain('how much was written')
+    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.mountainMinHeight * 100)}%`)
+    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.snowMinHeight * 100)}%`)
   })
 
   it('points at features that are actually on screen', () => {

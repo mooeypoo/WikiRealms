@@ -24,6 +24,11 @@ export const ICONS = {
   map: '<path d="M3 6.5l6-2 6 2 6-2v13l-6 2-6-2-6 2z" /><path d="M9 4.5v13" /><path d="M15 6.5v13" />',
   layers:
     '<path d="M12 3l9 5-9 5-9-5 9-5z" /><path d="M3 13l9 5 9-5" /><path d="M3 17.5l9 5 9-5" />',
+  // A map key: swatch, label, three times over. Deliberately NOT a question
+  // mark — "?" is bound to the About dialog, and an icon that looks like the
+  // help key but does something else is a trap.
+  legend:
+    '<rect x="3.5" y="5" width="4.5" height="4.5" rx="1" /><path d="M11.5 7.25h9" /><rect x="3.5" y="9.75" width="4.5" height="4.5" rx="1" /><path d="M11.5 12h9" /><rect x="3.5" y="14.5" width="4.5" height="4.5" rx="1" /><path d="M11.5 16.75h9" />',
   crosshair:
     '<circle cx="12" cy="12" r="7.5" /><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4" />',
   trail:

@@ -12,6 +12,8 @@ export const infoHubContent = {
         <div class="info-hub__feature"><strong>Portals:</strong> each distinct outbound Wikipedia link becomes a route to another article's world.</div>
       </div>
       <p>Search for any English Wikipedia article to generate its world.</p>
+      <p>To see what the colours and markers of a world mean, open the legend from the
+      key icon beside the view controls, or press <kbd>L</kbd>.</p>
     `,
   },
   howItWorks: {

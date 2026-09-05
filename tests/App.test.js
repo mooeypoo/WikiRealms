@@ -1131,3 +1131,32 @@ describe('App legend', () => {
     expect(document.querySelector('.legend')).toBeNull()
   })
 })
+
+describe('App legend affordance', () => {
+  afterEach(() => {
+    localStorage.clear()
+    history.replaceState(null, '', '/')
+    resetOverlays()
+    resetKeymap()
+  })
+
+  it('opens from the helm, not only from the keyboard', async () => {
+    searchWikipediaTitles.mockResolvedValue([{ title: 'Saturn', description: '', url: '' }])
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1', title: 'Saturn', summary: 'Sixth planet.', latestRevisionId: 1,
+      categories: [], links: [], images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    const wrapper = mount(App, { attachTo: document.body })
+    await typeSearch('Sat')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    firstResult().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    await wrapper.find('[aria-label="What am I looking at?"]').trigger('click')
+
+    expect(document.querySelector('.legend')).not.toBeNull()
+  })
+})

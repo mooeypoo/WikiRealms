@@ -416,6 +416,7 @@ watch([graph, articleCache], () => {
       :can-recenter="rendersInWebGL"
       @update:world-shape="setWorldShape"
       @recenter="recenterView"
+      @legend="toggleLegend"
     />
 
 

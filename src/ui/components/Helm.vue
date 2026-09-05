@@ -22,7 +22,7 @@ defineProps({
   canRecenter: { type: Boolean, default: true },
 })
 
-defineEmits(['update:worldShape', 'recenter'])
+defineEmits(['update:worldShape', 'recenter', 'legend'])
 
 const SHAPES = [
   { value: 'sphere', label: 'Planet', icon: 'globe' },
@@ -59,6 +59,25 @@ const SHAPES = [
       @click="$emit('recenter')"
     >
       <Icon name="crosshair" :size="18" />
+    </button>
+
+    <!-- The legend belongs beside the world rather than among the app's
+         utility icons: it explains what you are looking AT, which is the
+         same subject as the rest of this cluster. Without it the legend
+         was a keyboard secret, which no other summoned surface is.
+
+         Its icon is a map key rather than a question mark: "?" already
+         opens the About dialog, and two different things behind the same
+         glyph is worse than a shortcut nobody finds. -->
+    <button
+      class="helm__recenter"
+      type="button"
+      aria-label="What am I looking at?"
+      title="What am I looking at?"
+      :disabled="disabled"
+      @click="$emit('legend')"
+    >
+      <Icon name="legend" :size="18" />
     </button>
   </div>
 </template>

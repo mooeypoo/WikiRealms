@@ -49,9 +49,22 @@ describe('Helm', () => {
 
     await wrapper.findAll('[role="radio"]')[1].trigger('click')
     await wrapper.find('[aria-label="Recentre the view"]').trigger('click')
+    await wrapper.find('[aria-label="What am I looking at?"]').trigger('click')
 
     expect(wrapper.emitted('update:worldShape')).toBeUndefined()
     expect(wrapper.emitted('recenter')).toBeUndefined()
+    expect(wrapper.emitted('legend')).toBeUndefined()
+  })
+
+  it('offers the legend, so it is not a keyboard secret', async () => {
+    // Every other summoned surface has a control; this one had only `L`.
+    // It sits here rather than in the scrim because it explains the WORLD,
+    // which is what the rest of this cluster is about.
+    const wrapper = mountHelm()
+
+    await wrapper.find('[aria-label="What am I looking at?"]').trigger('click')
+
+    expect(wrapper.emitted('legend')).toHaveLength(1)
   })
 
   it('hides recentring where there is no camera to recentre', () => {
@@ -61,12 +74,14 @@ describe('Helm', () => {
 
     expect(wrapper.find('[aria-label="Recentre the view"]').exists()).toBe(false)
     expect(wrapper.findAll('[role="radio"]')).toHaveLength(2)
+    // The legend still applies: the flat canvas needs explaining too.
+    expect(wrapper.find('[aria-label="What am I looking at?"]').exists()).toBe(true)
   })
 
   it('labels its controls with drawn icons and real text', () => {
     const wrapper = mountHelm()
 
-    expect(wrapper.findAll('svg')).toHaveLength(3)
+    expect(wrapper.findAll('svg')).toHaveLength(4)
     expect(wrapper.text()).not.toMatch(/\p{Extended_Pictographic}/u)
   })
 })
