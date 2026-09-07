@@ -32,7 +32,7 @@ function update(key, value) {
 
 function reset() {
   emit('update:preferences', {
-    worldShape: 'sphere',
+    worldShape: 'flat',
     rendering: 'auto',
     travelAnimation: true,
     showSections: true,

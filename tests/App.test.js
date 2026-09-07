@@ -726,13 +726,23 @@ describe('App view axis', () => {
     withWorld.unmount()
   })
 
+  it('opens on the flat map', async () => {
+    // Pinned so moving the default is a deliberate edit rather than a
+    // silent one. The map shows the whole article at once; the planet can
+    // only ever show the half of it facing you.
+    const wrapper = await mountWithWorld()
+
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    wrapper.unmount()
+  })
+
   it('changes world shape from the helm and remembers it', async () => {
     const wrapper = await mountWithWorld()
 
-    await wrapper.findAll('.helm [role="radio"]')[1].trigger('click')
+    await wrapper.findAll('.helm [role="radio"]')[0].trigger('click')
 
-    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
-    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).worldShape).toBe('flat')
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Planet')
+    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).worldShape).toBe('sphere')
     wrapper.unmount()
   })
 
@@ -740,12 +750,20 @@ describe('App view axis', () => {
     // Keys 1 and 3 used to switch RENDERER, while shape hid in settings.
     const wrapper = await mountWithWorld()
 
-    const event = new KeyboardEvent('keydown', { key: 'v', bubbles: true, cancelable: true })
-    Object.defineProperty(event, 'target', { value: document.body })
-    window.dispatchEvent(event)
-    await flushPromises()
+    const press = async () => {
+      const event = new KeyboardEvent('keydown', { key: 'v', bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'target', { value: document.body })
+      window.dispatchEvent(event)
+      await flushPromises()
+    }
+    const active = () => wrapper.find('.helm [role="radio"][aria-checked="true"]').text()
 
-    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    await press()
+    expect(active()).toBe('Planet')
+    // Both ways on the one key, so it is a toggle rather than a switch
+    // that only moves off the default.
+    await press()
+    expect(active()).toBe('Flat')
     wrapper.unmount()
   })
 

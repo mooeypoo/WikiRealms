@@ -16,11 +16,18 @@ export const useUIState = () => {
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';
   const preferences = reactive({
-    // How the 3D view presents the world: 'sphere' (a planet you orbit) or
-    // 'flat' (the same world as a map you fly over). Purely a rendering
-    // choice — both views show the identical generated world, so
-    // switching never regenerates terrain.
-    worldShape: 'sphere',
+    // How the 3D view presents the world: 'flat' (a map you fly over) or
+    // 'sphere' (a planet you orbit). Purely a rendering choice — both
+    // views show the identical generated world, so switching never
+    // regenerates terrain.
+    //
+    // Flat is the default. The planet held it for a while and reads
+    // better as an arrival, but it can only ever show half a world at
+    // once: every section on the far side is behind the horizon, and the
+    // ground detail that carries the article — which section cites well,
+    // where the trees thin out — is spread over all of it. The map shows
+    // the whole article at once.
+    worldShape: 'flat',
     // How the world is drawn, as opposed to what shape it is: 'high' forces
     // WebGL, 'low' forces the 2D canvas fallback, 'auto' picks by capability.
     rendering: 'auto',

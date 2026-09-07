@@ -61,9 +61,11 @@ const props = defineProps({
   showPortals: { type: Boolean, default: true },
   showSections: { type: Boolean, default: true },
   showFoliage: { type: Boolean, default: true },
-  // 'sphere' | 'flat' — a pure presentation choice over the SAME generated
-  // world. Switching rebuilds the scene; it never regenerates terrain.
-  worldShape: { type: String, default: 'sphere' },
+  // 'flat' | 'sphere' — a pure presentation choice over the SAME
+  // generated world. Switching rebuilds the scene; it never regenerates
+  // terrain. Defaults to match useUIState's stored preference, so a
+  // mount without the prop shows what the app shows.
+  worldShape: { type: String, default: 'flat' },
 })
 
 const emit = defineEmits(['portal-click', 'section-click'])
@@ -107,7 +109,7 @@ let ambientLight = null
 // Active grid → 3D mapping, re-resolved on every rebuildScene from the
 // worldShape prop. Every position in this component goes through it, so
 // the flat map and the planet share one code path.
-let projection = getProjection('sphere')
+let projection = getProjection('flat')
 
 // Marker geometry is authored in the mesh's local frame with +Z as "up".
 // On the planet each marker rotates that axis onto its own surface
