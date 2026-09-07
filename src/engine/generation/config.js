@@ -381,6 +381,42 @@ export const LUSHNESS = Object.freeze({
   articleRateSaturation: 0.6,
   ceilingFloor: 0.18,
 
+  // How sharply the per-cell lushness blend favours the nearest peak
+  // (see sectionTerrain.js pass 1). Each peak's weight at a cell is its
+  // Gaussian contribution raised to this power.
+  //
+  // The blend exists to make the boundary between a subsection's ground
+  // and its parent's a few cells wide rather than a hard contour — the
+  // same artefact ALTITUDE was restructured to remove from the rock
+  // line. It is NOT there to average a section with its neighbours: at 1
+  // it would, and a jungle subsection inside a steppe parent would come
+  // out meadow, which is true of neither.
+  //
+  // Chosen against the criterion that matters: EVERY section's own band
+  // has to appear somewhere on the map, or that section is invisible and
+  // hovering it contradicts the ground — the bug this blend was built to
+  // fix. Measured on a deliberately hostile shape, where each parent has
+  // one very lush child and one barren one:
+  //
+  //   k=10   2 of 7 peaks have no ground in their own band
+  //   k=16   0 of 7            gradient 6.1% of land
+  //   k=24   0 of 7            gradient 4.2%
+  //   k=40   0 of 7            gradient 2.7%
+  //
+  // 16 is the lowest that clears it, and lowest is what to want: the
+  // gradient IS the soft boundary, and sharpening past the criterion
+  // just walks back toward the hard edge blending was chosen to avoid.
+  //
+  // KNOWN, and inherent to blending rather than to this value: a section
+  // with a very different immediate neighbour has its reading pulled
+  // about 0.2 toward that neighbour, and no amount of sharpening fixes
+  // it — the hostile shape's worst peak sits 0.199 from the nearest
+  // ground at k=16 and 0.182 at k=24, because the two summits are only a
+  // few cells apart. The BAND still lands correctly; it is the
+  // continuous value, which drives foliage density and the rock tint,
+  // that compresses.
+  blendSharpness: 16,
+
   // Smallest lushness a section with ANY citation can be given, so that
   // exactly 0 is reserved for "cites nothing" (see lushness.js). Without
   // this the bottom of the relative scale collapses into the dunes and

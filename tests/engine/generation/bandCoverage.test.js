@@ -215,6 +215,24 @@ const SHAPES = {
       { ...section('Discography', 0, RATE.none), list: true, items: 14, cites: 2 },
     ],
   },
+  // Deliberately hostile to the lushness blend: every parent has one very
+  // lush child and one barren one, sitting a few cells apart. This is the
+  // shape that decides LUSHNESS.blendSharpness, because it is where a
+  // section's reading is most strongly pulled toward its neighbour's.
+  hostile: {
+    lead: { sentences: 8, cites: 5, links: ['A'] },
+    sections: [
+      {
+        ...section('Overview', 30, RATE.typical, 0.35),
+        children: [section('Deep dive', 18, RATE.typical, 1.9), section('Aside', 12, RATE.typical, 0.25)],
+      },
+      {
+        ...section('History', 40, RATE.typical, 1.0),
+        children: [section('Origins', 20, RATE.typical, 1.7), section('Decline', 16, RATE.typical, 0.4)],
+      },
+      section('Legacy', 22, RATE.typical, 1.1),
+    ],
+  },
   // Well cited throughout, which is what should unlock the top bands.
   featured: {
     lead: { sentences: 8, cites: 7, links: ['A'] },
@@ -321,19 +339,87 @@ describe('band coverage', () => {
     }
   })
 
-  it('gaps only where the article has no section to fill them', () => {
-    // The converse, so the reasoning above cannot rot: every band a shape
-    // skips must be a band no section of it lands in. This holds by
-    // construction today — a cell takes its owning section's band — and
-    // this is what would notice if that stopped being true.
+  it('invents no band outside the range its sections actually occupy', () => {
+    // The converse, so the reasoning above cannot rot.
+    //
+    // This used to assert something stronger — that every band on the map
+    // belongs to some section — and that was true while a cell took its
+    // owning section's band outright. It is not true now that lushness is
+    // BLENDED across the boundary between a subsection and its parent: a
+    // steppe subsection inside a meadow parent puts a few cells of light
+    // vegetation in the transition, and no section is light vegetation.
+    // That is the gradient doing its job, not a defect.
+    //
+    // What must still hold is that the gradient stays INSIDE the range
+    // its sections span. A band above the best-cited section or below the
+    // worst would be a claim the article does not support.
     for (const [name, m] of Object.entries(measured)) {
       const { world } = worldFor(SHAPES[name])
-      const sectionBands = new Set(world.terrain.peaks.map((peak) => lushnessBand(peak.lushness)))
+      const sectionBands = world.terrain.peaks.map((peak) => lushnessBand(peak.lushness))
+      const lowest = Math.min(...sectionBands)
+      const highest = Math.max(...sectionBands)
 
       for (const band of m.present) {
-        expect(sectionBands.has(band), `${name}: ${BAND_NAMES[band]} on no section`).toBe(true)
+        expect(band, `${name}: ${BAND_NAMES[band]} above every section`).toBeLessThanOrEqual(highest)
+        expect(band, `${name}: ${BAND_NAMES[band]} below every section`).toBeGreaterThanOrEqual(lowest)
       }
     }
+  })
+
+  it('puts every section’s own band on the ground, subsections included', () => {
+    // The reported bug, pinned. Lushness came from a cell's TOP-LEVEL
+    // owner, so a subsection painted NOTHING: measured on a fixture whose
+    // children differ sharply from their parents, all four subsections
+    // owned zero cells and all four fell in a different band from the one
+    // drawn over them. Since halos and tooltips resolve subsections,
+    // hovering one contradicted the ground beneath it every time.
+    //
+    // Asserted on the BAND rather than on the scalar, because the band is
+    // what a reader sees and what the tooltip names. The scalar is pulled
+    // a little toward a section's neighbours by the blend, and how far
+    // depends on how close the two summits happen to land — which is a
+    // function of the seed, so a tolerance on the scalar would be a test
+    // that passes or fails by layout.
+    for (const name of ['varied', 'hostile']) {
+      const terrain = worldFor(SHAPES[name]).world.terrain
+      const painted = new Set()
+      for (let i = 0; i < terrain.biomeMap.length; i++) {
+        if (terrain.heightMap[i] <= BIOME_THRESHOLDS.beachMaxHeight) continue
+        painted.add(terrain.biomeMap[i])
+      }
+
+      expect(terrain.peaks.some((peak) => (peak.depth ?? 1) > 1)).toBe(true)
+
+      for (const peak of terrain.peaks) {
+        const band = lushnessBand(peak.lushness)
+        expect(painted.has(band), `${name}: ${peak.title} (${BAND_NAMES[band]}) has no ground`).toBe(true)
+      }
+    }
+  })
+
+  it('keeps the ground reading as real section values, not as an average', () => {
+    // The blend is there to soften a boundary, not to mix sections
+    // together. If it mixed, a jungle subsection inside a steppe parent
+    // would come out meadow, which is true of neither — so most land has
+    // to sit ON some section's actual reading, with gradients only at the
+    // edges. Measured across blend sharpness: 7.4% of land in a gradient
+    // at k=4, 3.3% at k=10, 1.2% at k=24.
+    const terrain = worldFor(SHAPES.varied).world.terrain
+    const sectionValues = terrain.peaks.map((peak) => peak.lushness)
+    let land = 0
+    let inGradient = 0
+
+    for (let i = 0; i < terrain.lushnessMap.length; i++) {
+      if (terrain.heightMap[i] <= BIOME_THRESHOLDS.beachMaxHeight) continue
+      land += 1
+      const nearest = Math.min(...sectionValues.map((value) => Math.abs(value - terrain.lushnessMap[i])))
+      if (nearest > 0.05) inGradient += 1
+    }
+
+    expect(inGradient / land).toBeLessThan(0.1)
+    // And some gradient must exist, or the blend has become a hard edge
+    // and the choice to blend at all was pointless.
+    expect(inGradient).toBeGreaterThan(0)
   })
 
   it('measures a list-heavy section by its items rather than as uncited', () => {
