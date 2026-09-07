@@ -10,8 +10,19 @@ import {
   relativeRateToUnit,
 } from '../../../src/engine/generation/lushness.js'
 
-/** A well-cited article: 0.35 citations per sentence saturates the ceiling. */
-const WELL_CITED = 0.35
+/**
+ * An article well cited enough to use the whole scale — read from config
+ * rather than written down, because the saturation point has moved once
+ * already. It was 0.35 until live measurement showed real articles run
+ * 0.185 to 0.922 citations per sentence, and every test that had spelled
+ * 0.35 out started asserting against a throttled ceiling.
+ */
+const WELL_CITED = LUSHNESS.articleRateSaturation
+
+/** Citations for a section citing at exactly WELL_CITED, for `sentences`. */
+function atArticleRate(sentences) {
+  return Math.round(sentences * WELL_CITED)
+}
 
 describe('computeArticleCitationRate', () => {
   it('is a ratio of totals', () => {
@@ -115,7 +126,7 @@ describe('computeLushnessCeiling', () => {
 
 describe('computeSectionLushness', () => {
   it('puts a section citing at its article’s own rate mid-scale', () => {
-    const lushness = computeSectionLushness({ citations: 14, sentences: 40 }, WELL_CITED)
+    const lushness = computeSectionLushness({ citations: atArticleRate(40), sentences: 40 }, WELL_CITED)
 
     expect(lushness).toBeCloseTo(0.5, 1)
   })
@@ -148,7 +159,7 @@ describe('computeSectionLushness', () => {
     // The absolute ceiling: internal variation alone must not make a
     // barely-sourced article look as green as a featured one.
     const bestOfPoor = computeSectionLushness({ citations: 4, sentences: 40 }, 0.02)
-    const averageOfGood = computeSectionLushness({ citations: 14, sentences: 40 }, WELL_CITED)
+    const averageOfGood = computeSectionLushness({ citations: atArticleRate(40), sentences: 40 }, WELL_CITED)
 
     expect(bestOfPoor).toBeLessThan(averageOfGood)
   })
@@ -171,7 +182,7 @@ describe('computeSectionLushness', () => {
     // The property the whole rewrite is for. 40 sentences, walking the
     // citation count up one at a time.
     let previous = computeSectionLushness({ citations: 1, sentences: 40 }, WELL_CITED)
-    for (let citations = 2; citations <= 60; citations++) {
+    for (let citations = 2; citations <= 80; citations++) {
       const current = computeSectionLushness({ citations, sentences: 40 }, WELL_CITED)
       expect(current).toBeGreaterThanOrEqual(previous)
       expect(current - previous).toBeLessThan(0.1)
@@ -234,10 +245,11 @@ describe('band coverage', () => {
       { citations: 10, sentences: 30 },
       { citations: 20, sentences: 30 },
     ]
+    // The base rate has to be AT or above saturation, or scaling up also
+    // lifts the ceiling and the bands legitimately move.
     const bandsAt = (multiplier) => {
       const scaled = spread.map((s) => ({ citations: s.citations * multiplier, sentences: s.sentences }))
-      const rate = 0.35 * multiplier
-      return scaled.map((s) => lushnessBand(computeSectionLushness(s, rate)))
+      return scaled.map((s) => lushnessBand(computeSectionLushness(s, WELL_CITED * multiplier)))
     }
 
     expect(bandsAt(2)).toEqual(bandsAt(1))

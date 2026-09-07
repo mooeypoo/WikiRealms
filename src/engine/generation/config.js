@@ -311,8 +311,21 @@ export const WATER_LEVEL = Object.freeze({
  * standing in a world — was lost.
  *
  * Every value here is a tunable of the continuous curve, not a cliff.
- * NOT YET CALIBRATED against real articles: see the open questions in
- * docs/implementation-plans/citation-density-and-elevation-2026-09-07.md.
+ *
+ * CALIBRATED against live English Wikipedia — see
+ * scripts/calibrate-bands.mjs, which is how these numbers were chosen and
+ * how to re-choose them. Measured over ten articles from a stub to a
+ * featured one:
+ *
+ *   article rate (citations per sentence)  0.185 to 0.922, median 0.640
+ *   within-article spread                  0.00 to 3.61 doublings, median 1.01
+ *
+ * The first of those figures is nearly double what this plan estimated
+ * before anyone measured it. Real Wikipedia cites far more densely than
+ * "0.2 to 0.4 even for well-cited articles" — Jupiter runs at 0.92 and
+ * Barack Obama at 0.85 — which had put articleRateSaturation below the
+ * rate of the WORST article in the sample, so the absolute ceiling never
+ * engaged for anything at all.
  */
 export const LUSHNESS = Object.freeze({
   // Step 1, shrinkage. A section's rate is pulled toward the article's
@@ -324,26 +337,48 @@ export const LUSHNESS = Object.freeze({
   shrinkageSentences: 6,
 
   // Step 3, how far from the article's own rate the scale reaches, in
-  // doublings. At 0.8, a section cited 2^0.8 = 1.74x the article's own
-  // rate saturates the top of the scale, and one cited 1/1.74x saturates
+  // doublings. At 0.7, a section cited 2^0.7 = 1.62x the article's own
+  // rate saturates the top of the scale, and one cited 1/1.62x saturates
   // the bottom. Doublings rather than a linear ratio because "twice as
   // cited" is the same perceptual step wherever it starts.
   //
-  // Chosen by sweeping 0.7 to 1.5 against the story fixture and counting
-  // how many bands a world actually shows: at 1.25 and above the top band
-  // was unreachable by any section the fixture contains, and everything
-  // piled into two bands. Deliberately narrow, because the comparison is
-  // WITHIN one article, where the spread is small — the shrinkage above
-  // is what stops that sensitivity amplifying noise.
-  spanDoublings: 0.8,
+  // Chosen by sweeping 0.5 to 1.5 against ten live articles and counting
+  // how many of the six bands each world actually shows. Mean bands per
+  // article: 3.63 at 0.5, 3.75 at 0.6, 3.88 at 0.7, 3.50 at 0.8, 3.38 at
+  // 1.0, 2.50 at 1.5. Wide scales fail the way the ORIGINAL system did —
+  // everything piles into two or three bands — because the median
+  // within-article spread is only about one doubling. Narrow is right
+  // here, and the shrinkage above is what stops that sensitivity
+  // amplifying noise.
+  //
+  // The articles with a much wider spread (Cyclone Tracy at 3.61
+  // doublings, Cassini Division at 2.90) do clip a section to each end of
+  // the scale. That is the intended trade: widening the scale to fit them
+  // would flatten every median article, and a section cited a fifth as
+  // often as its neighbours has genuinely bottomed out.
+  spanDoublings: 0.7,
 
   // Step 4, the absolute ceiling. An article whose overall rate reaches
   // this many citations per sentence can use the full scale; below it,
-  // the scale is compressed toward the floor, so a barely-cited
-  // article's best section cannot read as lush. This replaces a binary
-  // switch at 0.15 that made two articles either side of it render
-  // visibly differently.
-  articleRateSaturation: 0.35,
+  // the scale is compressed toward the floor, so a barely-cited article's
+  // best section cannot read as lush. This replaces a binary switch at
+  // 0.15 that made two articles either side of it render visibly
+  // differently.
+  //
+  // 0.6, just under the measured median of 0.640, so a typical article
+  // gets nearly the whole scale and a poorly-sourced one is held down.
+  // Was 0.35, which is BELOW the rate of the worst article in the sample
+  // (a list article at 0.185) — the ceiling was therefore inert, and
+  // "List of Doctor Who episodes", with twelve references across
+  // sixty-five sentences, could reach woodland. At 0.6 its ceiling is
+  // 0.37 and it tops out in light vegetation, which is what it is.
+  //
+  // Saturation barely moves the band COUNT, because it scales every
+  // section of an article together: at span 0.7 the mean is 3.88 bands at
+  // both 0.35 and 0.6. It is chosen on what it is FOR — not letting a
+  // thinly-sourced article look well sourced — which band counting cannot
+  // see.
+  articleRateSaturation: 0.6,
   ceilingFloor: 0.18,
 
   // Smallest lushness a section with ANY citation can be given, so that

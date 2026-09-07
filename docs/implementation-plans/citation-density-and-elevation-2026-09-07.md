@@ -303,15 +303,100 @@ is a prerequisite for judging the rest by eye.
   alike; the legend's stated numbers match what the engine computes.
 - Per-world memory does not increase.
 
-## Open questions
+## Open questions — resolved
 
-- **Real-article calibration.** The rate sweep above is synthetic-fixture data.
-  Before tuning cut points, run the band histogram against a handful of real
-  articles — a stub, a list article, a GA, a featured article — to find where
-  real Wikipedia prose actually sits. Working suspicion: 0.2–0.4 cps even for
-  well-cited articles, which would mean today's woodland threshold of 0.5 is
-  unreachable by legitimate prose. Not yet verified against a live article.
-- **Shrinkage constant `k`.** Proposed at 6 sentences. Wants a look at the
-  real-article distribution of section lengths before being fixed.
-- **Absolute saturation point.** Proposed at 0.35 cps for the ceiling's
-  `smoothstep`. Same dependency as above.
+All three were the same dependency, and `scripts/calibrate-bands.mjs` closed
+them by measuring live English Wikipedia. The environment turned out to permit
+`en.wikipedia.org`, so this did not have to wait.
+
+**Real-article calibration.** Measured over eight to ten articles from a list
+article to a featured one:
+
+| | min | median | max |
+|---|---|---|---|
+| article rate (citations/sentence) | 0.185 | 0.640 | 0.922 |
+| within-article spread (doublings) | 0.00 | 1.01 | 3.61 |
+
+**The working suspicion above was wrong, by about a factor of two.** Real
+Wikipedia cites far more densely than "0.2–0.4 cps even for well-cited
+articles" — Jupiter runs at 0.922 and Barack Obama at 0.849. Every consequence
+of that estimate had to be revisited.
+
+**Absolute saturation point.** Proposed at 0.35, shipped at **0.6**. At 0.35 it
+sat *below the rate of the worst article in the sample*, so the ceiling never
+engaged for anything and "List of Doctor Who episodes" — twelve references
+across sixty-five sentences — could reach woodland. At 0.6 it tops out in
+steppe, which is what it is. Saturation barely moves the band count, because it
+scales every section of an article together; it is chosen on what it is *for*.
+
+**Shrinkage constant `k`.** Proposed at 6 sentences, shipped at **6**. The
+measurement supports it: Cyclone Tracy's "Records and meteorological
+information" is 2 sentences carrying 5 citations, a raw rate 6.0× its article's,
+and shrinkage lands it at 0.82 rather than clipping it to 1.0. Small sections
+are held back without being flattened.
+
+**Scale width.** Not an open question in the original plan, but the measurement
+moved it. Swept 0.5 to 1.5 against the live articles, counting bands per world:
+mean 3.63 at 0.5, 3.75 at 0.6, **3.88 at 0.7**, 3.50 at 0.8, 3.38 at 1.0, 2.50
+at 1.5. Shipped at 0.7, against the 0.8 chosen in Phase 2 against the story
+fixture — the direction of that sweep was right and the value slightly
+overshot.
+
+## As built
+
+Where the implementation departed from the plan above, and why.
+
+**Six bands, but dunes is not the bottom of the scale.** The plan cut the
+scalar into six even sixths. That merged "cites nothing" into "cites very
+little" — measured, a section with one citation in twenty-two sentences
+computed to exactly 0 and rendered as bare dunes, a false statement about text
+that had a citation. Shipped: 0 is a *reserved* value meaning "cites nothing",
+and everything above it is cut into five even fifths among the sections that do
+cite. `LUSHNESS.citedFloor` keeps a poorly-cited section off the reserved
+value.
+
+**Rock is two rocks.** The plan blended one rock colour over the band colour.
+Shipped: rock lerps between a dry warm scree and a damp mossy stone by the
+section's lushness, so even at *complete* cover a summit still says what its
+section cites. That is what makes the phase's goal — a citation signal that
+survives to the top — hold at full cover rather than only at partial.
+
+**`BIOME.MOUNTAIN` is deleted.** The plan kept `biomeMap` and derived rock/snow
+as an overlay. With rock as cover rather than ground, nothing produces a
+mountain id, and a dead enum member is how phantom test references start (three
+were found in passing tests during this work).
+
+**Altitude bands were placed against measured land height**, not the plan's
+sketch: land runs p50 0.50, p75 0.60, p90 0.72, p99 0.96, so the first cut's
+treeline at 0.5 was thinning foliage on half the world rather than on
+mountains.
+
+**Vegetation came in well under the budget.** The plan estimated 20,000
+instances and 1.5 MB. Measured: 8,000 understory sprites plus 1,800 canopy
+instances, 117k triangles against a terrain mesh that is already 262k, in 0.23
+MB and 7 to 8 draw calls.
+
+**The story fixture was made representative**, which the plan did not call for.
+It emitted one paragraph per section with empty citation markers, so it could
+not exhibit either sentence-counting bug the parser was built against. A
+fixture that cannot produce the failures the code survives is not exercising
+the code.
+
+## Still unverified
+
+Nothing in this work has been checked in a browser. Every figure in it is a
+cell count, an RGB distance, a bounding box or a triangle estimate, and none of
+those establish that the result *looks* like anything. Specifically open:
+
+- whether `MeshStandardMaterial` with `flatShading` reads as foliage or as
+  faceted plastic under the current lighting;
+- whether the frame rate holds with ~10,000 vegetation objects on a real GPU
+  (the triangle counts are computed from segment counts, not profiled);
+- whether `SPHERE_VIEW.foliageScale` of 0.42 is right, or the canopy reads as
+  moss from the closest orbit the camera allows;
+- whether the emergent layer is legible above a closed canopy rather than
+  merely taller in the data;
+- whether `ROCK_MOSSY` reads as stone rather than as dark grass on a lit,
+  shaded surface;
+- whether the tooltip's longer chips ("far above the article" against "lush")
+  reflow badly in an 18rem tooltip at the narrowest width.
