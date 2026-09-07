@@ -440,13 +440,14 @@ function buildFoliage(world, heightScale) {
         world.seed,
         2,
       )
-      const { variantRoll: offsetRoll, densityRoll: tintRoll } = cellFoliageRolls(
+      const { variantRoll: offsetAngleRoll, densityRoll: offsetRadiusRoll } = cellFoliageRolls(
         cell.gridX,
         cell.gridY,
         world.seed,
         3,
       )
-      const transform = canopyInstanceTransform(scaleRoll, rotationRoll, offsetRoll)
+      const { variantRoll: tintRoll } = cellFoliageRolls(cell.gridX, cell.gridY, world.seed, 4)
+      const transform = canopyInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll)
 
       const local = projection.toLocal(
         cell.gridX + transform.offsetX,

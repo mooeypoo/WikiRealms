@@ -281,7 +281,7 @@ describe('canopyInstanceTransform', () => {
   })
 
   it('offsets a tree off the cell centre, so a wood is not an orchard', () => {
-    const offsets = [0, 0.25, 0.5, 0.75].map((roll) => canopyInstanceTransform(0.7, 0, roll))
+    const offsets = [0, 0.25, 0.5, 0.75].map((roll) => canopyInstanceTransform(0.7, 0, roll, 0.6))
     const distances = offsets.map((o) => Math.hypot(o.offsetX, o.offsetY))
 
     for (const distance of distances) {
@@ -293,8 +293,26 @@ describe('canopyInstanceTransform', () => {
     expect(new Set(offsets.map((o) => Math.round(o.offsetX * 1000))).size).toBeGreaterThan(1)
   })
 
-  it('keeps the offset inside half a cell, so trees stay on their cell', () => {
-    expect(CANOPY_JITTER.maxOffsetCells).toBeLessThan(0.5)
+  it('keeps the offset inside half the canopy stride', () => {
+    // Sized against the SPACING between trees, not against one cell: at
+    // a stride of 2 an offset of up to 1 fills the plane continuously,
+    // and beyond that a tree crosses into the next sampled cell's
+    // territory, which had its own chance to grow one.
+    expect(CANOPY_JITTER.maxOffsetCells).toBeLessThanOrEqual(FOLIAGE_SAMPLING.canopyStride / 2)
+    // And large enough to actually break the lattice. At 0.42 against a
+    // stride of 2 the offset was a fifth of the spacing and the grid
+    // showed straight through it.
+    expect(CANOPY_JITTER.maxOffsetCells).toBeGreaterThan(FOLIAGE_SAMPLING.canopyStride / 4)
+  })
+
+  it('does not tie a tree’s offset to its size', () => {
+    // The offset radius used to come from `scaleRoll`, so every small
+    // tree sat near its cell centre and every large one at the rim.
+    const small = canopyInstanceTransform(0, 0, 0.3, 0.9)
+    const large = canopyInstanceTransform(1, 0, 0.3, 0.9)
+
+    expect(Math.hypot(small.offsetX, small.offsetY)).toBeCloseTo(Math.hypot(large.offsetX, large.offsetY))
+    expect(small.scale).not.toBeCloseTo(large.scale)
   })
 })
 
@@ -406,6 +424,90 @@ describe('cellFoliageRolls', () => {
     const a = cellFoliageRolls(5, 5, 1)
     const b = cellFoliageRolls(5, 5, 2)
     expect(a).not.toEqual(b)
+  })
+
+  /**
+   * The guard that was missing. The previous hash had no avalanche step,
+   * so its high bits — which `densityRoll` reads — barely changed between
+   * neighbouring cells, and trees arrived in solid stripes on a
+   * ~29-column period. Every existing test passed: determinism held, the
+   * range held, the seed still changed the output. None of them looked at
+   * whether the field was actually NOISE.
+   *
+   * The bounds below are generous. Independent uniform rolls give a
+   * neighbour |delta| of 1/3 and a standard deviation of 0.2887/sqrt(n)
+   * across n-sample means; the failing implementation missed those by
+   * factors of 10 and 5, so anything close is fine and a regression of
+   * that kind cannot slip through.
+   */
+  it('draws a different value for neighbouring cells, in both axes', () => {
+    const SIZE = 64
+    let deltaX = 0
+    let deltaY = 0
+    let pairs = 0
+
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE - 1; x++) {
+        const here = cellFoliageRolls(x * 2, y * 2, 12345, 1).densityRoll
+        deltaX += Math.abs(here - cellFoliageRolls((x + 1) * 2, y * 2, 12345, 1).densityRoll)
+        deltaY += Math.abs(here - cellFoliageRolls(x * 2, (y + 1) * 2, 12345, 1).densityRoll)
+        pairs += 1
+      }
+    }
+
+    // 1/3 for independent uniforms. Measured at 0.097 and 0.033 before.
+    expect(deltaX / pairs).toBeGreaterThan(0.25)
+    expect(deltaY / pairs).toBeGreaterThan(0.25)
+  })
+
+  it('shows no row or column bias, so foliage does not stripe', () => {
+    const SIZE = 64
+    const rowMeans = []
+    const colSums = new Array(SIZE).fill(0)
+
+    for (let y = 0; y < SIZE; y++) {
+      let rowSum = 0
+      for (let x = 0; x < SIZE; x++) {
+        const roll = cellFoliageRolls(x * 2, y * 2, 12345, 1).densityRoll
+        rowSum += roll
+        colSums[x] += roll
+      }
+      rowMeans.push(rowSum / SIZE)
+    }
+
+    const sd = (values) => {
+      const mean = values.reduce((sum, v) => sum + v, 0) / values.length
+      return Math.sqrt(values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length)
+    }
+
+    // 0.2887/sqrt(64) = 0.036 for independent rolls. The column figure
+    // was 0.187 before, which is what the stripes were.
+    expect(sd(rowMeans)).toBeLessThan(0.08)
+    expect(sd(colSums.map((sum) => sum / SIZE))).toBeLessThan(0.08)
+  })
+
+  it('keeps every salt independent of every other', () => {
+    // Each layer and each per-instance property takes its own salt. If
+    // two agreed, every tree would stand in its own patch of grass.
+    const SIZE = 40
+    for (const [a, b] of [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ]) {
+      let delta = 0
+      let n = 0
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          delta += Math.abs(
+            cellFoliageRolls(x, y, 7, a).densityRoll - cellFoliageRolls(x, y, 7, b).densityRoll,
+          )
+          n += 1
+        }
+      }
+      expect(delta / n, `salts ${a} and ${b}`).toBeGreaterThan(0.25)
+    }
   })
 
   it('has weak correlation between the two rolls across a sample grid', () => {
