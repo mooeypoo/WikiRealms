@@ -322,13 +322,32 @@ describe('shouldShowCanopy', () => {
     expect(shouldShowCanopy(9999, undefined)).toBe(true)
   })
 
-  it('hides the canopy from orbit and shows it on descent', () => {
+  it('shows the canopy at the distance the planet view actually opens at', () => {
+    // The bug this exists to prevent, which shipped: the gate was set to
+    // 1.7 radii while the planet view opens at 3.2, so a world arrived
+    // with no visible vegetation at all and only grew any if you zoomed
+    // nearly to the surface. A threshold below the DEFAULT camera is not
+    // a distance cull, it is an off switch.
     const radius = 81
-    const orbit = radius * SPHERE_VIEW.cameraDistanceRatio
-    const close = radius * SPHERE_VIEW.minDistanceRatio
 
-    expect(shouldShowCanopy(orbit, radius)).toBe(false)
-    expect(shouldShowCanopy(close, radius)).toBe(true)
+    expect(shouldShowCanopy(radius * SPHERE_VIEW.cameraDistanceRatio, radius)).toBe(true)
+    expect(shouldShowCanopy(radius * SPHERE_VIEW.minDistanceRatio, radius)).toBe(true)
+  })
+
+  it('still culls the canopy when the camera pulls right back', () => {
+    // A tree is about 1.3 px at the furthest the controls allow, where it
+    // contributes aliasing rather than texture.
+    const radius = 81
+
+    expect(shouldShowCanopy(radius * SPHERE_VIEW.maxDistanceRatio, radius)).toBe(false)
+  })
+
+  it('leaves room between the default view and the cull', () => {
+    // Otherwise the canopy pops in and out on the smallest zoom nudge.
+    expect(FOLIAGE_SAMPLING.canopyVisibleRadiusRatio).toBeGreaterThan(
+      SPHERE_VIEW.cameraDistanceRatio * 1.25,
+    )
+    expect(FOLIAGE_SAMPLING.canopyVisibleRadiusRatio).toBeLessThan(SPHERE_VIEW.maxDistanceRatio)
   })
 })
 

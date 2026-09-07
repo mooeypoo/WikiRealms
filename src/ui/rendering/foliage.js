@@ -45,12 +45,31 @@ import { BIOME, snowCover, treelineFactor } from '../../engine/generation/terrai
 export const FOLIAGE_SAMPLING = Object.freeze({
   understoryStride: 1,
   canopyStride: 2,
-  // On the planet the canopy is hidden until the camera is inside this
-  // multiple of the planet's radius. Thousands of lit tree meshes say
-  // nothing from orbit, where the whole world is a few hundred pixels
-  // across, and drawing them there spends the frame rate that makes
-  // orbiting feel good.
-  canopyVisibleRadiusRatio: 1.7,
+  // On the planet the canopy is hidden beyond this multiple of the
+  // planet's radius, where a tree is too small to contribute anything but
+  // aliasing.
+  //
+  // THIS HAS TO CLEAR THE DEFAULT CAMERA, and at 1.7 it did not: the
+  // planet view opens at SPHERE_VIEW.cameraDistanceRatio, 3.2 radii out,
+  // so the canopy was hidden the moment a world loaded and stayed hidden
+  // unless you zoomed nearly all the way in. The planet looked like it
+  // had no vegetation at all.
+  //
+  // Measured apparent height of a broadleaf, at a 50-degree field of view
+  // on a 900px viewport:
+  //
+  //   planet, default (3.2R)   4.9 px      flat, default   4.5 px
+  //   planet, closest (1.15R) 71.3 px
+  //   planet, furthest (9R)    1.3 px
+  //
+  // The first two lines are the point: a tree is the SAME apparent size
+  // on the planet as on the flat map at each view's own default. Nothing
+  // about the globe made the canopy too small — it was gated off.
+  //
+  // 5 keeps it drawn through the default view and culls it only as the
+  // camera pulls back past about 2.7 px per tree, where it stops being
+  // texture and starts being noise.
+  canopyVisibleRadiusRatio: 5,
 })
 
 /**
