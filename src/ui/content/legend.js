@@ -1,4 +1,4 @@
-import { BIOME_THRESHOLDS, PORTAL_LIMITS } from '../../engine/generation/config.js'
+import { ALTITUDE, PORTAL_LIMITS } from '../../engine/generation/config.js'
 import { BIOME, LUSHNESS_BANDS } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 import { describeBand } from './lushnessBands.js'
@@ -75,11 +75,13 @@ export const FEATURE_LEGEND = [
     // reader was told a fact about a fictional mountain rather than
     // something about their article.
     label: 'Rock and snow are how much was written',
-    detail: `A section's own prose is what raises its peak. Push past ${percent(
-      BIOME_THRESHOLDS.mountainMinHeight,
-    )} of the world's height and the ground goes to bare rock; past ${percent(
-      BIOME_THRESHOLDS.snowMinHeight,
-    )} and it takes snow. The polar ice is the exception — every world has it.`,
+    detail:
+      `A section's own prose is what raises its peak. Stone starts showing through at ` +
+      `${percent(ALTITUDE.rockStart)} of the world's height and has covered the ground by ` +
+      `${percent(ALTITUDE.rockFull)}; snow begins at ${percent(ALTITUDE.snowStart)}. Both come ` +
+      `on gradually, and they tint rather than replace: a well-sourced section's high ground is ` +
+      `damp, mossy stone where a barren one's is dry scree, and its trees climb higher before ` +
+      `giving out. The polar ice is the exception — every world has it.`,
   },
 ]
 

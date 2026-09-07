@@ -1,4 +1,4 @@
-import { BIOME_THRESHOLDS, LUSHNESS } from './config.js'
+import { ALTITUDE, BIOME_THRESHOLDS, LUSHNESS } from './config.js'
 
 /**
  * Biome ids stored in World.terrain.biomeMap.
@@ -22,8 +22,10 @@ export const BIOME = Object.freeze({
   MEADOW: 5, // about the article's own rate
   WOODLAND: 6, // above it
   JUNGLE: 7, // far above it
-  MOUNTAIN: 8,
-  SNOW: 9,
+  // Not a band: the polar caps belong to no section, so they are the one
+  // ground in a world that says nothing about the article. Rock has no id
+  // at all any more — it is cover over a band (see rockCover).
+  SNOW: 8,
 })
 
 /** All six lushness bands, least to most cited. */
@@ -106,16 +108,64 @@ export function lushnessBand(lushness) {
   return CITED_LUSHNESS_BANDS[CITED_LUSHNESS_BANDS.length - 1]
 }
 
+/** Smooth 0→1 ramp with zero slope at both ends. */
+function smoothstep(edge0, edge1, value) {
+  if (edge1 <= edge0) return value >= edge1 ? 1 : 0
+  const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * How much bare stone shows through at this height, in [0, 1].
+ *
+ * A ramp, not a line. The threshold this replaces put a visible contour
+ * across every peak in the world at exactly one height.
+ *
+ * @param {number} height [0, 1]
+ */
+export function rockCover(height) {
+  return smoothstep(ALTITUDE.rockStart, ALTITUDE.rockFull, Number(height) || 0)
+}
+
+/**
+ * How much snow lies on top, in [0, 1]. Begins before the rock band has
+ * finished, so no altitude is uniformly one surface.
+ *
+ * @param {number} height [0, 1]
+ */
+export function snowCover(height) {
+  return smoothstep(ALTITUDE.snowStart, ALTITUDE.snowFull, Number(height) || 0)
+}
+
+/**
+ * What fraction of this cell's usual foliage survives its altitude, in
+ * [0, 1]. 1 below the treeline, tapering to 0 above it.
+ *
+ * A section's lushness lifts its own treeline: wetter ground grows trees
+ * higher up a real mountain, so a well-cited range keeps its green
+ * further towards the summit. That is a second reading of the same
+ * signal, but it arrives as geography rather than as a repeat — the
+ * range's silhouette changes, not just its colour.
+ *
+ * @param {number} height [0, 1]
+ * @param {number} [lushness] [0, 1] from lushness.js
+ */
+export function treelineFactor(height, lushness = 0) {
+  const lift = ALTITUDE.treelineLushnessLift * Math.min(1, Math.max(0, Number(lushness) || 0))
+  return 1 - smoothstep(ALTITUDE.treelineStart + lift, ALTITUDE.treelineEnd + lift, Number(height) || 0)
+}
+
 /**
  * Classifies a cell's biome from its height and its section's lushness.
  *
  * Pure and reusable so presentation layers can re-derive biome info
  * without re-running generation.
  *
- * KNOWN, and the subject of the next phase: altitude still REPLACES the
- * lushness band outright rather than blending with it, so a well-cited
- * summit reads as the same bare rock as a barren one, and the switch
- * draws a hard contour line at exactly mountainMinHeight.
+ * Land is ALWAYS a lushness band now, at every altitude. Rock and snow
+ * are cover applied over the top of that band by the two functions above,
+ * so a cell keeps saying what its section cites even where stone or ice
+ * is most of what you can see. Only the polar caps, which belong to no
+ * section, are classified as snow outright (see sectionTerrain.js).
  *
  * @param {number} height [0, 1]
  * @param {number} lushness [0, 1] from lushness.js
@@ -124,7 +174,5 @@ export function lushnessBand(lushness) {
 export function classifyBiome(height, lushness) {
   if (height < BIOME_THRESHOLDS.oceanMaxHeight) return BIOME.OCEAN
   if (height < BIOME_THRESHOLDS.beachMaxHeight) return BIOME.BEACH
-  if (height > BIOME_THRESHOLDS.snowMinHeight) return BIOME.SNOW
-  if (height > BIOME_THRESHOLDS.mountainMinHeight) return BIOME.MOUNTAIN
   return lushnessBand(lushness)
 }

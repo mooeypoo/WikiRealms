@@ -1,13 +1,19 @@
-import { BIOME } from '../../engine/generation/terrain.js'
+import { BIOME, treelineFactor } from '../../engine/generation/terrain.js'
 
 /**
  * Foliage variants per biome. Each entry is a weighted probability of
  * being chosen when a land cell rolls for foliage. If chosen, `density`
  * decides whether it's actually placed at that cell (a second roll).
  *
- * A biome not in the map has NO foliage: ocean, beach, mountain, snow —
- * and DUNES, which means the section cites nothing and should read as
- * bare ground rather than as sparse cover.
+ * A biome not in the map has NO foliage: ocean, beach, the polar-cap
+ * snow — and DUNES, which means the section cites nothing and should read
+ * as bare ground rather than as sparse cover.
+ *
+ * There is no longer a "mountain" entry to leave out. Altitude does not
+ * change a cell's band, so a summit cell still has one of these variant
+ * lists; what thins it out is the treeline (see computeFoliageDensityScale
+ * and treelineFactor). That is what puts vegetation on the lower slopes
+ * of a rocky peak instead of shearing it off at a line.
  *
  * Kept as pure data so the values can be tuned and the pick logic
  * unit-tested without touching three.js. `size` and `color` flow through
@@ -54,8 +60,8 @@ export const FOLIAGE_DENSITY = Object.freeze({
 /**
  * Picks which foliage variant to try placing at a cell in `biome`,
  * using `variantRoll` (0-1) to sample from the biome's weighted
- * distribution. Returns null for biomes without foliage (ocean, beach,
- * mountain, snow).
+ * distribution. Returns null for biomes without foliage: ocean, beach,
+ * polar-cap snow, and dunes.
  *
  * @param {number} biome BIOME enum value
  * @param {number} variantRoll [0, 1)
@@ -72,19 +78,27 @@ export function pickFoliageVariant(biome, variantRoll) {
 }
 
 /**
- * Density scale ∈ [FOLIAGE_DENSITY.min, FOLIAGE_DENSITY.max] from this
- * cell's lushness.
+ * Density scale from this cell's lushness and its altitude.
  *
- * Reads the same scalar the ground colour and the band name read, which
- * is the point: foliage used to normalize citations-per-sentence against
- * the article average on its own, while the biome under it classified on
- * absolute thresholds, so the two disagreed about what "lush" meant.
+ * The lushness part reads the same scalar the ground colour and the band
+ * name read, which is the point: foliage used to normalize
+ * citations-per-sentence against the article average on its own, while the
+ * biome under it classified on absolute thresholds, so the two disagreed
+ * about what "lush" meant.
+ *
+ * The altitude part is the treeline, and it is a multiplier rather than a
+ * gate. Foliage above the old rock threshold was not thinned, it was
+ * deleted — no variants existed for rock or snow — so a quarter of every
+ * world's land was bare by construction. Now it tapers, and a well-cited
+ * section's treeline sits higher than a barren one's.
  *
  * @param {number} lushness [0, 1] from lushness.js
+ * @param {number} [height] [0, 1] cell height; omit for ground-level cells
  */
-export function computeFoliageDensityScale(lushness) {
+export function computeFoliageDensityScale(lushness, height = 0) {
   const value = Math.min(1, Math.max(0, Number(lushness) || 0))
-  return FOLIAGE_DENSITY.min + (FOLIAGE_DENSITY.max - FOLIAGE_DENSITY.min) * value
+  const byLushness = FOLIAGE_DENSITY.min + (FOLIAGE_DENSITY.max - FOLIAGE_DENSITY.min) * value
+  return byLushness * treelineFactor(height, value)
 }
 
 /**

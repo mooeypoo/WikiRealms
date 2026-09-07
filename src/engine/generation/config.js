@@ -32,20 +32,71 @@ export const GRID = Object.freeze({
 })
 
 /**
- * Elevation thresholds bracketing the land bands: below these a cell is
- * water, above them it is rock or snow. What sits between is the section's
- * lushness (see LUSHNESS below), not a terrain property.
+ * Where the water stops. Below oceanMaxHeight a cell is sea, and the
+ * strip up to beachMaxHeight is shore; everything above is land, and what
+ * colour that land takes is the section's lushness (see LUSHNESS below),
+ * not a terrain property.
  *
- * There is no moisture here any more. Biome was once a purely physical
- * concern — local height plus an ambient noise field — and moisture chose
- * between plains and forest. Citations replaced that, and
+ * Rock and snow used to live here too, as mountainMinHeight and
+ * snowMinHeight. They are altitude COVER now rather than thresholds — see
+ * ALTITUDE.
+ *
+ * There is no moisture here any more either. Biome was once a purely
+ * physical concern — local height plus an ambient noise field — and
+ * moisture chose between plains and forest. Citations replaced that, and
  * forestMinMoisture sat here unread for as long.
  */
 export const BIOME_THRESHOLDS = Object.freeze({
   oceanMaxHeight: 0.32,
   beachMaxHeight: 0.36,
-  mountainMinHeight: 0.7,
-  snowMinHeight: 0.85,
+})
+
+/**
+ * Altitude, as a second axis over the top of lushness rather than a
+ * replacement for it.
+ *
+ * Height used to REPLACE a cell's lushness band outright: past 0.7 the
+ * ground became bare rock and past 0.85 it became snow, whatever the
+ * section cited. Three things were wrong with that. It drew a hard
+ * contour line at exactly 0.7 on every peak in the world. It deleted all
+ * foliage above the line, because no variants were registered for rock or
+ * snow. And measured on the story fixture it took 24% of land — with the
+ * 0.7 line sitting at about the 89th percentile of land height, so it ate
+ * precisely the summits a reader looks at.
+ *
+ * Now rock and snow arrive as smooth cover, and the rock itself is
+ * tinted by lushness, so a well-cited summit reads as damp, mossy stone
+ * and a barren one as dry scree. The signal survives all the way up.
+ *
+ * Each pair is a smoothstep band: nothing below `start`, complete at
+ * `full`. They overlap on purpose — snow begins before rock has finished,
+ * so there is no altitude at which the ground is uniformly one thing.
+ *
+ * All four heights are placed against the MEASURED distribution of land
+ * height, which on the story fixture runs p50 0.50, p75 0.60, p90 0.72,
+ * p99 0.96. A band that starts at 0.5 is not a mountain band, it is half
+ * the world — the first cut of this group put the treeline there and
+ * thinned the foliage on every second cell of open lowland.
+ */
+export const ALTITUDE = Object.freeze({
+  // Bare stone showing through the vegetation. Starts around the 78th
+  // percentile of land height, so it reads as high ground rather than as
+  // a wash over the whole map.
+  rockStart: 0.62,
+  rockFull: 0.86,
+  // Snow lying on top of whatever the rock band left.
+  snowStart: 0.82,
+  snowFull: 0.97,
+  // The treeline: foliage density falls off across this band rather than
+  // vanishing at a line. Deliberately BELOW rockStart — trees thin out
+  // before the stone starts showing, which is the order it happens in.
+  treelineStart: 0.58,
+  treelineEnd: 0.86,
+  // How far a fully-lush section lifts its own treeline, in height units.
+  // Wetter ground grows trees higher up a real mountain, so this reads as
+  // geography rather than as a second helping of the same signal — and it
+  // gives a well-cited range a visibly greener silhouette.
+  treelineLushnessLift: 0.1,
 })
 
 /**

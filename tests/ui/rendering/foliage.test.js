@@ -6,6 +6,7 @@ import {
   computeFoliageDensityScale,
   pickFoliageVariant,
 } from '../../../src/ui/rendering/foliage.js'
+import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
 describe('FOLIAGE_VARIANTS_BY_BIOME', () => {
@@ -40,7 +41,6 @@ describe('pickFoliageVariant', () => {
   it('returns null for biomes without foliage, dunes included', () => {
     expect(pickFoliageVariant(BIOME.OCEAN, 0.5)).toBeNull()
     expect(pickFoliageVariant(BIOME.BEACH, 0.5)).toBeNull()
-    expect(pickFoliageVariant(BIOME.MOUNTAIN, 0.5)).toBeNull()
     expect(pickFoliageVariant(BIOME.SNOW, 0.5)).toBeNull()
     // A section that cites nothing gets bare ground, not sparse cover.
     expect(pickFoliageVariant(BIOME.DUNES, 0.5)).toBeNull()
@@ -75,23 +75,47 @@ describe('computeFoliageDensityScale', () => {
     expect(computeFoliageDensityScale(0.5)).toBeCloseTo(1)
   })
 
-  it('spans the configured floor and ceiling across the scalar', () => {
-    expect(computeFoliageDensityScale(0)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(1)).toBe(FOLIAGE_DENSITY.max)
+  it('thins foliage across the treeline instead of deleting it', () => {
+    // Above the old rock threshold there were no variants at all, so a
+    // quarter of every world's land was bare by construction.
+    const low = computeFoliageDensityScale(0.5, 0.4)
+    const middle = computeFoliageDensityScale(0.5, (ALTITUDE.treelineStart + ALTITUDE.treelineEnd) / 2)
+    const high = computeFoliageDensityScale(0.5, 0.95)
+
+    expect(middle).toBeLessThan(low)
+    expect(middle).toBeGreaterThan(0)
+    expect(high).toBe(0)
+  })
+
+  it('keeps a well-cited section planted higher than a barren one', () => {
+    const height = ALTITUDE.treelineEnd - 0.03
+
+    expect(computeFoliageDensityScale(1, height)).toBeGreaterThan(computeFoliageDensityScale(0.2, height))
+  })
+
+  it('is unchanged at ground level when no height is given', () => {
+    // Callers with no height (2D view, tests) must not be silently
+    // treated as standing on a summit.
+    expect(computeFoliageDensityScale(0.7)).toBe(computeFoliageDensityScale(0.7, 0))
+  })
+
+  it('spans the configured floor and ceiling across the scalar at ground level', () => {
+    expect(computeFoliageDensityScale(0, 0)).toBe(FOLIAGE_DENSITY.min)
+    expect(computeFoliageDensityScale(1, 0)).toBe(FOLIAGE_DENSITY.max)
   })
 
   it('is monotone in lushness', () => {
     let previous = -1
     for (let lushness = 0; lushness <= 1.0001; lushness += 0.05) {
-      const scale = computeFoliageDensityScale(lushness)
+      const scale = computeFoliageDensityScale(lushness, 0)
       expect(scale).toBeGreaterThan(previous)
       previous = scale
     }
   })
 
   it('clamps a scalar outside [0, 1] rather than extrapolating', () => {
-    expect(computeFoliageDensityScale(-3)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(9)).toBe(FOLIAGE_DENSITY.max)
+    expect(computeFoliageDensityScale(-3, 0)).toBe(FOLIAGE_DENSITY.min)
+    expect(computeFoliageDensityScale(9, 0)).toBe(FOLIAGE_DENSITY.max)
   })
 
   it('treats a non-numeric or missing scalar as 0', () => {

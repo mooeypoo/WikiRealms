@@ -315,7 +315,7 @@ function buildTerrainMesh(world) {
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed)
       const variant = pickFoliageVariant(terrain.biomeMap[index], variantRoll)
       if (!variant) continue
-      const densityScale = computeFoliageDensityScale(terrain.lushnessMap[index])
+      const densityScale = computeFoliageDensityScale(terrain.lushnessMap[index], heightMap[index])
       if (densityRoll >= variant.density * densityScale) continue
 
       const positions = foliagePositions.get(variant) ?? []

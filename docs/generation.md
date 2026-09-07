@@ -156,8 +156,12 @@ Feature signals currently influence:
 - island size
 - terrain roughness
 - water ratio
-- biome distribution: per-section lushness drives the six land bands;
-  elevation still determines ocean, beach, mountain, and snow
+- biome distribution: per-section lushness drives the six land bands, at
+  every altitude. Elevation determines ocean and beach, and adds rock and
+  snow as smooth COVER over whichever band a cell already has — it no
+  longer replaces the band, so a well-cited summit reads as damp mossy
+  stone where a barren one reads as dry scree. A section's lushness also
+  lifts its own treeline, so a well-sourced range keeps its trees higher
 - portal count and placement
 
 ## Section identity in generation output

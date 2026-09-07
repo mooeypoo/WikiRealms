@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import Legend from '../../../src/ui/components/Legend.vue'
-import { BIOME_THRESHOLDS, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
+import { ALTITUDE, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
@@ -64,6 +64,18 @@ describe('Legend', () => {
     expect(document.querySelector('.legend__note').textContent).toContain('stays dry')
   })
 
+  it('never renders a NaN where an engine number should be', () => {
+    // This is not hypothetical. When rock and snow stopped being
+    // thresholds, this entry kept interpolating the deleted constants and
+    // rendered "Push past NaN% of the world's height" — and the test
+    // above passed, because it asserted the text contained the same NaN
+    // it was building.
+    mountLegend()
+
+    expect(document.querySelector('.legend__key').textContent).not.toContain('NaN')
+    expect(document.querySelector('.legend__key').textContent).not.toContain('undefined')
+  })
+
   it('says what causes the height, not just what sits on it', () => {
     // "Snow is altitude" names the cause of the snow without saying what
     // causes the altitude — a fact about a fictional mountain rather than
@@ -72,8 +84,11 @@ describe('Legend', () => {
     const text = document.querySelector('.legend__features').textContent
 
     expect(text).toContain('how much was written')
-    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.mountainMinHeight * 100)}%`)
-    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.snowMinHeight * 100)}%`)
+    expect(text).toContain(`${Math.round(ALTITUDE.rockStart * 100)}%`)
+    expect(text).toContain(`${Math.round(ALTITUDE.snowStart * 100)}%`)
+    // Says that altitude tints rather than replaces, which is the whole
+    // difference from the thresholds it used to describe.
+    expect(text).toContain('mossy')
   })
 
   it('says portals are a selection, not every link', () => {
