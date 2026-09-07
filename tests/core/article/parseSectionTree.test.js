@@ -205,6 +205,44 @@ describe('parseSectionTree', () => {
     expect(sections[0].citationDensity).toBeGreaterThan(lead.citationDensity)
   })
 
+  it('counts every paragraph’s last sentence, which textContent runs together', () => {
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Body">Body</h2>
+          <p>First paragraph ends here.</p><p>Second one ends here.</p><p>Third one ends here.</p>
+        </section>
+      `),
+    )
+
+    expect(sections[0].sentenceCount).toBe(3)
+  })
+
+  it('measures a list-only section by its items rather than reporting no sentences', () => {
+    const { sections } = parseSectionTree(
+      html(`
+        <section data-mw-section-id="1"><h2 id="Films">Films</h2>
+          <ul><li>Alpha film</li><li>Beta film</li><li>Gamma film</li></ul>
+          <p>Every entry is sourced.<sup class="reference"><a>1</a></sup></p>
+        </section>
+      `),
+    )
+
+    // Measured before the fix: sentenceCount 0, so citationsPerSentence
+    // was 0 and the section rendered as barren whatever it cited.
+    expect(sections[0].sentenceCount).toBe(4)
+    expect(sections[0].citationsPerSentence).toBeCloseTo(0.25)
+  })
+
+  it('keeps ownSize a count of prose characters, not of block separators', () => {
+    const { sections } = parseSectionTree(
+      html(`<section data-mw-section-id="1"><h2 id="B">B</h2><p>One.</p><p>Two.</p></section>`),
+    )
+
+    // "B" + "One." + "Two." — the newlines the sentence counter needs are
+    // not prose and must not inflate the height signal.
+    expect(sections[0].ownSize).toBe(9)
+  })
+
   it('keeps nested-section citations out of the parent count and totals them for the article', () => {
     const { sections, citationCount } = parseSectionTree(
       html(`
