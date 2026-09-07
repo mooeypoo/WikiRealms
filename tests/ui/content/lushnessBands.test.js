@@ -14,28 +14,42 @@ describe('LUSHNESS_BAND_COPY', () => {
     expect(described.sort()).toEqual([...LUSHNESS_BANDS].sort())
   })
 
-  it('gives every band a chip, a label and a detail', () => {
+  it('gives every band a name and a detail', () => {
     for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
-      expect(copy.chip.length).toBeGreaterThan(0)
-      expect(copy.label.length).toBeGreaterThan(0)
+      expect(copy.name.length).toBeGreaterThan(0)
       expect(copy.detail.length).toBeGreaterThan(0)
     }
   })
 
-  it('states every cited band as a comparison against the article', () => {
-    // The scalar behind these is relative, and the old vocabulary
-    // ("dense", "lush") described an absolute quantity the app was not
-    // measuring.
+  it('states the comparison in the detail, where there is room for it', () => {
+    // The scalar is relative, so every band except the bare one has to
+    // say what it is relative TO. It used to say so in the NAME — "far
+    // above the article", "typical for the article" — which was accurate
+    // and unreadable, because a chip is not a sentence.
     for (const biome of LUSHNESS_BANDS) {
       if (biome === BIOME.DUNES) continue
-      expect(LUSHNESS_BAND_COPY[biome].chip).toContain('the article')
+      expect(LUSHNESS_BAND_COPY[biome].detail.toLowerCase()).toContain('the rest')
     }
   })
 
-  it('keeps chips short enough for a tooltip', () => {
+  it('keeps names to a single word, short enough for a tooltip chip', () => {
     for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
-      expect(copy.chip.length).toBeLessThanOrEqual(24)
+      expect(copy.name.split(/\s+/)).toHaveLength(1)
+      expect(copy.name.length).toBeLessThanOrEqual(10)
     }
+  })
+
+  it('names the bands in an order a reader can rank without the legend', () => {
+    // Barren to Lush is a scale on its face. "Dunes to Jungle" would name
+    // the ground correctly and rank nothing.
+    expect(LUSHNESS_BANDS.map((biome) => LUSHNESS_BAND_COPY[biome].name)).toEqual([
+      'Barren',
+      'Sparse',
+      'Patchy',
+      'Green',
+      'Wooded',
+      'Lush',
+    ])
   })
 })
 
@@ -75,7 +89,7 @@ describe('one vocabulary', () => {
 
       expect(model.densityBand).toBe(entry.biome)
       expect(describeBand(model.densityBand).swatch).toBe(entry.swatch)
-      expect(describeBand(model.densityBand).chip).toBe(LUSHNESS_BAND_COPY[entry.biome].chip)
+      expect(describeBand(model.densityBand).name).toBe(LUSHNESS_BAND_COPY[entry.biome].name)
     }
   })
 

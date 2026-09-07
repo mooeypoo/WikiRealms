@@ -95,7 +95,7 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
               <li v-for="entry in GROUND_LEGEND" :key="entry.biome">
                 <span class="legend__swatch" :style="{ background: entry.swatch }" />
                 <span class="legend__text">
-                  <strong>{{ entry.label }}</strong>
+                  <strong>{{ entry.name }}</strong>
                   <span>{{ entry.detail }}</span>
                 </span>
               </li>

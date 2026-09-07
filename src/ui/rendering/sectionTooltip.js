@@ -87,12 +87,42 @@ export function countDirectSubsections(peaks, parentIndex) {
   return count
 }
 
+/**
+ * Formats a section's evidence as something a reader can go and check.
+ *
+ * This is the only number the tooltip states about citations, and that is
+ * deliberate. The band comes from a scalar built out of a shrinkage
+ * estimator, a log-ratio against the article's own rate and a smooth
+ * ceiling (see lushness.js); printing THAT as a percentage would be a
+ * figure nobody can verify and the engine does not use, which is what got
+ * an earlier version's percentages deleted. Two counts can be verified by
+ * opening the article and counting.
+ *
+ * They also carry something the band cannot: the SIZE of the evidence.
+ * One reference in one sentence and forty-six in thirty-eight are very
+ * different claims, and the scale treats them differently — the first is
+ * shrunk hard toward the article's own rate — so showing the counts shows
+ * why a short section reads as ordinary.
+ *
+ * @param {number} citations
+ * @param {number} sentences
+ * @returns {string}
+ */
+export function formatSources(citations, sentences) {
+  const refCount = Math.max(0, Math.round(Number(citations) || 0))
+  const sentenceCount = Math.max(0, Math.round(Number(sentences) || 0))
+  const refs = refCount === 0 ? 'no refs' : `${refCount} ref${refCount === 1 ? '' : 's'}`
+  if (sentenceCount === 0) return refs
+  return `${refs} in ${sentenceCount} sentence${sentenceCount === 1 ? '' : 's'}`
+}
+
 /** What the model carries when there is no peak to describe. */
 const EMPTY_MODEL = Object.freeze({
   title: '',
   subsectionCount: 0,
   wordsLabel: '',
   densityBand: null,
+  sourcesLabel: '',
 })
 
 /**
@@ -115,7 +145,7 @@ const EMPTY_MODEL = Object.freeze({
  * @param {object} peak the hovered peak (must have title, ownSize/subtreeSize, lushness, sectionIndex, depth)
  * @param {object[]} peaks full peaks array (for subsection count)
  * @param {number} [peakIndex] the peak's own index in `peaks`. When omitted, subsection count falls back to counting children of the top-level `peak.sectionIndex` (matches old behavior for top-level-only tooltips).
- * @returns {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null }}
+ * @returns {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null, sourcesLabel: string }}
  */
 export function buildTooltipModel(peak, peaks, peakIndex = null) {
   if (!peak) return { ...EMPTY_MODEL }
@@ -129,5 +159,8 @@ export function buildTooltipModel(peak, peaks, peakIndex = null) {
     subsectionCount: countDirectSubsections(peaks ?? [], parentIndex),
     wordsLabel: formatWords(words),
     densityBand: lushnessBand(Number(peak.lushness) || 0),
+    // Subtree counts, matching the lushness the band came from: a
+    // section's territory covers everything nested inside it.
+    sourcesLabel: formatSources(peak.citationCount, peak.subtreeSentenceCount),
   }
 }

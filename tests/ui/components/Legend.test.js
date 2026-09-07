@@ -45,14 +45,18 @@ describe('Legend', () => {
     expect(swatches.at(-1).getAttribute('style')).toContain(biomeColor(BIOME.JUNGLE, 0.6))
   })
 
-  it('names all six bands as comparisons against the article itself', () => {
-    // The bands are relative by construction, and the legend used to
-    // state them as absolute percentages the engine never computed.
+  it('names the bands as an ordered scale and explains each one', () => {
+    // The bands are relative by construction. The legend used to state
+    // them as absolute percentages the engine never computed, and then as
+    // clauses ("cited far better than the rest") that read as prose
+    // rather than as a key.
     mountLegend()
     const text = document.querySelector('.legend__ground').textContent
 
-    expect(text).toContain('Cites nothing')
+    expect(text).toContain('Barren')
+    expect(text).toContain('Lush')
     expect(text).toContain('than the rest')
+    // Still no percentages: the scalar behind the bands is not one.
     expect(text).not.toMatch(/\d+%/)
   })
 

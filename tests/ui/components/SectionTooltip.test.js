@@ -11,6 +11,7 @@ function makeModel(overrides = {}) {
     subsectionCount: 3,
     wordsLabel: '1,240 words',
     densityBand: BIOME.MEADOW,
+    sourcesLabel: '46 refs in 38 sentences',
     ...overrides,
   }
 }
@@ -35,7 +36,9 @@ describe('SectionTooltip', () => {
     const chipTexts = wrapper.findAll('.section-tooltip__chip').map((c) => c.text())
     expect(chipTexts.some((t) => t.includes('3 subsections'))).toBe(true)
     expect(chipTexts.some((t) => t.includes('1,240 words'))).toBe(true)
-    expect(chipTexts.some((t) => t.includes(LUSHNESS_BAND_COPY[BIOME.MEADOW].chip))).toBe(true)
+    expect(chipTexts.some((t) => t.includes(LUSHNESS_BAND_COPY[BIOME.MEADOW].name))).toBe(true)
+    // The checkable number: a reader can open the article and count.
+    expect(chipTexts.some((t) => t.includes('46 refs in 38 sentences'))).toBe(true)
   })
 
   it('pluralizes the subsection chip', () => {
@@ -72,7 +75,7 @@ describe('SectionTooltip', () => {
     const style = wrapper.find('.section-tooltip__dot').attributes('style') ?? ''
 
     expect(style).toContain(biomeColor(BIOME.JUNGLE, 0.6))
-    expect(wrapper.text()).toContain(LUSHNESS_BAND_COPY[BIOME.JUNGLE].chip)
+    expect(wrapper.text()).toContain(LUSHNESS_BAND_COPY[BIOME.JUNGLE].name)
   })
 
   it('omits the density chip when there is no band to name', () => {

@@ -14,52 +14,62 @@
  * from the renderer (`biomeColor`), and the words come from here. Nothing
  * restates anything.
  *
- * Every label is a COMPARISON, because the scalar behind it is one — a
- * section is greener than its neighbours when it cites better than they
- * do (see engine/generation/lushness.js). "Dense" and "lush" were the
- * old vocabulary and they described an absolute quantity the app was not
- * measuring.
+ * The names describe the GROUND, and the detail beside each one says what
+ * that ground means. That split is deliberate, and it is the third
+ * vocabulary this has had.
+ *
+ * The first was "dense" and "lush": short, but describing an absolute
+ * quantity the app was not measuring, and needing the legend open to mean
+ * anything at all.
+ *
+ * The second went the other way and put the comparison in the name —
+ * "far above the article", "typical for the article". Accurate, and
+ * unreadable: a chip is not a sentence, and a reader hovering a mountain
+ * should not have to parse a clause.
+ *
+ * So: an ordered word for the ground, which is true of what you are
+ * looking at and of how well it cites, and the comparison written out
+ * underneath where there is room for it. The names avoid claiming an
+ * absolute standard ("well sourced") that the middle bands cannot back —
+ * a thinly-cited section of a superb article may still be better
+ * referenced than most of Wikipedia.
  */
 import { BIOME } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 
 /**
- * Per band: a `chip` short enough for a tooltip, a `label` for the
- * legend's row, and the `detail` under it.
+ * Per band: a `name` short enough for a tooltip chip and clear enough for
+ * a legend row, and the `detail` that says what it means.
  *
- * The chips stand on their own — "far above the article" says what it
- * means without the legend open, where "lush" did not.
+ * Every detail states the comparison against THIS ARTICLE, because that
+ * is what the scalar measures. The tooltip adds the section's own
+ * reference and sentence counts beside the name, which is the part a
+ * reader can check by opening the article and counting.
  */
 export const LUSHNESS_BAND_COPY = Object.freeze({
   [BIOME.DUNES]: Object.freeze({
-    chip: 'uncited',
-    label: 'Cites nothing',
-    detail: 'Bare ground. This section carries no references at all.',
+    name: 'Barren',
+    detail: 'Bare ground: no references at all.',
   }),
   [BIOME.STEPPE]: Object.freeze({
-    chip: 'far below the article',
-    label: 'Cited far less than the rest',
-    detail: 'Scrub and dry grass, well below what this article manages elsewhere.',
+    name: 'Sparse',
+    detail: 'Scrub and dry grass. Far fewer references than the rest of this article.',
   }),
   [BIOME.LIGHT_VEG]: Object.freeze({
-    chip: 'below the article',
-    label: 'Cited less than the rest',
-    detail: 'Scattered green, somewhat below the article’s own rate.',
+    name: 'Patchy',
+    detail: 'Scattered green. Fewer references than the rest of this article.',
   }),
   [BIOME.MEADOW]: Object.freeze({
-    chip: 'typical for the article',
-    label: 'Cited about as well as the rest',
-    detail: 'Open meadow, at roughly the article’s own rate.',
+    name: 'Green',
+    detail: 'Open meadow. About as many references as the rest of this article.',
   }),
   [BIOME.WOODLAND]: Object.freeze({
-    chip: 'above the article',
-    label: 'Cited better than the rest',
-    detail: 'Trees, with ground still visible between them.',
+    name: 'Wooded',
+    detail: 'Trees, with ground still showing between them. More references than the rest.',
   }),
   [BIOME.JUNGLE]: Object.freeze({
-    chip: 'far above the article',
-    label: 'Cited far better than the rest',
-    detail: 'Closed canopy. The best-sourced ground in this world.',
+    name: 'Lush',
+    detail: 'Closed canopy. Far more references than the rest — the best-sourced ground here.',
   }),
 })
 

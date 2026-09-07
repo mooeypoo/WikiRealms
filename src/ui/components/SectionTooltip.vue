@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { describeBand } from '../content/lushnessBands.js'
 
 const props = defineProps({
-  /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null } | null} */
+  /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null, sourcesLabel: string } | null} */
   model: { type: Object, default: null },
   /** Anchor position in canvas-local pixels (left/top). */
   screenX: { type: Number, default: 0 },
@@ -42,8 +42,9 @@ const band = computed(() => describeBand(props.model?.densityBand))
             :style="{ background: band.swatch, color: band.swatch }"
             aria-hidden="true"
           ></span>
-          <span class="section-tooltip__density-label">{{ band.chip }}</span>
+          <span class="section-tooltip__density-label">{{ band.name }}</span>
         </li>
+        <li v-if="model.sourcesLabel" class="section-tooltip__chip">{{ model.sourcesLabel }}</li>
       </ul>
     </div>
   </div>
