@@ -38,40 +38,69 @@ import { BIOME } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 
 /**
- * Per band: a `name` short enough for a tooltip chip and clear enough for
- * a legend row, and the `detail` that says what it means.
+ * Per band, in three pieces, because three surfaces need different
+ * amounts of it:
  *
- * Every detail states the comparison against THIS ARTICLE, because that
- * is what the scalar measures. The tooltip adds the section's own
- * reference and sentence counts beside the name, which is the part a
- * reader can check by opening the article and counting.
+ * - `name` alone, for the tooltip chip, where there is room for a word.
+ * - `name` + `comparison`, for a Ledger row: what you clicked, and what
+ *   it means, without restating the terrain you can already see.
+ * - `name` + `detail`, for the legend, which has to teach the colour to
+ *   someone who has not met it yet — so it names the GROUND as well.
+ *
+ * `detail` is composed from the other two rather than written out again,
+ * or the legend and the Ledger would drift the moment either was edited.
+ *
+ * Every comparison is against THIS ARTICLE, because that is what the
+ * scalar measures. Neither surface prints a percentage: the tooltip and
+ * the Ledger both give the section's own reference and sentence counts
+ * instead, which is the part a reader can check by counting.
  */
-export const LUSHNESS_BAND_COPY = Object.freeze({
-  [BIOME.DUNES]: Object.freeze({
+const BANDS = {
+  [BIOME.DUNES]: {
     name: 'Barren',
-    detail: 'Bare ground: no references at all.',
-  }),
-  [BIOME.STEPPE]: Object.freeze({
+    ground: 'Bare ground',
+    comparison: 'no references at all',
+  },
+  [BIOME.STEPPE]: {
     name: 'Sparse',
-    detail: 'Scrub and dry grass. Far fewer references than the rest of this article.',
-  }),
-  [BIOME.LIGHT_VEG]: Object.freeze({
+    ground: 'Scrub and dry grass',
+    comparison: 'far fewer references than the rest of this article',
+  },
+  [BIOME.LIGHT_VEG]: {
     name: 'Patchy',
-    detail: 'Scattered green. Fewer references than the rest of this article.',
-  }),
-  [BIOME.MEADOW]: Object.freeze({
+    ground: 'Scattered green',
+    comparison: 'fewer references than the rest of this article',
+  },
+  [BIOME.MEADOW]: {
     name: 'Green',
-    detail: 'Open meadow. About as many references as the rest of this article.',
-  }),
-  [BIOME.WOODLAND]: Object.freeze({
+    ground: 'Open meadow',
+    comparison: 'about as many references as the rest of this article',
+  },
+  [BIOME.WOODLAND]: {
     name: 'Wooded',
-    detail: 'Trees, with ground still showing between them. More references than the rest.',
-  }),
-  [BIOME.JUNGLE]: Object.freeze({
+    ground: 'Trees, with ground still showing between them',
+    comparison: 'more references than the rest of this article',
+  },
+  [BIOME.JUNGLE]: {
     name: 'Lush',
-    detail: 'Closed canopy. Far more references than the rest — the best-sourced ground here.',
-  }),
-})
+    ground: 'Closed canopy',
+    comparison: 'far more references than the rest — the best-sourced ground here',
+  },
+}
+
+export const LUSHNESS_BAND_COPY = Object.freeze(
+  Object.fromEntries(
+    Object.entries(BANDS).map(([biome, copy]) => [
+      biome,
+      Object.freeze({
+        ...copy,
+        // Sentence-cased from the comparison, so the legend cannot say
+        // something different from the Ledger about the same band.
+        detail: `${copy.ground}: ${copy.comparison}.`,
+      }),
+    ]),
+  ),
+)
 
 /** Height fed to biomeColor for swatches, mid-way up the land range. */
 const SWATCH_HEIGHT = 0.6

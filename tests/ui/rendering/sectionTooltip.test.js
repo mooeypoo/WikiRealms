@@ -3,8 +3,6 @@ import { BIOME } from '../../../src/engine/generation/terrain.js'
 import {
   buildTooltipModel,
   countDirectSubsections,
-  estimateWordCount,
-  formatWords,
   projectClipToScreen,
 } from '../../../src/ui/rendering/sectionTooltip.js'
 
@@ -40,28 +38,6 @@ describe('projectClipToScreen', () => {
     const off = projectClipToScreen({ x: 1.5, y: 0, z: 0 }, rect)
     expect(off.isBehindCamera).toBe(false)
     expect(off.isOnScreen).toBe(false)
-  })
-})
-
-describe('estimateWordCount', () => {
-  it('converts characters to words at a ~5.5 chars/word rate', () => {
-    expect(estimateWordCount(0)).toBe(0)
-    expect(estimateWordCount(55)).toBe(10)
-    expect(estimateWordCount(1100)).toBe(200)
-  })
-
-  it('clamps negative and non-numeric input to zero', () => {
-    expect(estimateWordCount(-100)).toBe(0)
-    expect(estimateWordCount(null)).toBe(0)
-    expect(estimateWordCount(undefined)).toBe(0)
-  })
-})
-
-describe('formatWords', () => {
-  it('adds thousands separators and pluralizes correctly', () => {
-    expect(formatWords(0)).toBe('0 words')
-    expect(formatWords(1)).toBe('1 word')
-    expect(formatWords(1200)).toBe('1,200 words')
   })
 })
 

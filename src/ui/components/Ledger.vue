@@ -3,6 +3,14 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import { LEDGER_SNAP_POINTS as SNAP_POINTS, LEDGER_STATES as STATES } from './ledgerStates.js'
+import { LUSHNESS_BANDS, lushnessBand } from '../../engine/generation/terrain.js'
+import { describeBand } from '../content/lushnessBands.js'
+import {
+  estimateWordCount,
+  formatSources,
+  formatSubsections,
+  formatWords,
+} from '../rendering/sectionStats.js'
 
 /**
  * What this place is.
@@ -48,8 +56,17 @@ const stats = computed(() => [
   //
   // Words is uncapped, is a fact about the article, and is the one the
   // world visibly answers to: length is what sets the waterline.
-  { label: 'Words', value: formatWords(Math.round((props.article.sections?.totalSize ?? 0) / 5.5)) },
+  { label: 'Words', value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)) },
 ])
+
+/**
+ * Bare compact number for a readout tile, which carries its own label and
+ * is too narrow for "12,345 words". The section rows below spell counts
+ * out instead, because there the number has to say what it counts.
+ */
+function compactCount(count) {
+  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count)
+}
 
 function countSections(tree) {
   if (!tree?.sections) return 0
@@ -71,15 +88,72 @@ function step(direction) {
   setState(STATES[Math.min(STATES.length - 1, Math.max(0, index + direction))])
 }
 
-function wordCount(section) {
-  // The parser measures characters; ~5.5 per word is close enough for a
-  // reading-length signal, and a precise count would imply precision the
-  // measurement does not have.
-  return Math.round((section.subtreeSize || section.ownSize || 0) / 5.5)
+/**
+ * The generated peak for a section, by heading anchor.
+ *
+ * The Ledger lists the PARSED tree while lushness is annotated onto the
+ * generated peaks, so the two have to be matched up. Anchor rather than
+ * title, because a heading id is unique within an article and a title is
+ * not — "History" appears twice in plenty of them.
+ *
+ * A section can legitimately have no peak: applyPeakLimits folds the
+ * smallest ones into a single "Miscellaneous" range once an article has
+ * more than SECTION_LIMITS.maxTopLevelSections. Those rows simply show no
+ * band, which is honest — there is no ground of their own to describe.
+ */
+const peaksByAnchor = computed(() => {
+  const byAnchor = new Map()
+  for (const peak of props.world?.terrain?.peaks ?? []) {
+    if (peak.anchor) byAnchor.set(peak.anchor, peak)
+  }
+  return byAnchor
+})
+
+/** The band a section's ground is painted in, or null if it has no peak. */
+function bandFor(section) {
+  const peak = section.anchor ? peaksByAnchor.value.get(section.anchor) : null
+  if (!peak) return null
+  return describeBand(lushnessBand(peak.lushness))
 }
 
-function formatWords(count) {
-  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : String(count)
+/**
+ * "3 subsections", plus the range of their bands when they do not all
+ * agree — "3 subsections, Sparse to Lush".
+ *
+ * Worth the extra clause because subsections are painted their OWN band
+ * now rather than inheriting their parent's. A reader who sees a lush
+ * patch inside an otherwise dry range needs somewhere to find out which
+ * child that is, and a row saying only "3 subsections" does not explain
+ * why the range is not one colour.
+ */
+function subsectionSummary(section) {
+  const children = section.children ?? []
+  const label = formatSubsections(children.length)
+  if (!label) return ''
+
+  const bands = children.map(bandFor).filter(Boolean)
+  if (bands.length < 2) return label
+
+  const order = bands.map((band) => LUSHNESS_BANDS.indexOf(band.biome))
+  const lowest = Math.min(...order)
+  const highest = Math.max(...order)
+  if (lowest === highest) return label
+
+  const nameAt = (index) => describeBand(LUSHNESS_BANDS[index]).name
+  return `${label}, ${nameAt(lowest)} to ${nameAt(highest)}`
+}
+
+/** The facts line: the same figures the tooltip shows, in the same words. */
+function sectionStats(section) {
+  const size = Math.max(section.subtreeSize ?? 0, section.ownSize ?? 0)
+  return [
+    formatWords(estimateWordCount(size)),
+    formatSources(
+      section.subtreeCitationCount ?? section.citationCount ?? 0,
+      section.subtreeSentenceCount ?? section.sentenceCount ?? 0,
+    ),
+    subsectionSummary(section),
+  ].filter(Boolean)
 }
 
 /* ── focusing a section clicked on the map ─────────────────────────────── */
@@ -234,13 +308,18 @@ watch(
                 <Icon name="external" :size="13" />
               </a>
             </div>
-            <ul class="ledger__chips tabular">
-              <li v-if="section.children?.length">{{ section.children.length }} sub</li>
-              <li>{{ formatWords(wordCount(section)) }} w</li>
-              <li v-if="(section.subtreeCitationCount ?? section.citationCount ?? 0) > 0">
-                {{ section.subtreeCitationCount ?? section.citationCount }} c
-              </li>
-            </ul>
+            <!-- The band first, because it is what the reader just saw
+                 on the map and hovered on the summit, then what it means,
+                 then the figures behind it. Hovering gives the word;
+                 clicking gives the sentence. -->
+            <p v-if="bandFor(section)" class="ledger__band">
+              <span class="ledger__swatch" :style="{ background: bandFor(section).swatch }" />
+              <strong>{{ bandFor(section).name }}</strong>
+              <span>— {{ bandFor(section).comparison }}</span>
+            </p>
+            <p class="ledger__section-stats tabular">
+              {{ sectionStats(section).join(' · ') }}
+            </p>
           </article>
         </section>
       </template>
@@ -493,6 +572,38 @@ watch(
 
 .ledger__section-head a:hover {
   color: var(--accent);
+}
+
+.ledger__band {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--spacing-xs);
+  margin: var(--spacing-xs) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.ledger__band strong {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+
+.ledger__swatch {
+  flex: none;
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(var(--edge-rgb), 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.ledger__section-stats {
+  margin: 2px 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
 .ledger__chips {

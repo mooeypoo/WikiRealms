@@ -459,7 +459,7 @@ describe('App section focus', () => {
     await flushPromises()
   }
 
-  it('renders a card per top-level section, with subsection/word/citation chips', async () => {
+  it('renders a card per top-level section, in the words the tooltip uses', async () => {
     const wrapper = await mountWithArticle()
 
     const cards = [...document.querySelectorAll('.ledger__section')]
@@ -467,8 +467,10 @@ describe('App section focus', () => {
     expect(cards).toHaveLength(2)
     expect(cards[0].dataset.anchor).toBe('Early_life')
     expect(cards[0].querySelector('h4').textContent).toBe('Early life')
-    expect(cards[0].textContent).toContain('1 sub')
-    expect(cards[0].textContent).toContain('4 c')
+    // Spelled out rather than abbreviated. These read "1 SUB" and "4 C"
+    // before, which are not words and do not say what they count.
+    expect(cards[0].textContent).toContain('1 subsection')
+    expect(cards[0].textContent).toContain('4 refs')
     expect(cards[1].dataset.anchor).toBe('Career')
     // Subsections aren't listed as cards of their own.
     expect(sectionCard('Childhood')).toBeNull()
