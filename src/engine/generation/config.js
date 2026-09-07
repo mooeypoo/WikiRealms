@@ -92,6 +92,12 @@ export const ALTITUDE = Object.freeze({
   // before the stone starts showing, which is the order it happens in.
   treelineStart: 0.58,
   treelineEnd: 0.86,
+  // Where one kind of tree gives way to another (see foliage.js
+  // resolveArchetypeForAltitude). Broadleaf turns to conifer well before
+  // the treeline starts, and conifer to stunted krummholz inside it, so a
+  // slope changes in KIND as it climbs rather than only thinning out.
+  coniferStart: 0.52,
+  krummholzStart: 0.74,
   // How far a fully-lush section lifts its own treeline, in height units.
   // Wetter ground grows trees higher up a real mountain, so this reads as
   // geography rather than as a second helping of the same signal — and it

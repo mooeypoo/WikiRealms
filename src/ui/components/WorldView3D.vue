@@ -9,6 +9,7 @@ import {
   computeVertexColors,
 } from '../rendering/terrainMesh.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
+import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import {
   buildHaloFillArrays,
   buildHaloRingArrays,
@@ -41,9 +42,16 @@ import {
   pickPortalOpacity,
 } from '../rendering/portalMarkers.js'
 import {
+  CANOPY_ARCHETYPES,
+  FOLIAGE_SAMPLING,
+  canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
-  pickFoliageVariant,
+  foliageInstanceColor,
+  pickCanopyVariant,
+  pickUnderstoryVariant,
+  resolveArchetypeForAltitude,
+  shouldShowCanopy,
 } from '../rendering/foliage.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -89,7 +97,8 @@ let terrainMesh = null
 let waterMesh = null
 let portalGroup = null
 let haloGroup = null
-let foliageGroup = null
+let understoryGroup = null
+let canopyGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
@@ -104,8 +113,12 @@ let projection = getProjection('sphere')
 // On the planet each marker rotates that axis onto its own surface
 // normal; on the flat map the normal IS +Z, so the rotation is identity
 // and behavior is unchanged.
-/** Foliage sprites sit this far off the surface, in flat-view units. */
-const FOLIAGE_LIFT = 0.8
+// A point sprite is centred on its position, so to stand ON the ground
+// it has to be lifted half its own height. The old flat 0.8 units was
+// tuned for sprites 1.5 to 4.8 units across; at the sizes they are now
+// authored in — under one grid cell — that same lift would float every
+// blade of grass a full sprite-width above the terrain.
+const UNDERSTORY_LIFT_RATIO = 0.5
 
 // Where the last press started, so a camera drag that happens to end over
 // a marker doesn't read as a click on it. OrbitControls captures the
@@ -224,19 +237,17 @@ function makeFoliageTexture(kind) {
     ctx.lineTo(center + 20, center - 8)
     ctx.lineTo(center + 17, center + 20)
     ctx.closePath()
-  } else if (kind === 'tree') {
-    ctx.moveTo(center, 5)
-    ctx.lineTo(10, 42)
-    ctx.lineTo(23, 40)
-    ctx.lineTo(7, 57)
-    ctx.lineTo(57, 57)
-    ctx.lineTo(41, 40)
-    ctx.lineTo(54, 42)
-    ctx.closePath()
   } else {
-    ctx.arc(center - 10, center + 2, 17, 0, Math.PI * 2)
-    ctx.arc(center + 8, center - 5, 20, 0, Math.PI * 2)
-    ctx.arc(center + 18, center + 12, 15, 0, Math.PI * 2)
+    // Fern: a fan of fronds. The understory's job is to break up bare
+    // ground under a canopy, so it needs a silhouette distinct from
+    // grass without pretending to be a plant you could identify.
+    for (let frond = -2; frond <= 2; frond += 1) {
+      const lean = frond * 9
+      ctx.moveTo(center, center + 22)
+      ctx.lineTo(center + lean - 4, center - 14)
+      ctx.lineTo(center + lean + 4, center - 12)
+      ctx.closePath()
+    }
   }
   ctx.fill()
 
@@ -307,41 +318,168 @@ function buildTerrainMesh(world) {
 
   const halos = buildSectionHalos(world, heightScale)
 
-  const foliage = new THREE.Group()
-  const foliagePositions = new Map()
-  for (let gridY = 2; gridY < height - 2; gridY += 4) {
-    for (let gridX = 2; gridX < width - 2; gridX += 4) {
-      const index = gridY * width + gridX
-      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed)
-      const variant = pickFoliageVariant(terrain.biomeMap[index], variantRoll)
-      if (!variant) continue
-      const densityScale = computeFoliageDensityScale(terrain.lushnessMap[index], heightMap[index])
-      if (densityRoll >= variant.density * densityScale) continue
+  const { understory, canopy } = buildFoliage(world, heightScale)
 
-      const positions = foliagePositions.get(variant) ?? []
-      const local = projection.toLocal(gridX, gridY, heightMap[index], terrain, heightScale, FOLIAGE_LIFT)
+  return { mesh, water, portals, halos, understory, canopy, heightScale }
+}
+
+/**
+ * Builds the two vegetation layers: ground-cover sprites, and instanced
+ * tree meshes.
+ *
+ * They are separate groups so the canopy can be hidden on its own — from
+ * orbit it says nothing and costs a lot (see shouldShowCanopy), while the
+ * understory reads as ground texture at any distance and is cheap enough
+ * to leave on.
+ *
+ * @param {object} world
+ * @param {number} heightScale
+ * @returns {{ understory: THREE.Group, canopy: THREE.Group }}
+ */
+function buildFoliage(world, heightScale) {
+  const terrain = world.terrain
+  const { width, height, heightMap, biomeMap, lushnessMap } = terrain
+  // Foliage proportions are in grid cells, and one cell is one world unit
+  // of arc in both projections — but the RELIEF those cells rise through
+  // is compressed on the planet, so a tree sized for the flat map
+  // out-scales the range it stands on there. See SPHERE_VIEW.foliageScale.
+  const cellScale = projection.foliageScale ?? 1
+
+  // === Understory: one Points cloud per variant ===
+  const understory = new THREE.Group()
+  const understoryPositions = new Map()
+  const stride = FOLIAGE_SAMPLING.understoryStride
+
+  for (let gridY = 1; gridY < height - 1; gridY += stride) {
+    for (let gridX = 1; gridX < width - 1; gridX += stride) {
+      const index = gridY * width + gridX
+      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed, 0)
+      const variant = pickUnderstoryVariant(biomeMap[index], variantRoll)
+      if (!variant) continue
+      if (densityRoll >= variant.density * computeFoliageDensityScale(lushnessMap[index], heightMap[index])) {
+        continue
+      }
+
+      const positions = understoryPositions.get(variant) ?? []
+      const lift = variant.size * cellScale * UNDERSTORY_LIFT_RATIO
+      const local = projection.toLocal(gridX, gridY, heightMap[index], terrain, heightScale, lift)
       positions.push(local.x, local.y, local.z)
-      foliagePositions.set(variant, positions)
+      understoryPositions.set(variant, positions)
     }
   }
 
-  for (const [variant, positions] of foliagePositions) {
+  for (const [variant, positions] of understoryPositions) {
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-    const material = new THREE.PointsMaterial({
-      color: variant.color,
-      map: makeFoliageTexture(variant.kind),
-      size: variant.size,
-      sizeAttenuation: true,
-      transparent: true,
-      alphaTest: 0.1,
-      opacity: 0.9,
-      depthWrite: false,
-    })
-    foliage.add(new THREE.Points(geometry, material))
+    understory.add(
+      new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          color: variant.color,
+          map: makeFoliageTexture(variant.kind),
+          size: variant.size * cellScale,
+          sizeAttenuation: true,
+          transparent: true,
+          alphaTest: 0.1,
+          opacity: 0.9,
+          depthWrite: false,
+        }),
+      ),
+    )
   }
 
-  return { mesh, water, portals, halos, foliage, heightScale }
+  // === Canopy: one InstancedMesh per archetype ===
+  // Collected per archetype first, because an InstancedMesh needs its
+  // final count at construction.
+  const canopyCells = new Map()
+  const canopyStride = FOLIAGE_SAMPLING.canopyStride
+
+  for (let gridY = 1; gridY < height - 1; gridY += canopyStride) {
+    for (let gridX = 1; gridX < width - 1; gridX += canopyStride) {
+      const index = gridY * width + gridX
+      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed, 1)
+      const variant = pickCanopyVariant(biomeMap[index], variantRoll)
+      if (!variant) continue
+      if (densityRoll >= variant.density * computeFoliageDensityScale(lushnessMap[index], heightMap[index])) {
+        continue
+      }
+
+      const archetype = resolveArchetypeForAltitude(variant.archetype, heightMap[index])
+      const cells = canopyCells.get(archetype) ?? []
+      cells.push({ gridX, gridY, index, color: variant.color })
+      canopyCells.set(archetype, cells)
+    }
+  }
+
+  const canopy = new THREE.Group()
+  const up = new THREE.Vector3(0, 0, 1)
+  const normal = new THREE.Vector3()
+  const position = new THREE.Vector3()
+  const scaleVec = new THREE.Vector3()
+  const quaternion = new THREE.Quaternion()
+  const yawQuaternion = new THREE.Quaternion()
+  const matrix = new THREE.Matrix4()
+  const instanceColor = new THREE.Color()
+
+  for (const [archetype, cells] of canopyCells) {
+    const spec = CANOPY_ARCHETYPES[archetype]
+    if (!spec) continue
+
+    const geometry = buildArchetypeGeometry(spec, cellScale)
+    // Lit, so a tree has a shaded side and reads as an object. The point
+    // sprites this replaces took no light at all, which is why two bands
+    // of trees were distinguishable only by hue and count.
+    const material = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: true })
+    const mesh = new THREE.InstancedMesh(geometry, material, cells.length)
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+
+    cells.forEach((cell, instance) => {
+      const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
+        cell.gridX,
+        cell.gridY,
+        world.seed,
+        2,
+      )
+      const { variantRoll: offsetRoll, densityRoll: tintRoll } = cellFoliageRolls(
+        cell.gridX,
+        cell.gridY,
+        world.seed,
+        3,
+      )
+      const transform = canopyInstanceTransform(scaleRoll, rotationRoll, offsetRoll)
+
+      const local = projection.toLocal(
+        cell.gridX + transform.offsetX,
+        cell.gridY + transform.offsetY,
+        heightMap[cell.index],
+        terrain,
+        heightScale,
+        0,
+      )
+      position.set(local.x, local.y, local.z)
+
+      // Trees stand up out of the ground they are on. On the flat map
+      // that is +Z everywhere; on the planet it is the surface normal, so
+      // a tree at the far side of the globe is not lying on its side.
+      const surface = projection.normalAt(cell.gridX, cell.gridY, terrain)
+      normal.set(surface.x, surface.y, surface.z).normalize()
+      quaternion.setFromUnitVectors(up, normal)
+      yawQuaternion.setFromAxisAngle(normal, transform.yaw)
+      quaternion.premultiply(yawQuaternion)
+
+      scaleVec.setScalar(transform.scale)
+      mesh.setMatrixAt(instance, matrix.compose(position, quaternion, scaleVec))
+
+      const { r, g, b } = foliageInstanceColor(cell.color, heightMap[cell.index], tintRoll)
+      mesh.setColorAt(instance, instanceColor.setRGB(r, g, b))
+    })
+
+    mesh.instanceMatrix.needsUpdate = true
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    canopy.add(mesh)
+  }
+
+  return { understory, canopy }
 }
 
 /**
@@ -644,7 +782,7 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
-  for (const group of [portalGroup, haloGroup, foliageGroup]) {
+  for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -668,17 +806,19 @@ function rebuildScene() {
   projection = getProjection(props.worldShape)
   if (ambientLight) ambientLight.intensity = projection.ambientLightIntensity
 
-  const { mesh, water, portals, halos, foliage, heightScale } = buildTerrainMesh(props.world)
+  const { mesh, water, portals, halos, understory, canopy, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
   haloGroup = halos
-  foliageGroup = foliage
+  understoryGroup = understory
+  canopyGroup = canopy
   // Apply the current layer toggles so a rebuild respects the user's
   // last on/off state without waiting for the layer-watch to fire.
   haloGroup.visible = props.showSections
-  foliageGroup.visible = props.showFoliage
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, foliageGroup)
+  understoryGroup.visible = props.showFoliage
+  canopyGroup.visible = props.showFoliage
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup)
 
   currentHeightScale = heightScale
   frameCamera(props.world.terrain, heightScale)
@@ -949,6 +1089,15 @@ function animate() {
   const peaks = props.world?.terrain?.peaks
   const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
 
+  // Individual trees are meaningless from orbit and expensive to draw
+  // there, so the canopy fades in on descent. The understory stays on:
+  // it reads as ground texture at any distance and costs one draw call
+  // per variant. On the flat map the gate is always open.
+  if (canopyGroup && props.showFoliage) {
+    const radius = projection.isSpherical ? planetRadius(props.world.terrain) : 0
+    canopyGroup.visible = shouldShowCanopy(camera.position.length(), radius)
+  }
+
   if (portalGroup) {
     const alpha = PORTAL_MARKERS.lerpAlpha
     for (const sprite of portalGroup.children) {
@@ -1000,7 +1149,7 @@ onMounted(() => {
   renderer.setClearColor(0x000000, 0)
   containerRef.value.appendChild(renderer.domElement)
 
-  // A single rotated group so terrain/water/portals/halos/foliage all
+  // A single rotated group so terrain/water/portals/halos/vegetation all
   // share one consistent transform from grid-space (XY, Z-up) to
   // world-space (Y-up).
   worldGroup = new THREE.Group()
@@ -1149,7 +1298,8 @@ watch(
   () => [props.showSections, props.showFoliage],
   () => {
     if (haloGroup) haloGroup.visible = props.showSections
-    if (foliageGroup) foliageGroup.visible = props.showFoliage
+    if (understoryGroup) understoryGroup.visible = props.showFoliage
+    if (canopyGroup) canopyGroup.visible = props.showFoliage
   },
   { immediate: false },
 )

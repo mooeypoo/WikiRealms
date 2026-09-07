@@ -1,31 +1,53 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CANOPY_ARCHETYPES,
+  CANOPY_BY_BAND,
+  CANOPY_JITTER,
   FOLIAGE_DENSITY,
-  FOLIAGE_VARIANTS_BY_BIOME,
+  FOLIAGE_SAMPLING,
+  UNDERSTORY_BY_BAND,
+  canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
-  pickFoliageVariant,
+  foliageInstanceColor,
+  pickCanopyVariant,
+  pickUnderstoryVariant,
+  resolveArchetypeForAltitude,
+  shouldShowCanopy,
 } from '../../../src/ui/rendering/foliage.js'
+import { SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
-describe('FOLIAGE_VARIANTS_BY_BIOME', () => {
-  it('defines variants only for the five vegetated bands, not for dunes', () => {
-    const keys = Object.keys(FOLIAGE_VARIANTS_BY_BIOME).map((k) => Number(k))
+describe('UNDERSTORY_BY_BAND', () => {
+  it('covers the five vegetated bands and not the dunes', () => {
+    const keys = Object.keys(UNDERSTORY_BY_BAND).map(Number)
+
     expect(keys.sort()).toEqual(
       [BIOME.STEPPE, BIOME.LIGHT_VEG, BIOME.MEADOW, BIOME.WOODLAND, BIOME.JUNGLE].sort(),
     )
   })
 
-  it("each variant list's weights sum to approximately 1", () => {
-    for (const [biome, variants] of Object.entries(FOLIAGE_VARIANTS_BY_BIOME)) {
-      const total = variants.reduce((sum, v) => sum + v.weight, 0)
-      expect(total).toBeCloseTo(1, 2)
+  it("each band's weights sum to approximately 1", () => {
+    for (const variants of Object.values(UNDERSTORY_BY_BAND)) {
+      expect(variants.reduce((sum, v) => sum + v.weight, 0)).toBeCloseTo(1, 2)
+    }
+  })
+
+  it('sizes ground cover under one grid cell', () => {
+    // Sizes are in grid cells now. The sprites this replaces were up to
+    // 4.8 cells wide on a 4-cell sampling grid, so at any real density
+    // the crowns fused into one mat and no two bands looked different.
+    for (const variants of Object.values(UNDERSTORY_BY_BAND)) {
+      for (const variant of variants) {
+        expect(variant.size).toBeLessThanOrEqual(1)
+        expect(variant.size).toBeGreaterThan(0)
+      }
     }
   })
 
   it('every variant declares kind, color, size, density, weight', () => {
-    for (const variants of Object.values(FOLIAGE_VARIANTS_BY_BIOME)) {
+    for (const variants of Object.values(UNDERSTORY_BY_BAND)) {
       for (const v of variants) {
         expect(typeof v.kind).toBe('string')
         expect(typeof v.color).toBe('number')
@@ -37,34 +59,271 @@ describe('FOLIAGE_VARIANTS_BY_BIOME', () => {
   })
 })
 
-describe('pickFoliageVariant', () => {
-  it('returns null for biomes without foliage, dunes included', () => {
-    expect(pickFoliageVariant(BIOME.OCEAN, 0.5)).toBeNull()
-    expect(pickFoliageVariant(BIOME.BEACH, 0.5)).toBeNull()
-    expect(pickFoliageVariant(BIOME.SNOW, 0.5)).toBeNull()
+describe('CANOPY_BY_BAND', () => {
+  it('names only archetypes that exist', () => {
+    for (const variants of Object.values(CANOPY_BY_BAND)) {
+      for (const variant of variants) {
+        expect(CANOPY_ARCHETYPES[variant.archetype]).toBeDefined()
+      }
+    }
+  })
+
+  it("each band's weights sum to approximately 1", () => {
+    for (const variants of Object.values(CANOPY_BY_BAND)) {
+      expect(variants.reduce((sum, v) => sum + v.weight, 0)).toBeCloseTo(1, 2)
+    }
+  })
+
+  it('closes the canopy over the jungle and leaves the woodland open', () => {
+    // This is what separates the top two bands now, in place of a 16-unit
+    // hue difference in one dark green. Ground visible between trunks
+    // versus no ground visible at all.
+    const woodland = Math.max(...CANOPY_BY_BAND[BIOME.WOODLAND].map((v) => v.density))
+    const jungle = Math.max(...CANOPY_BY_BAND[BIOME.JUNGLE].map((v) => v.density))
+
+    expect(woodland).toBeLessThan(0.6)
+    expect(jungle).toBeGreaterThan(0.8)
+  })
+
+  it('gives the jungle an emergent layer and the woodland none', () => {
+    // The second separator, and the one that reads in silhouette: trees
+    // breaking through the top of a closed canopy.
+    const archetypes = (band) => CANOPY_BY_BAND[band].map((v) => v.archetype)
+
+    expect(archetypes(BIOME.JUNGLE)).toContain('emergent')
+    expect(archetypes(BIOME.WOODLAND)).not.toContain('emergent')
+  })
+
+  it('grows trees in the dry bands too, so three dry bands differ', () => {
+    // Bare dunes, bare ground with shrubs, grass with shrubs.
+    expect(CANOPY_BY_BAND[BIOME.DUNES]).toBeUndefined()
+    expect(CANOPY_BY_BAND[BIOME.STEPPE].length).toBeGreaterThan(0)
+    expect(CANOPY_BY_BAND[BIOME.LIGHT_VEG].length).toBeGreaterThan(0)
+  })
+
+  it('rises in occupancy with the band, so the ramp never inverts', () => {
+    // Occupancy, not peak density: the chance a cell takes ANYTHING is
+    // what a reader sees. Measured on the first cut of this table, meadow
+    // came out at 0.102 against light vegetation's 0.13 — a better-cited
+    // section growing less than a worse-cited one — because a meadow
+    // honestly carries fewer shrubs than scrubland.
+    const occupancy = (band) =>
+      CANOPY_BY_BAND[band].reduce((sum, v) => sum + v.weight * v.density, 0)
+    const bands = [BIOME.STEPPE, BIOME.LIGHT_VEG, BIOME.MEADOW, BIOME.WOODLAND, BIOME.JUNGLE]
+
+    for (let i = 1; i < bands.length; i++) {
+      expect(occupancy(bands[i])).toBeGreaterThan(occupancy(bands[i - 1]))
+    }
+  })
+
+  it('rises in understory occupancy with the band too', () => {
+    const occupancy = (band) =>
+      UNDERSTORY_BY_BAND[band].reduce((sum, v) => sum + v.weight * v.density, 0)
+
+    expect(occupancy(BIOME.LIGHT_VEG)).toBeGreaterThan(occupancy(BIOME.STEPPE))
+    expect(occupancy(BIOME.MEADOW)).toBeGreaterThan(occupancy(BIOME.LIGHT_VEG))
+    // Woodland and jungle floors sit UNDER a canopy, so they carry less
+    // ground cover than open meadow does. That is the shade, not an
+    // inversion of the signal — the trees above them more than make up
+    // the difference, which the occupancy test above pins.
+    expect(occupancy(BIOME.JUNGLE)).toBeGreaterThan(occupancy(BIOME.WOODLAND))
+  })
+})
+
+describe('CANOPY_ARCHETYPES', () => {
+  it('makes the emergent the tallest thing that grows', () => {
+    const total = (name) => CANOPY_ARCHETYPES[name].trunkHeight + CANOPY_ARCHETYPES[name].crownHeight
+    const others = Object.keys(CANOPY_ARCHETYPES).filter((name) => name !== 'emergent')
+
+    for (const name of others) {
+      expect(total('emergent')).toBeGreaterThan(total(name))
+    }
+  })
+
+  it('makes the krummholz wider than it is tall', () => {
+    // Wind-flattened, and that is the whole visual point of it.
+    const k = CANOPY_ARCHETYPES.krummholz
+
+    expect(k.crownRadius * 2).toBeGreaterThan(k.trunkHeight + k.crownHeight)
+  })
+
+  it('gives the conifer a spire and the broadleaf a mass', () => {
+    expect(CANOPY_ARCHETYPES.conifer.crown).toBe('cone')
+    expect(CANOPY_ARCHETYPES.broadleaf.crown).toBe('round')
+    // A conifer is taller and narrower than a broadleaf, or the two read
+    // as the same tree.
+    expect(CANOPY_ARCHETYPES.conifer.crownHeight).toBeGreaterThan(CANOPY_ARCHETYPES.broadleaf.crownHeight)
+    expect(CANOPY_ARCHETYPES.conifer.crownRadius).toBeLessThan(CANOPY_ARCHETYPES.broadleaf.crownRadius)
+  })
+
+  it('keeps every tree within a few grid cells', () => {
+    for (const spec of Object.values(CANOPY_ARCHETYPES)) {
+      expect(spec.trunkHeight + spec.crownHeight).toBeLessThan(5)
+      expect(spec.crownRadius).toBeLessThan(1)
+    }
+  })
+})
+
+describe('pickUnderstoryVariant', () => {
+  it('returns null for ground that grows nothing', () => {
+    expect(pickUnderstoryVariant(BIOME.OCEAN, 0.5)).toBeNull()
+    expect(pickUnderstoryVariant(BIOME.BEACH, 0.5)).toBeNull()
+    expect(pickUnderstoryVariant(BIOME.SNOW, 0.5)).toBeNull()
     // A section that cites nothing gets bare ground, not sparse cover.
-    expect(pickFoliageVariant(BIOME.DUNES, 0.5)).toBeNull()
+    expect(pickUnderstoryVariant(BIOME.DUNES, 0.5)).toBeNull()
   })
 
   it('returns the first variant when the roll falls below its weight', () => {
-    // First MEADOW variant has weight 0.75 → any roll < 0.75 → grass
-    const v = pickFoliageVariant(BIOME.MEADOW, 0.1)
-    expect(v.kind).toBe('grass')
-    expect(v.color).toBe(0x75ba55)
+    expect(pickUnderstoryVariant(BIOME.MEADOW, 0.1).kind).toBe('grass')
   })
 
   it('returns a later variant when the roll exceeds earlier weights', () => {
-    // MEADOW weights are grass(0.75) + wildflower(0.10) + shrub(0.15).
-    // Roll 0.9 lands in the shrub bucket.
-    const v = pickFoliageVariant(BIOME.MEADOW, 0.9)
-    expect(v.kind).toBe('scrub')
+    expect(pickUnderstoryVariant(BIOME.MEADOW, 0.95).kind).toBe('scrub')
   })
 
   it('never returns undefined at roll=1 (safety fallback)', () => {
-    for (const biomeKey of Object.keys(FOLIAGE_VARIANTS_BY_BIOME)) {
-      const v = pickFoliageVariant(Number(biomeKey), 1 - 1e-9)
-      expect(v).toBeTruthy()
+    for (const band of Object.keys(UNDERSTORY_BY_BAND)) {
+      expect(pickUnderstoryVariant(Number(band), 1 - 1e-9)).toBeTruthy()
     }
+  })
+})
+
+describe('pickCanopyVariant', () => {
+  it('returns null for ground that grows no trees', () => {
+    expect(pickCanopyVariant(BIOME.OCEAN, 0.5)).toBeNull()
+    expect(pickCanopyVariant(BIOME.DUNES, 0.5)).toBeNull()
+    expect(pickCanopyVariant(BIOME.SNOW, 0.5)).toBeNull()
+  })
+
+  it('never returns undefined at roll=1 (safety fallback)', () => {
+    for (const band of Object.keys(CANOPY_BY_BAND)) {
+      expect(pickCanopyVariant(Number(band), 1 - 1e-9)).toBeTruthy()
+    }
+  })
+})
+
+describe('resolveArchetypeForAltitude', () => {
+  it('leaves low ground alone', () => {
+    expect(resolveArchetypeForAltitude('broadleaf', 0.4)).toBe('broadleaf')
+  })
+
+  it('turns broadleaf into conifer up the slope', () => {
+    // Altitude reads as a change in KIND, not only as a thinning, so a
+    // rocky slope carries alpine vegetation rather than a sparser copy
+    // of the valley.
+    expect(resolveArchetypeForAltitude('broadleaf', ALTITUDE.coniferStart)).toBe('conifer')
+  })
+
+  it('stunts everything to krummholz just under the treeline', () => {
+    for (const archetype of Object.keys(CANOPY_ARCHETYPES)) {
+      expect(resolveArchetypeForAltitude(archetype, ALTITUDE.krummholzStart)).toBe('krummholz')
+    }
+  })
+
+  it('keeps the jungle’s emergent layer up to the krummholz line', () => {
+    // Substituting it away would erase the woodland/jungle distinction on
+    // exactly the high ground where the two are hardest to tell apart.
+    expect(resolveArchetypeForAltitude('emergent', ALTITUDE.coniferStart)).toBe('emergent')
+    expect(resolveArchetypeForAltitude('emergent', ALTITUDE.krummholzStart - 0.01)).toBe('emergent')
+  })
+
+  it('always names an archetype that exists', () => {
+    for (const archetype of Object.keys(CANOPY_ARCHETYPES)) {
+      for (let height = 0; height <= 1.0001; height += 0.05) {
+        expect(CANOPY_ARCHETYPES[resolveArchetypeForAltitude(archetype, height)]).toBeDefined()
+      }
+    }
+  })
+})
+
+describe('foliageInstanceColor', () => {
+  it('returns channels in [0, 1]', () => {
+    for (const roll of [0, 0.5, 0.999]) {
+      for (const height of [0, 0.5, 1]) {
+        const { r, g, b } = foliageInstanceColor(0x3f793f, height, roll)
+        for (const channel of [r, g, b]) {
+          expect(channel).toBeGreaterThanOrEqual(0)
+          expect(channel).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+  })
+
+  it('varies brightness per instance, so a stand has depth', () => {
+    const dark = foliageInstanceColor(0x3f793f, 0, 0)
+    const bright = foliageInstanceColor(0x3f793f, 0, 0.999)
+
+    expect(bright.g).toBeGreaterThan(dark.g)
+  })
+
+  it('dusts the trees white inside the snow band', () => {
+    // What puts vegetation INSIDE the snow rather than stopping at its
+    // edge: dark conifers going pale as they climb.
+    const low = foliageInstanceColor(0x1f6937, 0.4, 0.5)
+    const high = foliageInstanceColor(0x1f6937, 0.9, 0.5)
+    const summit = foliageInstanceColor(0x1f6937, 1, 0.5)
+
+    expect(high.r).toBeGreaterThan(low.r)
+    expect(summit.r).toBeCloseTo(1)
+    expect(summit.g).toBeCloseTo(1)
+  })
+})
+
+describe('canopyInstanceTransform', () => {
+  it('varies scale across the configured range', () => {
+    expect(canopyInstanceTransform(0, 0, 0).scale).toBeCloseTo(CANOPY_JITTER.minScale)
+    expect(canopyInstanceTransform(1, 0, 0).scale).toBeCloseTo(CANOPY_JITTER.maxScale)
+  })
+
+  it('spreads yaw over a full turn, so trees are not all aligned', () => {
+    expect(canopyInstanceTransform(0, 0, 0).yaw).toBeCloseTo(0)
+    expect(canopyInstanceTransform(0, 1, 0).yaw).toBeCloseTo(Math.PI * 2)
+  })
+
+  it('offsets a tree off the cell centre, so a wood is not an orchard', () => {
+    const offsets = [0, 0.25, 0.5, 0.75].map((roll) => canopyInstanceTransform(0.7, 0, roll))
+    const distances = offsets.map((o) => Math.hypot(o.offsetX, o.offsetY))
+
+    for (const distance of distances) {
+      expect(distance).toBeGreaterThan(0)
+      expect(distance).toBeLessThanOrEqual(CANOPY_JITTER.maxOffsetCells)
+    }
+    // Different rolls must point different ways, or every tree in a stand
+    // shifts the same direction and the lattice survives.
+    expect(new Set(offsets.map((o) => Math.round(o.offsetX * 1000))).size).toBeGreaterThan(1)
+  })
+
+  it('keeps the offset inside half a cell, so trees stay on their cell', () => {
+    expect(CANOPY_JITTER.maxOffsetCells).toBeLessThan(0.5)
+  })
+})
+
+describe('shouldShowCanopy', () => {
+  it('always shows on the flat map, where the camera never gets far enough', () => {
+    expect(shouldShowCanopy(9999, 0)).toBe(true)
+    expect(shouldShowCanopy(9999, undefined)).toBe(true)
+  })
+
+  it('hides the canopy from orbit and shows it on descent', () => {
+    const radius = 81
+    const orbit = radius * SPHERE_VIEW.cameraDistanceRatio
+    const close = radius * SPHERE_VIEW.minDistanceRatio
+
+    expect(shouldShowCanopy(orbit, radius)).toBe(false)
+    expect(shouldShowCanopy(close, radius)).toBe(true)
+  })
+})
+
+describe('FOLIAGE_SAMPLING', () => {
+  it('samples the understory at least as densely as the canopy', () => {
+    // Grass wants to be continuous; a tree needs room for its crown.
+    expect(FOLIAGE_SAMPLING.understoryStride).toBeLessThanOrEqual(FOLIAGE_SAMPLING.canopyStride)
+  })
+
+  it('samples far more finely than the one-in-sixteen it replaces', () => {
+    // The old stride of 4 in both axes capped a whole world at one sprite
+    // per 16 cells — measured at 100 to 718 sprites for an entire planet.
+    expect(FOLIAGE_SAMPLING.canopyStride).toBeLessThan(4)
   })
 })
 

@@ -216,15 +216,36 @@ sentence counts and the derived `lushness` scalar, but are no longer
 rendered as their own marker: they read through the land's lushness band
 and its foliage density instead.
 
-## Biome-Aware Foliage
+## Vegetation
 
-The 3D renderer sparsely samples the generated biome grid using a stable
-coordinate hash and adds lightweight point-sprite foliage above eligible
-land cells. Desert cells receive scrub, light vegetation and meadow cells
-receive grass, woodland cells receive conifers, and jungle cells receive
-broad canopy. Ocean, beach, mountain, and snow cells deliberately receive
-no foliage. These are presentation-only details: they consume the
-deterministic terrain data and do not alter world generation.
+The 3D renderer samples the generated band grid with a stable coordinate
+hash and grows two layers on it.
+
+**Understory** — camera-facing point sprites, one per cell, for grass,
+scrub and ferns. Cheap and numerous; ground texture rather than objects.
+
+**Canopy** — instanced, lit tree meshes on every second cell, from five
+archetypes: broadleaf, conifer, emergent, shrub and krummholz. One
+`InstancedMesh` per archetype, so a stand of two thousand trees is one
+draw call.
+
+Which layer a band grows is what separates the bands from each other. The
+dry bands differ by whether they carry shrubs at all; the top two differ
+by canopy CLOSURE and by an emergent layer breaking through it, rather
+than by a shade of green. Altitude substitutes the archetype as well as
+thinning it — broadleaf gives way to conifer, and conifer to stunted
+krummholz under the treeline — so a slope changes in kind as it climbs.
+
+Ocean, beach, polar-cap snow and the dunes carry nothing: a section that
+cites nothing reads as bare ground.
+
+Sizes are authored in grid cells and scaled per projection: the same
+relief is compressed 5.4x on the planet, so a tree sized for the flat map
+would out-scale the range it stands on there. The canopy is also hidden
+from orbit, where individual trees say nothing and cost a great deal.
+
+These are presentation-only details: they consume the deterministic
+terrain data and do not alter world generation.
 
 ## Generation pipeline
 
