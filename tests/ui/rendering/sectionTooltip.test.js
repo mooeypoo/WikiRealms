@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { BIOME } from '../../../src/engine/generation/terrain.js'
 import {
   buildTooltipModel,
-  classifyCitationDensity,
   countDirectSubsections,
   estimateWordCount,
   formatWords,
@@ -40,23 +40,6 @@ describe('projectClipToScreen', () => {
     const off = projectClipToScreen({ x: 1.5, y: 0, z: 0 }, rect)
     expect(off.isBehindCamera).toBe(false)
     expect(off.isOnScreen).toBe(false)
-  })
-})
-
-describe('classifyCitationDensity', () => {
-  it('buckets the density into the five semantic tiers', () => {
-    expect(classifyCitationDensity(0)).toBe('barren')
-    expect(classifyCitationDensity(0.04)).toBe('barren')
-    expect(classifyCitationDensity(0.1)).toBe('light')
-    expect(classifyCitationDensity(0.2)).toBe('moderate')
-    expect(classifyCitationDensity(0.4)).toBe('dense')
-    expect(classifyCitationDensity(0.6)).toBe('lush')
-  })
-
-  it('treats non-numeric input as barren', () => {
-    expect(classifyCitationDensity(null)).toBe('barren')
-    expect(classifyCitationDensity(undefined)).toBe('barren')
-    expect(classifyCitationDensity('not a number')).toBe('barren')
   })
 })
 
@@ -125,7 +108,7 @@ describe('buildTooltipModel', () => {
       sectionIndex: 0,
       ownSize: 2200,
       subtreeSize: 3400,
-      subtreeCitationsPerSentence: 0.22,
+      lushness: 0.5,
     },
     { title: 'Early life', depth: 2, sectionIndex: 0 },
     { title: 'Later years', depth: 2, sectionIndex: 0 },
@@ -136,7 +119,7 @@ describe('buildTooltipModel', () => {
     expect(model.title).toBe('Life and career')
     expect(model.subsectionCount).toBe(2)
     expect(model.wordsLabel).toMatch(/word/)
-    expect(model.densityBucket).toBe('moderate')
+    expect(model.densityBand).toBe(BIOME.MEADOW)
   })
 
   it('prefers subtreeSize when it is larger than ownSize', () => {
@@ -151,19 +134,29 @@ describe('buildTooltipModel', () => {
     const model = buildTooltipModel(null, peaks)
     expect(model.title).toBe('')
     expect(model.subsectionCount).toBe(0)
-    expect(model.densityBucket).toBe('barren')
+    expect(model.densityBand).toBeNull()
   })
 
   it('counts children of a subsection when peakIndex is provided', () => {
     // Build a peaks list where index 1 is a subsection with one grandchild.
     const deep = [
       { title: 'Root', depth: 1, sectionIndex: 0, ownSize: 100 },
-      { title: 'Sub', depth: 2, sectionIndex: 0, ownSize: 200, subtreeCitationsPerSentence: 0.06 },
+      { title: 'Sub', depth: 2, sectionIndex: 0, ownSize: 200, lushness: 0.1 },
       { title: 'Sub.Sub', depth: 3, sectionIndex: 0 },
     ]
     const model = buildTooltipModel(deep[1], deep, 1)
     expect(model.title).toBe('Sub')
     expect(model.subsectionCount).toBe(1)
-    expect(model.densityBucket).toBe('light')
+    expect(model.densityBand).toBe(BIOME.STEPPE)
+  })
+
+  it('reads the same scalar the ground under the cursor was coloured by', () => {
+    // The tooltip used to run its own absolute thresholds over
+    // citations-per-sentence, so it could say "dense" over meadow.
+    const uncited = buildTooltipModel({ title: 'X', lushness: 0 }, [])
+    const best = buildTooltipModel({ title: 'Y', lushness: 1 }, [])
+
+    expect(uncited.densityBand).toBe(BIOME.DUNES)
+    expect(best.densityBand).toBe(BIOME.JUNGLE)
   })
 })

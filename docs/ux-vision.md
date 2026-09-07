@@ -266,8 +266,14 @@ The UI domain gets a three-way internal split, in strict dependency order:
 | Directory | Knows about | Must never import |
 |---|---|---|
 | `src/ui/design/` | nothing but itself — tokens, `<Sheet>`, `<Icon>`, buttons | `engine/`, `core/`, `adapters/` |
-| `src/ui/rendering/` | world data, three.js; no Vue | `adapters/`, Vue |
-| `src/ui/components/` | both of the above, plus composables | — |
+| `src/ui/rendering/` | world data, three.js; no Vue | `adapters/`, Vue, `ui/content/` |
+| `src/ui/content/` | the engine it describes, and `ui/rendering/` for its colours | `adapters/`, `ui/components/` |
+| `src/ui/components/` | all of the above, plus composables | — |
+
+`ui/content/` holds copy, and it reads the engine's own numbers and the renderer's own colours
+rather than restating either. That fixes the direction: content depends on rendering, never the
+reverse. A renderer that wanted the words for a band it had just classified — the section
+tooltip did — returns the band id and lets the component look them up.
 
 A `<Sheet>` that knows what an article is has failed. A design primitive is reusable precisely
 because it is ignorant.

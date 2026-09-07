@@ -7,6 +7,7 @@
  * with plain numbers — the three.js consumer (WorldView3D.vue) just
  * hands over the projected clip-space vector and the canvas rect.
  */
+import { lushnessBand } from '../../engine/generation/terrain.js'
 
 /**
  * Converts a clip-space vector (post-projection: x,y ∈ [-1, 1], z is
@@ -28,30 +29,6 @@ export function projectClipToScreen(clip, canvasRect) {
   const screenY = (1 - (clip.y * 0.5 + 0.5)) * canvasRect.height
   const isOnScreen = !isBehindCamera && clip.x >= -1 && clip.x <= 1 && clip.y >= -1 && clip.y <= 1
   return { screenX, screenY, isBehindCamera, isOnScreen }
-}
-
-/**
- * Density classification for the tooltip's citation-per-sentence dot.
- * Buckets: barren (< 0.05), light (< 0.15), moderate (< 0.3), dense (< 0.5),
- * lush (≥ 0.5).
- *
- * KNOWN, and the next phase's subject: these thresholds are this module's
- * own, and they are ABSOLUTE where the ground under the cursor is now
- * classified by a RELATIVE scalar (see lushness.js). So the tooltip can
- * say "dense" over meadow. It used to claim to mirror a config block
- * called CITATION_PER_SENTENCE, which never held these numbers and no
- * longer exists at all.
- *
- * @param {number} citationsPerSentence
- * @returns {'barren' | 'light' | 'moderate' | 'dense' | 'lush'}
- */
-export function classifyCitationDensity(citationsPerSentence) {
-  const value = Number(citationsPerSentence) || 0
-  if (value < 0.05) return 'barren'
-  if (value < 0.15) return 'light'
-  if (value < 0.3) return 'moderate'
-  if (value < 0.5) return 'dense'
-  return 'lush'
 }
 
 /**
@@ -110,18 +87,38 @@ export function countDirectSubsections(peaks, parentIndex) {
   return count
 }
 
+/** What the model carries when there is no peak to describe. */
+const EMPTY_MODEL = Object.freeze({
+  title: '',
+  subsectionCount: 0,
+  wordsLabel: '',
+  densityBand: null,
+})
+
 /**
  * Builds the render model for the section tooltip from a peak object and
  * the surrounding peaks array. Pure — the Vue component just displays
  * these fields.
  *
- * @param {object} peak the hovered peak (must have title, ownSize/subtreeSize, citationsPerSentence, sectionIndex, depth)
+ * `densityBand` is the ENGINE's band for the peak's `lushness` — the same
+ * classification that coloured the ground the cursor is over. This module
+ * previously ran its own five absolute thresholds over
+ * citations-per-sentence, so it could say "dense" while the ground
+ * underneath was meadow.
+ *
+ * It returns the band id rather than words and a colour on purpose. Those
+ * live in ui/content/lushnessBands.js, and a renderer reaching into
+ * content would point the dependency back the way content already points
+ * at rendering for its colours. The component resolves them; it is
+ * allowed to see both.
+ *
+ * @param {object} peak the hovered peak (must have title, ownSize/subtreeSize, lushness, sectionIndex, depth)
  * @param {object[]} peaks full peaks array (for subsection count)
  * @param {number} [peakIndex] the peak's own index in `peaks`. When omitted, subsection count falls back to counting children of the top-level `peak.sectionIndex` (matches old behavior for top-level-only tooltips).
- * @returns {{ title: string, subsectionCount: number, wordsLabel: string, densityBucket: string }}
+ * @returns {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null }}
  */
 export function buildTooltipModel(peak, peaks, peakIndex = null) {
-  if (!peak) return { title: '', subsectionCount: 0, wordsLabel: '', densityBucket: 'barren' }
+  if (!peak) return { ...EMPTY_MODEL }
   // Use subtreeSize when meaningfully larger — sections whose prose lives
   // in their subsections have ownSize=0 but a real subtreeSize.
   const size = Math.max(peak.subtreeSize ?? 0, peak.ownSize ?? 0)
@@ -131,8 +128,6 @@ export function buildTooltipModel(peak, peaks, peakIndex = null) {
     title: peak.title ?? 'Untitled section',
     subsectionCount: countDirectSubsections(peaks ?? [], parentIndex),
     wordsLabel: formatWords(words),
-    densityBucket: classifyCitationDensity(
-      peak.subtreeCitationsPerSentence ?? peak.citationsPerSentence ?? 0,
-    ),
+    densityBand: lushnessBand(Number(peak.lushness) || 0),
   }
 }

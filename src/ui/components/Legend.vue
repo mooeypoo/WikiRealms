@@ -8,7 +8,6 @@ import {
   LUSHNESS_CEILING_NOTE,
   SNOW_SWATCH,
   WATER_SWATCH,
-  swatchFor,
 } from '../content/legend.js'
 
 /**
@@ -94,7 +93,7 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
             <h3>The ground is how well each section cites</h3>
             <ul class="legend__ground">
               <li v-for="entry in GROUND_LEGEND" :key="entry.biome">
-                <span class="legend__swatch" :style="{ background: swatchFor(entry.biome) }" />
+                <span class="legend__swatch" :style="{ background: entry.swatch }" />
                 <span class="legend__text">
                   <strong>{{ entry.label }}</strong>
                   <span>{{ entry.detail }}</span>
@@ -282,7 +281,7 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
 }
 
 .legend__note {
-  margin: 12px 0 0;
+  margin: var(--spacing-sm) 0 0;
   color: var(--ink-3);
   font-size: var(--text-xs);
   line-height: 1.45;

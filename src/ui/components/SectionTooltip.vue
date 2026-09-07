@@ -1,12 +1,22 @@
 <script setup>
-defineProps({
-  /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBucket: string } | null} */
+import { computed } from 'vue'
+import { describeBand } from '../content/lushnessBands.js'
+
+const props = defineProps({
+  /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null } | null} */
   model: { type: Object, default: null },
   /** Anchor position in canvas-local pixels (left/top). */
   screenX: { type: Number, default: 0 },
   screenY: { type: Number, default: 0 },
   visible: { type: Boolean, default: false },
 })
+
+/**
+ * The band's words and colour, resolved here rather than in the render
+ * model: the words are copy (ui/content/) and the colour is the terrain
+ * renderer's own, and this component is the layer allowed to see both.
+ */
+const band = computed(() => describeBand(props.model?.densityBand))
 </script>
 
 <template>
@@ -24,9 +34,15 @@ defineProps({
           {{ model.subsectionCount }} subsection<span v-if="model.subsectionCount !== 1">s</span>
         </li>
         <li class="section-tooltip__chip">{{ model.wordsLabel }}</li>
-        <li class="section-tooltip__chip section-tooltip__chip--density">
-          <span class="section-tooltip__dot" :class="`section-tooltip__dot--${model.densityBucket}`" aria-hidden="true"></span>
-          <span class="section-tooltip__density-label">{{ model.densityBucket }}</span>
+        <li v-if="band" class="section-tooltip__chip section-tooltip__chip--density">
+          <!-- Colour comes from the terrain renderer's own biomeColor, so
+               the dot is literally the shade of the ground below. -->
+          <span
+            class="section-tooltip__dot"
+            :style="{ background: band.swatch, color: band.swatch }"
+            aria-hidden="true"
+          ></span>
+          <span class="section-tooltip__density-label">{{ band.chip }}</span>
         </li>
       </ul>
     </div>
@@ -107,7 +123,7 @@ defineProps({
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  text-transform: capitalize;
+  text-transform: none;
 }
 
 .section-tooltip__dot {
@@ -117,11 +133,4 @@ defineProps({
   display: inline-block;
   box-shadow: 0 0 6px currentColor;
 }
-
-/* Semantic dot colors mirror the biome gradient: sandy → verdant → dense. */
-.section-tooltip__dot--barren { background: #d3ad6d; color: #d3ad6d; }
-.section-tooltip__dot--light { background: #b6c88a; color: #b6c88a; }
-.section-tooltip__dot--moderate { background: #86c07a; color: #86c07a; }
-.section-tooltip__dot--dense { background: #4b8f6f; color: #4b8f6f; }
-.section-tooltip__dot--lush { background: #2f6a4c; color: #2f6a4c; }
 </style>

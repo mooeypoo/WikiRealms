@@ -32,10 +32,14 @@ export const GRID = Object.freeze({
 })
 
 /**
- * Elevation/moisture thresholds used to classify a cell's biome.
- * Biome is purely a physical/terrain concern (local height + moisture) —
- * independent of article content. Article categories drive a separate
- * global visual "style" layer, not biome placement.
+ * Elevation thresholds bracketing the land bands: below these a cell is
+ * water, above them it is rock or snow. What sits between is the section's
+ * lushness (see LUSHNESS below), not a terrain property.
+ *
+ * There is no moisture here any more. Biome was once a purely physical
+ * concern — local height plus an ambient noise field — and moisture chose
+ * between plains and forest. Citations replaced that, and
+ * forestMinMoisture sat here unread for as long.
  */
 export const BIOME_THRESHOLDS = Object.freeze({
   oceanMaxHeight: 0.32,
@@ -212,8 +216,8 @@ export const POLAR_CAPS = Object.freeze({
 /**
  * Fractal noise layered on top of the section-driven structural height, for
  * natural roughness/detail. Deliberately a small perturbation, not a
- * replacement for the structural shape — see docs/generation.md brainstorm
- * notes on why moisture stays ambient/independent of article content.
+ * replacement for the structural shape — the section peaks define the
+ * silhouette and this only roughens it.
  */
 export const TERRAIN_DETAIL = Object.freeze({
   noiseWeight: 0.05, // subtle surface texture; section peaks should define the terrain silhouette

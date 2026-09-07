@@ -1,6 +1,7 @@
 import { BIOME_THRESHOLDS, PORTAL_LIMITS } from '../../engine/generation/config.js'
-import { BIOME } from '../../engine/generation/terrain.js'
+import { BIOME, LUSHNESS_BANDS } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
+import { describeBand } from './lushnessBands.js'
 
 /**
  * What the world is telling you.
@@ -18,54 +19,23 @@ import { biomeColor } from '../rendering/biomeColor.js'
  */
 
 /**
- * The land, from least to most cited, with the engine's own colours.
+ * The land, from least to most cited, in the engine's own band order and
+ * with its own colours.
  *
- * Every band is measured against THIS ARTICLE's own citation rate, not
- * against an absolute figure — that is the whole claim the ground makes,
- * and the previous legend stated it wrong. It described the bands as
- * percentages "of the article's citation density" while the engine was
- * comparing raw citations-per-sentence to fixed thresholds, so the
- * numbers on screen belonged to no calculation the app performed.
+ * Both the words and the ordering come from lushnessBands.js, which the
+ * section tooltip reads too — one vocabulary, so the chip under the
+ * cursor cannot disagree with the row in the legend. It used to: the
+ * tooltip had its own thresholds and its own hand-copied palette.
  *
- * There are no numbers here now, deliberately. The scalar behind the
- * bands is built from a shrinkage estimator, a log-ratio and a smooth
- * ceiling (see lushness.js); any single percentage printed against that
- * would be a number the reader cannot check and the engine does not use.
- * What a reader can act on is the ordering and the comparison, which is
- * what these say.
+ * There are no numbers here, deliberately. The scalar behind the bands is
+ * built from a shrinkage estimator, a log-ratio and a smooth ceiling (see
+ * lushness.js); any single percentage printed against that would be a
+ * number the reader cannot check and the engine does not use. The
+ * previous legend printed exactly such numbers, as percentages "of the
+ * article's citation density", while the engine was comparing raw
+ * citations-per-sentence to fixed thresholds.
  */
-export const GROUND_LEGEND = [
-  {
-    biome: BIOME.DUNES,
-    label: 'Cites nothing',
-    detail: 'Bare ground. This section carries no references at all.',
-  },
-  {
-    biome: BIOME.STEPPE,
-    label: 'Cited far less than the rest',
-    detail: 'Scrub and dry grass, well below what this article manages elsewhere.',
-  },
-  {
-    biome: BIOME.LIGHT_VEG,
-    label: 'Cited less than the rest',
-    detail: 'Scattered green, somewhat below the article’s own rate.',
-  },
-  {
-    biome: BIOME.MEADOW,
-    label: 'Cited about as well as the rest',
-    detail: 'Open meadow, at roughly the article’s own rate.',
-  },
-  {
-    biome: BIOME.WOODLAND,
-    label: 'Cited better than the rest',
-    detail: 'Trees, with ground still visible between them.',
-  },
-  {
-    biome: BIOME.JUNGLE,
-    label: 'Cited far better than the rest',
-    detail: 'Closed canopy. The best-sourced ground in this world.',
-  },
-]
+export const GROUND_LEGEND = LUSHNESS_BANDS.map((biome) => describeBand(biome))
 
 /**
  * How green a world can get at all, which is a separate question from
@@ -112,11 +82,6 @@ export const FEATURE_LEGEND = [
     )} and it takes snow. The polar ice is the exception — every world has it.`,
   },
 ]
-
-/** Swatch colour for a biome, straight from the renderer's own function. */
-export function swatchFor(biome, height = 0.6) {
-  return biomeColor(biome, height)
-}
 
 export const WATER_SWATCH = biomeColor(BIOME.OCEAN, 0.5)
 export const SNOW_SWATCH = biomeColor(BIOME.SNOW, 0.95)

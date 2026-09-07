@@ -1,0 +1,92 @@
+import { describe, expect, it } from 'vitest'
+import { BIOME, LUSHNESS_BANDS, lushnessBand } from '../../../src/engine/generation/terrain.js'
+import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
+import { LUSHNESS_BAND_COPY, describeBand } from '../../../src/ui/content/lushnessBands.js'
+import { GROUND_LEGEND } from '../../../src/ui/content/legend.js'
+import { buildTooltipModel } from '../../../src/ui/rendering/sectionTooltip.js'
+
+describe('LUSHNESS_BAND_COPY', () => {
+  it('covers every band the engine can classify, and nothing else', () => {
+    // A band without words would render an empty chip; words without a
+    // band would be copy for something the engine cannot produce.
+    const described = Object.keys(LUSHNESS_BAND_COPY).map(Number)
+
+    expect(described.sort()).toEqual([...LUSHNESS_BANDS].sort())
+  })
+
+  it('gives every band a chip, a label and a detail', () => {
+    for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
+      expect(copy.chip.length).toBeGreaterThan(0)
+      expect(copy.label.length).toBeGreaterThan(0)
+      expect(copy.detail.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('states every cited band as a comparison against the article', () => {
+    // The scalar behind these is relative, and the old vocabulary
+    // ("dense", "lush") described an absolute quantity the app was not
+    // measuring.
+    for (const biome of LUSHNESS_BANDS) {
+      if (biome === BIOME.DUNES) continue
+      expect(LUSHNESS_BAND_COPY[biome].chip).toContain('the article')
+    }
+  })
+
+  it('keeps chips short enough for a tooltip', () => {
+    for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
+      expect(copy.chip.length).toBeLessThanOrEqual(24)
+    }
+  })
+})
+
+describe('describeBand', () => {
+  it('takes its colour from the terrain renderer rather than restating one', () => {
+    expect(describeBand(BIOME.MEADOW).swatch).toBe(biomeColor(BIOME.MEADOW, 0.6))
+  })
+
+  it('is null for a biome that is not a lushness band', () => {
+    expect(describeBand(BIOME.OCEAN)).toBeNull()
+    expect(describeBand(BIOME.MOUNTAIN)).toBeNull()
+    expect(describeBand(999)).toBeNull()
+  })
+})
+
+describe('describeBand and the engine agree', () => {
+  it('names the band the engine classifies a scalar into', () => {
+    // Content names bands; it does not decide them. The engine's
+    // lushnessBand is the only classifier.
+    for (const lushness of [0, 0.1, 0.3, 0.5, 0.7, 0.95]) {
+      expect(describeBand(lushnessBand(lushness))).not.toBeNull()
+      expect(describeBand(lushnessBand(lushness)).biome).toBe(lushnessBand(lushness))
+    }
+  })
+})
+
+describe('one vocabulary', () => {
+  /**
+   * The failure this module exists to prevent: the engine, the foliage
+   * layer and the tooltip each had their own idea of what "lush" meant,
+   * and the tooltip could say "dense" while the ground under the cursor
+   * was meadow.
+   */
+  it('sends the tooltip to the same band the legend row describes', () => {
+    for (const entry of GROUND_LEGEND) {
+      const model = buildTooltipModel({ title: 'x', lushness: midpointOf(entry.biome) }, [])
+
+      expect(model.densityBand).toBe(entry.biome)
+      expect(describeBand(model.densityBand).swatch).toBe(entry.swatch)
+      expect(describeBand(model.densityBand).chip).toBe(LUSHNESS_BAND_COPY[entry.biome].chip)
+    }
+  })
+
+  it('orders the legend the way the engine orders the bands', () => {
+    expect(GROUND_LEGEND.map((entry) => entry.biome)).toEqual([...LUSHNESS_BANDS])
+  })
+})
+
+/** A lushness value that lands squarely inside `biome`'s band. */
+function midpointOf(biome) {
+  if (biome === BIOME.DUNES) return 0
+  const index = LUSHNESS_BANDS.indexOf(biome) - 1 // cited bands are fifths
+  return (index + 0.5) / 5
+}
