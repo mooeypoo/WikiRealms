@@ -33,8 +33,14 @@ export function projectClipToScreen(clip, canvasRect) {
 /**
  * Density classification for the tooltip's citation-per-sentence dot.
  * Buckets: barren (< 0.05), light (< 0.15), moderate (< 0.3), dense (< 0.5),
- * lush (≥ 0.5). Thresholds mirror CITATION_PER_SENTENCE's adjusted
- * thresholds so the tooltip's semantic maps 1:1 with the biome logic.
+ * lush (≥ 0.5).
+ *
+ * KNOWN, and the next phase's subject: these thresholds are this module's
+ * own, and they are ABSOLUTE where the ground under the cursor is now
+ * classified by a RELATIVE scalar (see lushness.js). So the tooltip can
+ * say "dense" over meadow. It used to claim to mirror a config block
+ * called CITATION_PER_SENTENCE, which never held these numbers and no
+ * longer exists at all.
  *
  * @param {number} citationsPerSentence
  * @returns {'barren' | 'light' | 'moderate' | 'dense' | 'lush'}

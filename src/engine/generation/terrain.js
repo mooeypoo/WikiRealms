@@ -1,17 +1,47 @@
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS, CITATION_PER_SENTENCE } from './config.js'
+import { BIOME_THRESHOLDS, LUSHNESS } from './config.js'
 
-/** Biome ids stored in World.terrain.biomeMap. */
+/**
+ * Biome ids stored in World.terrain.biomeMap.
+ *
+ * Ordered, and the order is load-bearing for the six lushness bands: they
+ * run from least to most cited, so LUSHNESS_BANDS below can be indexed
+ * straight from a cut point. Water and altitude bracket them.
+ *
+ * DUNES and STEPPE are both dry, and the difference between them is the
+ * point: dunes mean a section cites NOTHING, steppe means it cites less
+ * than the rest of the article. "No sources" and "fewer sources than its
+ * neighbours" are different claims about an article, and a reader acts on
+ * them differently.
+ */
 export const BIOME = Object.freeze({
   OCEAN: 0,
   BEACH: 1,
-  DESERT: 2, // sparse citations/under-cited land
-  LIGHT_VEG: 3, // sparse vegetation (light citations)
-  MEADOW: 4, // moderate citations/lush grassland
-  WOODLAND: 5, // dense vegetation (well-cited)
-  JUNGLE: 6, // densest vegetation (heavily-cited)
-  MOUNTAIN: 7,
-  SNOW: 8,
+  DUNES: 2, // cites nothing at all
+  STEPPE: 3, // cited well below this article's own rate
+  LIGHT_VEG: 4, // somewhat below
+  MEADOW: 5, // about the article's own rate
+  WOODLAND: 6, // above it
+  JUNGLE: 7, // far above it
+  MOUNTAIN: 8,
+  SNOW: 9,
 })
+
+/** All six lushness bands, least to most cited. */
+export const LUSHNESS_BANDS = Object.freeze([
+  BIOME.DUNES,
+  BIOME.STEPPE,
+  BIOME.LIGHT_VEG,
+  BIOME.MEADOW,
+  BIOME.WOODLAND,
+  BIOME.JUNGLE,
+])
+
+/**
+ * The five bands a section with at least one citation can land in.
+ * Index matches LUSHNESS.bandCuts. Dunes is excluded deliberately: it is
+ * not the bottom of this scale, it is a separate statement.
+ */
+export const CITED_LUSHNESS_BANDS = Object.freeze(LUSHNESS_BANDS.slice(1))
 
 /**
  * Fractal noise sampled on a CYLINDER rather than a plane, so it is
@@ -54,76 +84,47 @@ export function sampleFractalNoiseWrapped(noise3D, x, y, width, { octaves, persi
 }
 
 /**
- * Classifies a cell's biome from its height and citation density.
- * Citation density reflects how "important" a section is (how many citations it has
- * relative to the total article). Pure and reusable so presentation layers can
- * re-derive biome info without re-running generation.
- * @param {number} height [0, 1]
- * @param {number} citationDensity [0, 1] - normalized by total article citations
+ * Which lushness band a scalar falls in. The only place that turns the
+ * continuous signal into a name — renderers that can vary continuously
+ * should read the scalar itself and leave this to the legend and tooltip.
+ *
+ * Exactly 0 means the section cites nothing, and gets the dunes. Every
+ * other value is a position among the sections that DO cite, cut into
+ * even fifths. Treating dunes as the bottom fifth instead would merge
+ * "no sources" into "few sources", which is the distinction the sixth
+ * band exists for.
+ *
+ * @param {number} lushness [0, 1] from lushness.js
+ * @returns {number} BIOME enum value
  */
-export function classifyBiome(height, citationDensity) {
-  if (height < BIOME_THRESHOLDS.oceanMaxHeight) return BIOME.OCEAN
-  if (height < BIOME_THRESHOLDS.beachMaxHeight) return BIOME.BEACH
-  if (height > BIOME_THRESHOLDS.snowMinHeight) return BIOME.SNOW
-  if (height > BIOME_THRESHOLDS.mountainMinHeight) return BIOME.MOUNTAIN
-
-  // Land biomes determined by citation density (how "cited" the section is)
-  if (citationDensity < CITATION_LUSHNESS.desertThreshold) return BIOME.DESERT
-  if (citationDensity < CITATION_LUSHNESS.lightVegThreshold) return BIOME.LIGHT_VEG
-  if (citationDensity < CITATION_LUSHNESS.meadowThreshold) return BIOME.MEADOW
-  if (citationDensity < CITATION_LUSHNESS.woodlandThreshold) return BIOME.WOODLAND
-  return BIOME.JUNGLE
+export function lushnessBand(lushness) {
+  const value = Number(lushness) || 0
+  if (value <= 0) return BIOME.DUNES
+  for (let i = 0; i < LUSHNESS.bandCuts.length; i++) {
+    if (value < LUSHNESS.bandCuts[i]) return CITED_LUSHNESS_BANDS[i]
+  }
+  return CITED_LUSHNESS_BANDS[CITED_LUSHNESS_BANDS.length - 1]
 }
 
 /**
- * Classifies biome using citations-per-sentence with article-wide awareness.
- * If the article's average citations-per-sentence is below minAverageThreshold,
- * the entire article's biome is biased toward dry/barren to avoid making
- * sparsely-cited articles appear lush. Otherwise, sections with higher
- * citations-per-sentence appear lusher than those with lower values.
+ * Classifies a cell's biome from its height and its section's lushness.
+ *
+ * Pure and reusable so presentation layers can re-derive biome info
+ * without re-running generation.
+ *
+ * KNOWN, and the subject of the next phase: altitude still REPLACES the
+ * lushness band outright rather than blending with it, so a well-cited
+ * summit reads as the same bare rock as a barren one, and the switch
+ * draws a hard contour line at exactly mountainMinHeight.
  *
  * @param {number} height [0, 1]
- * @param {number} citationsPerSentence citation count / sentence count for this section
- * @param {number} averageCitationsPerSentence article-wide average
+ * @param {number} lushness [0, 1] from lushness.js
  * @returns {number} BIOME enum value
  */
-export function classifyBiomeWithSentenceAwareness(height, citationsPerSentence, averageCitationsPerSentence) {
-  // Water and mountain biomes unaffected by citation logic
+export function classifyBiome(height, lushness) {
   if (height < BIOME_THRESHOLDS.oceanMaxHeight) return BIOME.OCEAN
   if (height < BIOME_THRESHOLDS.beachMaxHeight) return BIOME.BEACH
   if (height > BIOME_THRESHOLDS.snowMinHeight) return BIOME.SNOW
   if (height > BIOME_THRESHOLDS.mountainMinHeight) return BIOME.MOUNTAIN
-
-  // Determine effective citation thresholds based on article's overall citation density
-  let desertThreshold, lightVegThreshold, meadowThreshold, woodlandThreshold
-
-  if (averageCitationsPerSentence < CITATION_PER_SENTENCE.minAverageThreshold) {
-    // Article is sparsely cited overall; bias toward barren with a dampening curve
-    const bias = CITATION_PER_SENTENCE.biasStrength
-    const baseDesert = CITATION_PER_SENTENCE.desertThresholdAdjusted
-    const baseLightVeg = CITATION_PER_SENTENCE.lightVegThresholdAdjusted
-    const baseMeadow = CITATION_PER_SENTENCE.meadowThresholdAdjusted
-    const baseWoodland = CITATION_PER_SENTENCE.woodlandThresholdAdjusted
-
-    // When below threshold, push thresholds down (making DESERT more likely)
-    // Lerp between original thresholds and adjusted thresholds based on bias strength
-    desertThreshold = CITATION_LUSHNESS.desertThreshold * (1 - bias) + baseDesert * bias
-    lightVegThreshold = CITATION_LUSHNESS.lightVegThreshold * (1 - bias) + baseLightVeg * bias
-    meadowThreshold = CITATION_LUSHNESS.meadowThreshold * (1 - bias) + baseMeadow * bias
-    woodlandThreshold = CITATION_LUSHNESS.woodlandThreshold * (1 - bias) + baseWoodland * bias
-  } else {
-    // Article is well-cited; use standard thresholds
-    desertThreshold = CITATION_LUSHNESS.desertThreshold
-    lightVegThreshold = CITATION_LUSHNESS.lightVegThreshold
-    meadowThreshold = CITATION_LUSHNESS.meadowThreshold
-    woodlandThreshold = CITATION_LUSHNESS.woodlandThreshold
-  }
-
-  // Classify based on this section's citations-per-sentence
-  if (citationsPerSentence < desertThreshold) return BIOME.DESERT
-  if (citationsPerSentence < lightVegThreshold) return BIOME.LIGHT_VEG
-  if (citationsPerSentence < meadowThreshold) return BIOME.MEADOW
-  if (citationsPerSentence < woodlandThreshold) return BIOME.WOODLAND
-  return BIOME.JUNGLE
+  return lushnessBand(lushness)
 }
-

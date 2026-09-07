@@ -1,4 +1,4 @@
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS, PORTAL_LIMITS } from '../../engine/generation/config.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
 
@@ -17,34 +17,64 @@ import { biomeColor } from '../rendering/biomeColor.js'
  * is worse than no legend.
  */
 
-/** The land, from least to most cited, with the engine's own colours. */
+/**
+ * The land, from least to most cited, with the engine's own colours.
+ *
+ * Every band is measured against THIS ARTICLE's own citation rate, not
+ * against an absolute figure — that is the whole claim the ground makes,
+ * and the previous legend stated it wrong. It described the bands as
+ * percentages "of the article's citation density" while the engine was
+ * comparing raw citations-per-sentence to fixed thresholds, so the
+ * numbers on screen belonged to no calculation the app performed.
+ *
+ * There are no numbers here now, deliberately. The scalar behind the
+ * bands is built from a shrinkage estimator, a log-ratio and a smooth
+ * ceiling (see lushness.js); any single percentage printed against that
+ * would be a number the reader cannot check and the engine does not use.
+ * What a reader can act on is the ordering and the comparison, which is
+ * what these say.
+ */
 export const GROUND_LEGEND = [
   {
-    biome: BIOME.DESERT,
-    label: 'Barely cited',
-    detail: `Under ${percent(CITATION_LUSHNESS.desertThreshold)} of the article's citation density`,
+    biome: BIOME.DUNES,
+    label: 'Cites nothing',
+    detail: 'Bare ground. This section carries no references at all.',
+  },
+  {
+    biome: BIOME.STEPPE,
+    label: 'Cited far less than the rest',
+    detail: 'Scrub and dry grass, well below what this article manages elsewhere.',
   },
   {
     biome: BIOME.LIGHT_VEG,
-    label: 'Lightly cited',
-    detail: `${percent(CITATION_LUSHNESS.desertThreshold)}–${percent(CITATION_LUSHNESS.lightVegThreshold)}`,
+    label: 'Cited less than the rest',
+    detail: 'Scattered green, somewhat below the article’s own rate.',
   },
   {
     biome: BIOME.MEADOW,
-    label: 'Moderately cited',
-    detail: `${percent(CITATION_LUSHNESS.lightVegThreshold)}–${percent(CITATION_LUSHNESS.meadowThreshold)}`,
+    label: 'Cited about as well as the rest',
+    detail: 'Open meadow, at roughly the article’s own rate.',
   },
   {
     biome: BIOME.WOODLAND,
-    label: 'Well cited',
-    detail: `${percent(CITATION_LUSHNESS.meadowThreshold)}–${percent(CITATION_LUSHNESS.woodlandThreshold)}`,
+    label: 'Cited better than the rest',
+    detail: 'Trees, with ground still visible between them.',
   },
   {
     biome: BIOME.JUNGLE,
-    label: 'Heavily cited',
-    detail: `Over ${percent(CITATION_LUSHNESS.woodlandThreshold)}`,
+    label: 'Cited far better than the rest',
+    detail: 'Closed canopy. The best-sourced ground in this world.',
   },
 ]
+
+/**
+ * How green a world can get at all, which is a separate question from
+ * which section is greenest. An article that cites little stays dry
+ * everywhere, however unevenly it cites.
+ */
+export const LUSHNESS_CEILING_NOTE =
+  'These compare sections within one article. A poorly sourced article stays dry throughout, ' +
+  'however uneven it is — the greens are only available to an article that cites well overall.'
 
 /** Everything that is not the ground itself. */
 export const FEATURE_LEGEND = [

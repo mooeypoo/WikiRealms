@@ -42,7 +42,6 @@ export const BIOME_THRESHOLDS = Object.freeze({
   beachMaxHeight: 0.36,
   mountainMinHeight: 0.7,
   snowMinHeight: 0.85,
-  forestMinMoisture: 0.5,
 })
 
 /**
@@ -239,41 +238,67 @@ export const WATER_LEVEL = Object.freeze({
 })
 
 /**
- * Citation density thresholds used to classify land biome lushness.
- * Reflects how "cited" or "important" a section is within the article.
- * Thresholds represent the percentile of total article citations for a section:
- * - desert (under-cited): 0-10%
- * - light vegetation (sparse citations): 10-25%
- * - meadow (moderate citations): 25-50%
- * - woodland (well-cited): 50-75%
- * - jungle (heavily-cited): 75%+
- */
-export const CITATION_LUSHNESS = Object.freeze({
-  desertThreshold: 0.1,
-  lightVegThreshold: 0.25,
-  meadowThreshold: 0.5,
-  woodlandThreshold: 0.75,
-})
-
-/**
- * Citation-per-sentence biome calculation. If the article's average
- * citations-per-sentence falls below minAverageThreshold, the entire
- * article's biome is biased toward dry/barren regardless of relative
- * citation density within sections. This prevents sparsely-cited articles
- * from appearing lush just because some sections are relatively
- * over-cited compared to equally under-cited peers.
+ * Land lushness: how a section's citation habits become ground cover.
  *
- * biasStrength controls how strongly to shift biomes toward DESERT when
- * below threshold: 0 = no bias (keep relative ratios), 1 = hard desert floor
- * (all land reads as desert). Values between create a gradual dampening curve.
+ * The signal is a single scalar in [0, 1] per section (see lushness.js),
+ * built in four steps, and the bands below are cut points on it. The
+ * previous system compared a section's raw citations-per-sentence against
+ * ABSOLUTE thresholds, which had two consequences worth not repeating:
+ * only two of its five bands ever rendered on a normal article, and the
+ * whole map slid with the article's overall citation rate, so the
+ * within-article comparison — the one a reader can actually act on while
+ * standing in a world — was lost.
+ *
+ * Every value here is a tunable of the continuous curve, not a cliff.
+ * NOT YET CALIBRATED against real articles: see the open questions in
+ * docs/implementation-plans/citation-density-and-elevation-2026-09-07.md.
  */
-export const CITATION_PER_SENTENCE = Object.freeze({
-  minAverageThreshold: 0.15, // if article avg < this, entire article biased toward barren
-  biasStrength: 0.8, // how aggressively to dampen biome lushness below threshold (0-1)
-  desertThresholdAdjusted: 0.05, // citations/sentence threshold for DESERT when below article minimum
-  lightVegThresholdAdjusted: 0.15,
-  meadowThresholdAdjusted: 0.3,
-  woodlandThresholdAdjusted: 0.5,
+export const LUSHNESS = Object.freeze({
+  // Step 1, shrinkage. A section's rate is pulled toward the article's
+  // own rate by this many notional sentences, so a short section reads as
+  // "typical for this article" rather than as an extreme. Without it a
+  // one-sentence section carrying one citation scored 1.0 citations per
+  // sentence and rendered as the lushest land on the map — the most
+  // extreme reading from the least evidence.
+  shrinkageSentences: 6,
+
+  // Step 3, how far from the article's own rate the scale reaches, in
+  // doublings. At 0.8, a section cited 2^0.8 = 1.74x the article's own
+  // rate saturates the top of the scale, and one cited 1/1.74x saturates
+  // the bottom. Doublings rather than a linear ratio because "twice as
+  // cited" is the same perceptual step wherever it starts.
+  //
+  // Chosen by sweeping 0.7 to 1.5 against the story fixture and counting
+  // how many bands a world actually shows: at 1.25 and above the top band
+  // was unreachable by any section the fixture contains, and everything
+  // piled into two bands. Deliberately narrow, because the comparison is
+  // WITHIN one article, where the spread is small — the shrinkage above
+  // is what stops that sensitivity amplifying noise.
+  spanDoublings: 0.8,
+
+  // Step 4, the absolute ceiling. An article whose overall rate reaches
+  // this many citations per sentence can use the full scale; below it,
+  // the scale is compressed toward the floor, so a barely-cited
+  // article's best section cannot read as lush. This replaces a binary
+  // switch at 0.15 that made two articles either side of it render
+  // visibly differently.
+  articleRateSaturation: 0.35,
+  ceilingFloor: 0.18,
+
+  // Smallest lushness a section with ANY citation can be given, so that
+  // exactly 0 is reserved for "cites nothing" (see lushness.js). Without
+  // this the bottom of the relative scale collapses into the dunes and
+  // the two bands say the same thing — measured on the fixture, a
+  // section with one citation in 22 sentences landed in the band that
+  // means no citations at all.
+  citedFloor: 0.001,
+
+  // Cut points between the five CITED bands, on the [0, 1] scalar: even
+  // fifths. The sixth band, dunes, is not a cut — it is the reserved
+  // value 0. Even cuts are what let the legend describe the bands
+  // truthfully without restating a table of numbers. Tune spanDoublings
+  // and the ceiling, not these.
+  bandCuts: Object.freeze([1 / 5, 2 / 5, 3 / 5, 4 / 5]),
 })
 
 /**

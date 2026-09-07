@@ -15,7 +15,7 @@ function makeTerrain(overrides = {}) {
     width,
     height,
     heightMap: new Float64Array(cellCount).fill(0.5),
-    biomeMap: new Uint8Array(cellCount).fill(BIOME.PLAINS),
+    biomeMap: new Uint8Array(cellCount).fill(BIOME.MEADOW),
     ...overrides,
   }
 }
@@ -49,7 +49,7 @@ describe('computeVertexColors', () => {
 
   it('is deterministic and matches biomeColor for a given cell', () => {
     const terrain = makeTerrain({
-      biomeMap: new Uint8Array([BIOME.OCEAN, BIOME.SNOW, BIOME.PLAINS, BIOME.FOREST]),
+      biomeMap: new Uint8Array([BIOME.OCEAN, BIOME.SNOW, BIOME.MEADOW, BIOME.WOODLAND]),
       heightMap: new Float64Array([0.1, 0.9, 0.5, 0.5]),
       width: 2,
       height: 2,

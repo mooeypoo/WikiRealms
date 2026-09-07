@@ -1127,7 +1127,7 @@ describe('App legend', () => {
     await flushPromises()
 
     expect(document.querySelector('.legend')).not.toBeNull()
-    expect(document.body.textContent).toContain('citation density')
+    expect(document.body.textContent).toContain('how well each section cites')
 
     press('l')
     await flushPromises()

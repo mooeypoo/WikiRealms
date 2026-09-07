@@ -1,6 +1,7 @@
 import { createNoise3D } from 'simplex-noise'
 import { BIOME_THRESHOLDS, GRID, PEAK_LAYOUT, POLAR_CAPS, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
-import { BIOME, classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
+import { BIOME, classifyBiome, sampleFractalNoiseWrapped } from './terrain.js'
+import { annotatePeakLushness } from './lushness.js'
 import { computeRidgeLayout, computeSpiralLayout, relaxPlacements } from './layout.js'
 
 /**
@@ -489,6 +490,12 @@ export function flattenPeaks(
       citationDensity: node.subtreeCitationDensity ?? node.citationDensity ?? 0,
       citationsPerSentence: node.citationsPerSentence ?? 0,
       subtreeCitationsPerSentence: node.subtreeCitationsPerSentence ?? 0,
+      // Raw sentence counts, not just the ratios above: lushness shrinks a
+      // section's rate toward the article's by a number of sentences, so
+      // it needs the numerator and denominator separately. A ratio alone
+      // cannot say whether it came from 1 sentence or 100.
+      sentenceCount: node.sentenceCount ?? 0,
+      subtreeSentenceCount: node.subtreeSentenceCount ?? node.sentenceCount ?? 0,
     })
 
     if (node.children.length > 0) {
@@ -639,16 +646,12 @@ function computeWaterLevelShift(totalArticleSize) {
  *
  * Each cell's biome uses the section whose continent contribution was
  * largest at that cell (tracked in sectionOwnershipMap during pass 1), fed
- * through classifyBiomeWithSentenceAwareness so under-cited articles
- * lean toward barren as a whole rather than by rank.
+ * through classifyBiome along with that section's lushness (lushness.js).
  *
- * Output shape (heightMap/moistureMap/biomeMap/peaks) is unchanged; the
- * 2D and 3D renderers do not need updating.
- *
- * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number }} options
- * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
+ * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number, articleCitationRate?: number }} options
+ * @returns {{ width: number, height: number, heightMap: Float64Array, lushnessMap: Float32Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
  */
-export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
+export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize, articleCitationRate = 0 }) {
   const cellCount = width * height
   const waterLevelShift = computeWaterLevelShift(totalArticleSize)
 
@@ -788,30 +791,31 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // === PASS 8: Post-erosion polish ===
   terrain = smoothHeightMap(terrain, width, height, cfg.postErosionSmoothing.passes, cfg.postErosionSmoothing.strength)
 
-  // Biome pass: each land cell picks up its dominant section's
-  // citations-per-sentence for the sentence-aware classifier.
-  const totalCitationsPerSentence = peaks.reduce((sum, p) => sum + (p.subtreeCitationsPerSentence ?? 0), 0)
-  const averageCitationsPerSentence = totalCitationsPerSentence / Math.max(peaks.length, 1)
+  // Biome pass: each land cell picks up its dominant section's lushness.
+  //
+  // lushnessMap is Float32, where the moistureMap it replaces was
+  // Float64. The extra precision bought nothing — the values are a
+  // normalized [0, 1] signal read by a renderer — and half the width
+  // saves 512 KB per world at the current grid.
+  annotatePeakLushness(peaks, articleCitationRate)
 
-  const moistureMap = new Float64Array(cellCount)
+  const lushnessMap = new Float32Array(cellCount)
   const biomeMap = new Uint8Array(cellCount)
   for (let i = 0; i < cellCount; i++) {
     if (polarCapMask[i]) {
       // Icecaps belong to no section: leaving them owned would make
       // hovering one light up an unrelated continent's halo.
       sectionOwnershipMap[i] = -1
-      moistureMap[i] = 0
+      lushnessMap[i] = 0
       biomeMap[i] = terrain[i] > BIOME_THRESHOLDS.oceanMaxHeight ? BIOME.SNOW : BIOME.OCEAN
       continue
     }
 
     const ownerIdx = sectionOwnershipMap[i]
-    const cps = ownerIdx >= 0 && ownerIdx < peaks.length
-      ? peaks[ownerIdx].subtreeCitationsPerSentence ?? 0
-      : 0
-    moistureMap[i] = cps
-    biomeMap[i] = classifyBiomeWithSentenceAwareness(terrain[i], cps, averageCitationsPerSentence)
+    const lushness = ownerIdx >= 0 && ownerIdx < peaks.length ? peaks[ownerIdx].lushness ?? 0 : 0
+    lushnessMap[i] = lushness
+    biomeMap[i] = classifyBiome(terrain[i], lushness)
   }
 
-  return { width, height, heightMap: terrain, moistureMap, biomeMap, sectionOwnershipMap, peaks }
+  return { width, height, heightMap: terrain, lushnessMap, biomeMap, sectionOwnershipMap, peaks }
 }

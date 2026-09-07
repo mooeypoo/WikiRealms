@@ -35,6 +35,12 @@ function limitLevel(nodes, depth, limits) {
   if (folded.length > 0) {
     const foldedSize = folded.reduce((sum, node) => sum + node.subtreeSize, 0)
     const foldedCitations = folded.reduce((sum, node) => sum + (node.subtreeCitationCount ?? node.citationCount ?? 0), 0)
+    // Sentences aggregate too, or the folded peak's lushness would divide
+    // real citations by zero sentences and read as maximally cited land.
+    const foldedSentences = folded.reduce(
+      (sum, node) => sum + (node.subtreeSentenceCount ?? node.sentenceCount ?? 0),
+      0,
+    )
     limited.push({
       title: 'Miscellaneous',
       depth,
@@ -45,6 +51,8 @@ function limitLevel(nodes, depth, limits) {
       citationDensity: foldedSize > 0 ? foldedCitations / foldedSize : 0,
       subtreeCitationCount: foldedCitations,
       subtreeCitationDensity: foldedSize > 0 ? foldedCitations / foldedSize : 0,
+      sentenceCount: foldedSentences,
+      subtreeSentenceCount: foldedSentences,
       children: [],
       folded: true,
     })

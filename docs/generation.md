@@ -50,11 +50,18 @@ needs to be used now, but it's worth capturing so nothing is forgotten.
 - per-section outbound links — drives per-section portal placement (one
   portal per distinct link *per section*, so the same target can appear
   in multiple sections without being deduplicated away)
-- per-section citation count — parsed from inline reference markers. The
-  citation density of the dominant top-level section selects land lushness:
-  desert, light vegetation, meadow, woodland, or jungle, and modulates how
-  densely that land is planted. Citation density is expressed entirely
-  through the land itself — a well-sourced section is visibly greener.
+- per-section citation count and sentence count — parsed from inline
+  reference markers and from prose punctuation plus list/table structure
+  (see `countSentences.js`). Together they give each section a single
+  lushness scalar in [0, 1] (see `lushness.js`), built from a shrinkage
+  estimator, the article's own citation rate, a log-ratio against it and a
+  smooth absolute ceiling. The dominant top-level section's lushness
+  selects one of six land bands — dunes, steppe, light vegetation,
+  meadow, woodland, jungle — and modulates how densely that land is
+  planted. The comparison is WITHIN the article: a section reads greener
+  than its neighbours when it cites better than they do, and the absolute
+  ceiling stops a barely-sourced article looking green anywhere. Dunes is
+  reserved for a section that cites nothing at all.
 - section anchors (`#Section_Title`) — retained for future click-to-jump
   interactions
 - templates (infoboxes, navboxes, citation lists, etc.) — not represented
@@ -149,8 +156,8 @@ Feature signals currently influence:
 - island size
 - terrain roughness
 - water ratio
-- biome distribution: citation density drives land lushness; elevation still
-  determines ocean, beach, mountain, and snow
+- biome distribution: per-section lushness drives the six land bands;
+  elevation still determines ocean, beach, mountain, and snow
 - portal count and placement
 
 ## Section identity in generation output
@@ -200,9 +207,10 @@ to document order, so every linked section places its first portal before
 any section places its second. In document order a link-heavy opening
 section would otherwise swallow the entire budget.
 
-Citation counts remain on peaks (own and subtree totals) but are no longer
-rendered as their own marker: citation density reads through biome
-lushness and foliage density instead.
+Citation counts remain on peaks (own and subtree totals), alongside the
+sentence counts and the derived `lushness` scalar, but are no longer
+rendered as their own marker: they read through the land's lushness band
+and its foliage density instead.
 
 ## Biome-Aware Foliage
 

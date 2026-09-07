@@ -165,7 +165,7 @@ function countTreeCitations(nodes) {
  * Pure and deterministic: the same HTML always produces the same tree.
  *
  * @param {string} html
- * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number }}
+ * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number, sentenceCount: number }}
  */
 export function parseSectionTree(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -215,5 +215,13 @@ export function parseSectionTree(html) {
   computeSubtreeCitations(sections)
   const citationCount = lead.citationCount + countTreeCitations(sections)
 
-  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount }
+  // Article-wide sentence total, summed over the LEAD plus each top-level
+  // subtree so nothing is counted twice. This is the denominator of the
+  // article's own citation rate (see lushness.js), and it has to be a
+  // ratio of totals rather than an average of per-section ratios — an
+  // average double-counts every nested section and follows outliers.
+  const sentenceCount =
+    (lead.sentenceCount ?? 0) + sections.reduce((sum, section) => sum + section.subtreeSentenceCount, 0)
+
+  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount, sentenceCount }
 }

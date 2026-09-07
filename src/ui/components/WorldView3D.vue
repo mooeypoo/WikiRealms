@@ -42,7 +42,6 @@ import {
 } from '../rendering/portalMarkers.js'
 import {
   cellFoliageRolls,
-  computeArticleAverageCps,
   computeFoliageDensityScale,
   pickFoliageVariant,
 } from '../rendering/foliage.js'
@@ -310,14 +309,13 @@ function buildTerrainMesh(world) {
 
   const foliage = new THREE.Group()
   const foliagePositions = new Map()
-  const articleAvgCps = computeArticleAverageCps(terrain.peaks ?? [])
   for (let gridY = 2; gridY < height - 2; gridY += 4) {
     for (let gridX = 2; gridX < width - 2; gridX += 4) {
       const index = gridY * width + gridX
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed)
       const variant = pickFoliageVariant(terrain.biomeMap[index], variantRoll)
       if (!variant) continue
-      const densityScale = computeFoliageDensityScale(terrain.moistureMap[index], articleAvgCps)
+      const densityScale = computeFoliageDensityScale(terrain.lushnessMap[index])
       if (densityRoll >= variant.density * densityScale) continue
 
       const positions = foliagePositions.get(variant) ?? []

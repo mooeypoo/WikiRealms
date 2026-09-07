@@ -3,17 +3,16 @@ import {
   FOLIAGE_DENSITY,
   FOLIAGE_VARIANTS_BY_BIOME,
   cellFoliageRolls,
-  computeArticleAverageCps,
   computeFoliageDensityScale,
   pickFoliageVariant,
 } from '../../../src/ui/rendering/foliage.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
 describe('FOLIAGE_VARIANTS_BY_BIOME', () => {
-  it('defines variants only for the five vegetated biomes', () => {
+  it('defines variants only for the five vegetated bands, not for dunes', () => {
     const keys = Object.keys(FOLIAGE_VARIANTS_BY_BIOME).map((k) => Number(k))
     expect(keys.sort()).toEqual(
-      [BIOME.DESERT, BIOME.LIGHT_VEG, BIOME.MEADOW, BIOME.WOODLAND, BIOME.JUNGLE].sort(),
+      [BIOME.STEPPE, BIOME.LIGHT_VEG, BIOME.MEADOW, BIOME.WOODLAND, BIOME.JUNGLE].sort(),
     )
   })
 
@@ -38,11 +37,13 @@ describe('FOLIAGE_VARIANTS_BY_BIOME', () => {
 })
 
 describe('pickFoliageVariant', () => {
-  it('returns null for biomes without foliage (ocean, beach, mountain, snow)', () => {
+  it('returns null for biomes without foliage, dunes included', () => {
     expect(pickFoliageVariant(BIOME.OCEAN, 0.5)).toBeNull()
     expect(pickFoliageVariant(BIOME.BEACH, 0.5)).toBeNull()
     expect(pickFoliageVariant(BIOME.MOUNTAIN, 0.5)).toBeNull()
     expect(pickFoliageVariant(BIOME.SNOW, 0.5)).toBeNull()
+    // A section that cites nothing gets bare ground, not sparse cover.
+    expect(pickFoliageVariant(BIOME.DUNES, 0.5)).toBeNull()
   })
 
   it('returns the first variant when the roll falls below its weight', () => {
@@ -68,28 +69,34 @@ describe('pickFoliageVariant', () => {
 })
 
 describe('computeFoliageDensityScale', () => {
-  it('returns 1 when the article-wide average is 0 or missing', () => {
-    expect(computeFoliageDensityScale(0.2, 0)).toBe(1)
-    expect(computeFoliageDensityScale(0.2, null)).toBe(1)
+  it('leaves the biome default alone for a section at its article’s own rate', () => {
+    // Lushness 0.5 means "cites like the rest of this article", and the
+    // variant densities are already tuned for that, so the scale is 1.
+    expect(computeFoliageDensityScale(0.5)).toBeCloseTo(1)
   })
 
-  it('scales proportionally to the ratio of cell/article citations-per-sentence', () => {
-    // Cell at 2x the average → clamped to max (1.6)
-    expect(computeFoliageDensityScale(0.4, 0.2)).toBe(FOLIAGE_DENSITY.max)
-    // Cell at the average → 1
-    expect(computeFoliageDensityScale(0.2, 0.2)).toBeCloseTo(1)
-    // Cell at 0.7x → 0.7
-    expect(computeFoliageDensityScale(0.14, 0.2)).toBeCloseTo(0.7)
+  it('spans the configured floor and ceiling across the scalar', () => {
+    expect(computeFoliageDensityScale(0)).toBe(FOLIAGE_DENSITY.min)
+    expect(computeFoliageDensityScale(1)).toBe(FOLIAGE_DENSITY.max)
   })
 
-  it('clamps to the barren-section floor for very low values', () => {
-    expect(computeFoliageDensityScale(0.01, 0.5)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(0, 0.5)).toBe(FOLIAGE_DENSITY.min)
+  it('is monotone in lushness', () => {
+    let previous = -1
+    for (let lushness = 0; lushness <= 1.0001; lushness += 0.05) {
+      const scale = computeFoliageDensityScale(lushness)
+      expect(scale).toBeGreaterThan(previous)
+      previous = scale
+    }
   })
 
-  it('treats non-numeric cell values as 0', () => {
-    expect(computeFoliageDensityScale('not-a-number', 0.5)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(undefined, 0.5)).toBe(FOLIAGE_DENSITY.min)
+  it('clamps a scalar outside [0, 1] rather than extrapolating', () => {
+    expect(computeFoliageDensityScale(-3)).toBe(FOLIAGE_DENSITY.min)
+    expect(computeFoliageDensityScale(9)).toBe(FOLIAGE_DENSITY.max)
+  })
+
+  it('treats a non-numeric or missing scalar as 0', () => {
+    expect(computeFoliageDensityScale('not-a-number')).toBe(FOLIAGE_DENSITY.min)
+    expect(computeFoliageDensityScale(undefined)).toBe(FOLIAGE_DENSITY.min)
   })
 })
 
@@ -132,21 +139,5 @@ describe('cellFoliageRolls', () => {
     // this window (0.01 tolerance out of [0, 1]) ≈ 9 out of 900. Give
     // ourselves a generous ceiling.
     expect(same).toBeLessThan(50)
-  })
-})
-
-describe('computeArticleAverageCps', () => {
-  it('averages subtreeCitationsPerSentence over top-level peaks only', () => {
-    const peaks = [
-      { depth: 1, subtreeCitationsPerSentence: 0.2 },
-      { depth: 2, subtreeCitationsPerSentence: 0.9 }, // ignored
-      { depth: 1, subtreeCitationsPerSentence: 0.4 },
-    ]
-    expect(computeArticleAverageCps(peaks)).toBeCloseTo(0.3)
-  })
-
-  it('returns 0 for an empty peaks list', () => {
-    expect(computeArticleAverageCps([])).toBe(0)
-    expect(computeArticleAverageCps(null)).toBe(0)
   })
 })

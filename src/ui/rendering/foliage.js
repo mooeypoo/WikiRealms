@@ -4,14 +4,17 @@ import { BIOME } from '../../engine/generation/terrain.js'
  * Foliage variants per biome. Each entry is a weighted probability of
  * being chosen when a land cell rolls for foliage. If chosen, `density`
  * decides whether it's actually placed at that cell (a second roll).
- * A biome not in the map has NO foliage (ocean, beach, mountain, snow).
+ *
+ * A biome not in the map has NO foliage: ocean, beach, mountain, snow —
+ * and DUNES, which means the section cites nothing and should read as
+ * bare ground rather than as sparse cover.
  *
  * Kept as pure data so the values can be tuned and the pick logic
  * unit-tested without touching three.js. `size` and `color` flow through
  * to the sprite material; `kind` picks the texture (leaf shape).
  */
 export const FOLIAGE_VARIANTS_BY_BIOME = Object.freeze({
-  [BIOME.DESERT]: [
+  [BIOME.STEPPE]: [
     { kind: 'scrub', color: 0x9a7d42, size: 1.5, density: 0.08, weight: 0.85 },
     { kind: 'scrub', color: 0xb08c50, size: 2.4, density: 0.02, weight: 0.15 },
   ],
@@ -37,14 +40,15 @@ export const FOLIAGE_VARIANTS_BY_BIOME = Object.freeze({
 })
 
 /**
- * Density scaling factors. Cells whose section is well-cited (relative
- * to the article's average) get denser foliage than the biome default;
- * sparsely-cited cells get sparser. Clamped so pathological articles
- * don't produce empty maps or overgrown blobs.
+ * Density scaling factors, applied on top of a variant's own `density`.
+ *
+ * The scale is a straight lerp across the lushness scalar, chosen so
+ * lushness 0.5 — a section citing at exactly its article's own rate —
+ * lands on 1.0 and leaves the biome default untouched.
  */
 export const FOLIAGE_DENSITY = Object.freeze({
-  min: 0.5, // barren-section floor
-  max: 1.6, // lush-section ceiling
+  min: 0.4, // lushness 0
+  max: 1.6, // lushness 1
 })
 
 /**
@@ -68,20 +72,19 @@ export function pickFoliageVariant(biome, variantRoll) {
 }
 
 /**
- * Density scale ∈ [FOLIAGE_DENSITY.min, FOLIAGE_DENSITY.max] based on
- * this cell's citations-per-sentence relative to the article's mean.
- * Cells in above-average sections get lusher foliage; below-average
- * sections get sparser. Returns 1 when the article-wide average is 0
- * (no citations to compare) or the cell has no cps assigned.
+ * Density scale ∈ [FOLIAGE_DENSITY.min, FOLIAGE_DENSITY.max] from this
+ * cell's lushness.
  *
- * @param {number} citationsPerSentence
- * @param {number} articleAverage
+ * Reads the same scalar the ground colour and the band name read, which
+ * is the point: foliage used to normalize citations-per-sentence against
+ * the article average on its own, while the biome under it classified on
+ * absolute thresholds, so the two disagreed about what "lush" meant.
+ *
+ * @param {number} lushness [0, 1] from lushness.js
  */
-export function computeFoliageDensityScale(citationsPerSentence, articleAverage) {
-  if (!articleAverage || articleAverage <= 0) return 1
-  const cps = Number(citationsPerSentence) || 0
-  const ratio = cps / articleAverage
-  return Math.min(FOLIAGE_DENSITY.max, Math.max(FOLIAGE_DENSITY.min, ratio))
+export function computeFoliageDensityScale(lushness) {
+  const value = Math.min(1, Math.max(0, Number(lushness) || 0))
+  return FOLIAGE_DENSITY.min + (FOLIAGE_DENSITY.max - FOLIAGE_DENSITY.min) * value
 }
 
 /**
@@ -100,24 +103,4 @@ export function cellFoliageRolls(gridX, gridY, seed) {
     variantRoll: (hash & 0xffff) / 0x10000,
     densityRoll: ((hash >>> 16) & 0xffff) / 0x10000,
   }
-}
-
-/**
- * Convenience: article-wide average citations-per-sentence across the
- * top-level sections, used as the denominator for
- * `computeFoliageDensityScale`. Pure — takes a peaks array, returns a
- * single number.
- *
- * @param {object[]} peaks
- */
-export function computeArticleAverageCps(peaks) {
-  if (!Array.isArray(peaks) || peaks.length === 0) return 0
-  let sum = 0
-  let count = 0
-  for (const peak of peaks) {
-    if ((peak.depth ?? 0) > 1) continue
-    sum += peak.subtreeCitationsPerSentence ?? 0
-    count++
-  }
-  return count > 0 ? sum / count : 0
 }

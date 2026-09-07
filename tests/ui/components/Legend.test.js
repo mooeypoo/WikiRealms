@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import Legend from '../../../src/ui/components/Legend.vue'
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
+import { BIOME_THRESHOLDS, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
@@ -40,16 +40,28 @@ describe('Legend', () => {
     mountLegend()
     const swatches = [...document.querySelectorAll('.legend__ground .legend__swatch')]
 
-    expect(swatches).toHaveLength(5)
-    expect(swatches[0].getAttribute('style')).toContain(biomeColor(BIOME.DESERT, 0.6))
+    expect(swatches).toHaveLength(6)
+    expect(swatches[0].getAttribute('style')).toContain(biomeColor(BIOME.DUNES, 0.6))
+    expect(swatches.at(-1).getAttribute('style')).toContain(biomeColor(BIOME.JUNGLE, 0.6))
   })
 
-  it('takes its thresholds from the engine too', () => {
+  it('names all six bands as comparisons against the article itself', () => {
+    // The bands are relative by construction, and the legend used to
+    // state them as absolute percentages the engine never computed.
     mountLegend()
     const text = document.querySelector('.legend__ground').textContent
 
-    expect(text).toContain(`${Math.round(CITATION_LUSHNESS.desertThreshold * 100)}%`)
-    expect(text).toContain(`${Math.round(CITATION_LUSHNESS.woodlandThreshold * 100)}%`)
+    expect(text).toContain('Cites nothing')
+    expect(text).toContain('than the rest')
+    expect(text).not.toMatch(/\d+%/)
+  })
+
+  it('says that a poorly sourced article stays dry throughout', () => {
+    // Without this the relative bands overclaim: a stub's best section
+    // would read as if it were well sourced.
+    mountLegend()
+
+    expect(document.querySelector('.legend__note').textContent).toContain('stays dry')
   })
 
   it('says what causes the height, not just what sits on it', () => {
