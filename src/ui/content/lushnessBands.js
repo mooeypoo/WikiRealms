@@ -54,6 +54,17 @@ import { biomeColor } from '../rendering/biomeColor.js'
  * scalar measures. Neither surface prints a percentage: the tooltip and
  * the Ledger both give the section's own reference and sentence counts
  * instead, which is the part a reader can check by counting.
+ *
+ * The comparisons say "average" rather than naming what is averaged, and
+ * they are short on purpose — they sit on one line in a narrow panel, and
+ * the counts printed directly beneath them ("66 refs in 72 sentences")
+ * are what says what is being averaged.
+ *
+ * They used to read "as many references as the rest of this article",
+ * which describes a TOTAL. The scale compares rates: a section with five
+ * references can sit exactly at the average of an article with two
+ * hundred, because what is measured is references per sentence. Counting
+ * language made that impossible to read correctly.
  */
 const BANDS = {
   [BIOME.DUNES]: {
@@ -64,27 +75,27 @@ const BANDS = {
   [BIOME.STEPPE]: {
     name: 'Sparse',
     ground: 'Scrub and dry grass',
-    comparison: 'far fewer references than the rest of this article',
+    comparison: 'far below this article’s average',
   },
   [BIOME.LIGHT_VEG]: {
     name: 'Patchy',
     ground: 'Scattered green',
-    comparison: 'fewer references than the rest of this article',
+    comparison: 'below this article’s average',
   },
   [BIOME.MEADOW]: {
     name: 'Green',
     ground: 'Open meadow',
-    comparison: 'about as many references as the rest of this article',
+    comparison: 'about this article’s average',
   },
   [BIOME.WOODLAND]: {
     name: 'Wooded',
     ground: 'Trees, with ground still showing between them',
-    comparison: 'more references than the rest of this article',
+    comparison: 'above this article’s average',
   },
   [BIOME.JUNGLE]: {
     name: 'Lush',
     ground: 'Closed canopy',
-    comparison: 'far more references than the rest — the best-sourced ground here',
+    comparison: 'far above this article’s average',
   },
 }
 

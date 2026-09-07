@@ -28,7 +28,24 @@ describe('LUSHNESS_BAND_COPY', () => {
     // and unreadable, because a chip is not a sentence.
     for (const biome of LUSHNESS_BANDS) {
       if (biome === BIOME.DUNES) continue
-      expect(LUSHNESS_BAND_COPY[biome].detail.toLowerCase()).toContain('the rest')
+      expect(LUSHNESS_BAND_COPY[biome].detail.toLowerCase()).toContain('average')
+    }
+  })
+
+  it('compares rates rather than totals', () => {
+    // "as many references as the rest of this article" describes a
+    // TOTAL, and the scale compares rates: a section with five
+    // references can sit exactly at the average of an article with two
+    // hundred, because what is measured is references per sentence.
+    // Counting language made that impossible to read correctly.
+    for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
+      expect(copy.comparison).not.toMatch(/as many|fewer references|more references/)
+    }
+  })
+
+  it('keeps a comparison short enough to sit on one line', () => {
+    for (const copy of Object.values(LUSHNESS_BAND_COPY)) {
+      expect(copy.comparison.length).toBeLessThanOrEqual(36)
     }
   })
 

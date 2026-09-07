@@ -55,7 +55,7 @@ describe('Legend', () => {
 
     expect(text).toContain('Barren')
     expect(text).toContain('Lush')
-    expect(text).toContain('than the rest')
+    expect(text).toContain('average')
     // Still no percentages: the scalar behind the bands is not one.
     expect(text).not.toMatch(/\d+%/)
   })

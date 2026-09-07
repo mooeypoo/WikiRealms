@@ -228,9 +228,19 @@ describe('Ledger', () => {
       mountLedger()
 
       expect(cards()[0].textContent).toContain('Wooded')
-      expect(cards()[0].textContent).toContain('more references than the rest of this article')
+      expect(cards()[0].textContent).toContain('above this article’s average')
       expect(cards()[1].textContent).toContain('Barren')
       expect(cards()[1].textContent).toContain('no references at all')
+    })
+
+    it('puts the band on the title row, so the list can be scanned', () => {
+      // A column of band names down the panel reads the shape of the
+      // article without opening a single section.
+      mountLedger()
+
+      for (const card of cards()) {
+        expect(card.querySelector('.ledger__section-head .ledger__band')).not.toBeNull()
+      }
     })
 
     it('takes the band swatch from the renderer rather than a copy of it', () => {

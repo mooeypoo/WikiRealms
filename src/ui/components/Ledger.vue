@@ -298,6 +298,13 @@ watch(
           >
             <div class="ledger__section-head">
               <h4>{{ section.title }}</h4>
+              <!-- The band sits on the title row so a column of them runs
+                   down the list: scanning it reads the shape of the
+                   article without opening a single section. -->
+              <span v-if="bandFor(section)" class="ledger__band">
+                <span class="ledger__swatch" :style="{ background: bandFor(section).swatch }" aria-hidden="true" />
+                {{ bandFor(section).name }}
+              </span>
               <a
                 v-if="article.url && section.anchor"
                 :href="`${article.url}#${section.anchor}`"
@@ -308,18 +315,13 @@ watch(
                 <Icon name="external" :size="13" />
               </a>
             </div>
-            <!-- The band first, because it is what the reader just saw
-                 on the map and hovered on the summit, then what it means,
-                 then the figures behind it. Hovering gives the word;
-                 clicking gives the sentence. -->
-            <p v-if="bandFor(section)" class="ledger__band">
-              <span class="ledger__swatch" :style="{ background: bandFor(section).swatch }" />
-              <strong>{{ bandFor(section).name }}</strong>
-              <span>— {{ bandFor(section).comparison }}</span>
+            <!-- Then what the band means, then the figures behind it.
+                 Hovering a summit gives the word; clicking gives the
+                 sentence. -->
+            <p v-if="bandFor(section)" class="ledger__section-why">
+              {{ bandFor(section).comparison }}
             </p>
-            <p class="ledger__section-stats tabular">
-              {{ sectionStats(section).join(' · ') }}
-            </p>
+            <p class="ledger__section-stats">{{ sectionStats(section).join(' · ') }}</p>
           </article>
         </section>
       </template>
@@ -556,11 +558,14 @@ watch(
 .ledger__section-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--spacing-sm);
 }
 
 .ledger__section-head h4 {
+  flex: 1;
+  /* Or a long heading pushes the band and the link off the row instead
+     of wrapping under itself. */
+  min-width: 0;
   margin: 0;
   font-size: var(--text-sm);
   font-weight: 400;
@@ -575,35 +580,41 @@ watch(
 }
 
 .ledger__band {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0 var(--spacing-xs);
-  margin: var(--spacing-xs) 0 0;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
   color: var(--ink-2);
   font-size: var(--text-xs);
-  line-height: 1.4;
-}
-
-.ledger__band strong {
-  color: var(--ink-1);
-  font-weight: 500;
+  white-space: nowrap;
 }
 
 .ledger__swatch {
   flex: none;
-  align-self: center;
   width: 9px;
   height: 9px;
   border: 1px solid rgba(var(--edge-rgb), 0.3);
   border-radius: var(--radius-sm);
 }
 
+.ledger__section-why {
+  margin: 3px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+/* Deliberately NOT .tabular. That class sets font-family to the mono
+   stack, which is right for a short run of digits in a chip and wrong
+   for a sentence: at the same 11px, monospace renders visibly wider and
+   heavier than the body face, so this line read as a different and
+   larger typeface than the one above it. */
 .ledger__section-stats {
   margin: 2px 0 0;
   color: var(--ink-3);
   font-size: var(--text-xs);
-  line-height: 1.4;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
 }
 
 .ledger__chips {
