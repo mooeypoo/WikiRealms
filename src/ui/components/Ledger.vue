@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { LEDGER_SNAP_POINTS as SNAP_POINTS, LEDGER_STATES as STATES } from './ledgerStates.js'
 import { LUSHNESS_BANDS, lushnessBand } from '../../engine/generation/terrain.js'
 import { describeBand } from '../content/lushnessBands.js'
@@ -281,15 +282,6 @@ watch(
       ?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' })
   },
 )
-
-/**
- * §5 gates every motion token behind this, and a panel that scrolls
- * itself is motion the reader did not ask for. matchMedia is absent in
- * jsdom, so an unanswerable question reads as "no preference".
- */
-function prefersReducedMotion() {
-  return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-}
 
 watch(
   () => props.article,

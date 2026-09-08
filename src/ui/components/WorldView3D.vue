@@ -4,7 +4,9 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
-import { createStylizedMaterial } from '../rendering/stylizedMaterial.js'
+import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
+import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
+import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
 import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import {
@@ -116,6 +118,36 @@ let animationFrameId = null
 let raycaster = null
 let pointer = null
 let ambientLight = null
+
+// The world's clock and weather (see rendering/environment.js). One
+// object, so the wind, the portal pulse and the halo breathing all read
+// the same time and all stop together when the reader has asked for
+// less motion. Built with defaults up front so the first frames have a
+// clock even if they land before the first rebuild.
+let environment = createEnvironment()
+
+/**
+ * How long to keep drawing after something changes, in seconds.
+ *
+ * Only consulted when the world is otherwise still. The fades it covers
+ * are exponential lerps toward a target, so they approach and never
+ * arrive; a window is the honest way to decide they are done, and one
+ * second is comfortably past the point where the last step is worth a
+ * pixel.
+ */
+const SETTLE_SECONDS = 1
+let restlessUntil = 0
+
+/** Something changed: keep drawing until it has finished settling. */
+function markRestless() {
+  restlessUntil = performance.now() * 0.001 + SETTLE_SECONDS
+}
+// The canopy materials the wind is written to each frame — one per
+// archetype, since each bends by its own height.
+let windMaterials = []
+// World-space wind, converted once per frame from the grid-space bearing
+// the environment states. Held here so the loop allocates nothing.
+const windWorldDirection = new THREE.Vector3()
 
 // Active grid → 3D mapping, re-resolved on every rebuildScene from the
 // worldShape prop. Every position in this component goes through it, so
@@ -376,11 +408,19 @@ function buildFoliage(world, heightScale) {
     // The frost band, not the ground's snowline: a crown takes snow far
     // lower than open ground holds it, and on the ground's band no tree
     // in the world was high enough to carry a cap.
+    //
+    // swayHeight is this archetype's own full height, which is the whole
+    // reason a material per archetype earns its keep: the wind weights
+    // its bend by height above the base, and a single shared number
+    // would leave a shrub thrashing and an emergent barely moving.
+    const spec = CANOPY_ARCHETYPES[layer.archetype]
     const material = createStylizedMaterial({
       flatShading: true,
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
+      swayHeight: (spec.trunkHeight + spec.crownHeight) * cellScale,
     })
+    windMaterials.push(material)
     const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
 
@@ -715,6 +755,10 @@ function clearScene() {
   portalForm?.dispose()
   portalForm = null
 
+  // Dropped before the materials holding them are disposed below, or the
+  // loop would keep writing wind onto a dead program every frame.
+  windMaterials = []
+
   for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup]) {
     if (!group) continue
     worldGroup.remove(group)
@@ -739,6 +783,16 @@ function rebuildScene() {
   projection = getProjection(props.worldShape)
   if (ambientLight) ambientLight.intensity = projection.ambientLightIntensity
 
+  // The wind is a property of the realm, so it is derived from the same
+  // seed the terrain is: Saturn's wind runs the same way on every visit.
+  // Only the phase depends on the clock, which is why none of this can
+  // reach worldId. Read once per rebuild rather than per frame, since
+  // matchMedia is a DOM query and the answer does not change mid-orbit.
+  environment = createEnvironment({
+    seed: props.world?.seed ?? 1,
+    reducedMotion: prefersReducedMotion(),
+  })
+
   const { mesh, water, portals, halos, understory, canopy, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
@@ -753,6 +807,7 @@ function rebuildScene() {
   understoryGroup.visible = props.showFoliage
   canopyGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup)
+  markRestless()
 
   currentHeightScale = heightScale
   frameCamera(props.world.terrain, heightScale)
@@ -920,6 +975,7 @@ function pickHaloClickTarget() {
 
 function onPointerMove(event) {
   if (!raycaster) return
+  markRestless()
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
@@ -1042,6 +1098,7 @@ function onPointerLeave() {
   hoveredMarker.value = null
   hoveredPortalId = null
   if (renderer) renderer.domElement.style.cursor = ''
+  markRestless()
 }
 
 function resizeToContainer() {
@@ -1052,6 +1109,7 @@ function resizeToContainer() {
   renderer.setSize(clientWidth, clientHeight)
   camera.aspect = clientWidth / clientHeight
   camera.updateProjectionMatrix()
+  markRestless()
 }
 
 function animate() {
@@ -1059,8 +1117,19 @@ function animate() {
 
   advanceDive()
 
-  const nowSec = performance.now() * 0.001
+  // One clock for everything that moves. A frozen environment returns
+  // the same reading every frame, so the pulse, the breathing and the
+  // wind hold still together and none of them needs to know why.
+  const weather = sampleEnvironment(environment, performance.now() * 0.001)
+  const nowSec = weather.time
   const peaks = props.world?.terrain?.peaks
+
+  // Grid space to world: the world group is rotated -90° about X, so the
+  // grid's (x, y) plane lies in world (x, -z) and the wind stays flat
+  // against the map. On the globe the shader takes it from here, keeping
+  // only what lies in the tangent plane at each plant.
+  windWorldDirection.set(weather.windDirection.x, 0, -weather.windDirection.y)
+  for (const material of windMaterials) setWind(material, weather, windWorldDirection)
   const hoveredTopLevel = resolveHoveredTopLevel(attentionIndex(), peaks)
 
   // Individual trees are meaningless from orbit and expensive to draw
@@ -1104,8 +1173,22 @@ function animate() {
     updateSectionTooltip()
   }
 
-  controls?.update()
-  renderer?.render(scene, camera)
+  // Returns true when it actually moved the camera, which covers both a
+  // drag and the damping that keeps coasting after one.
+  if (controls?.update() === true) markRestless()
+
+  // A still world does not need redrawing sixty times a second. When the
+  // reader has asked for less motion nothing in the scene changes on its
+  // own, so frames are drawn only while something is settling — the
+  // hover fades and the camera damping are exponential and never quite
+  // arrive, which is what the settle window is for rather than a test
+  // for equality that would never pass.
+  //
+  // With motion allowed the wind is always running, so this is always
+  // true and the loop behaves exactly as it did before.
+  if (weather.animated || performance.now() * 0.001 < restlessUntil) {
+    renderer?.render(scene, camera)
+  }
 }
 
 onMounted(() => {
@@ -1225,6 +1308,7 @@ function cancelDive() {
 
 function advanceDive() {
   if (!dive) return
+  markRestless()
 
   const elapsed = (performance.now() - dive.startedAt) / dive.duration
   const t = Math.min(1, Math.max(0, elapsed))
@@ -1281,6 +1365,7 @@ watch(
     if (haloGroup) haloGroup.visible = props.showSections
     if (understoryGroup) understoryGroup.visible = props.showFoliage
     if (canopyGroup) canopyGroup.visible = props.showFoliage
+    markRestless()
   },
   { immediate: false },
 )

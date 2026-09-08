@@ -74,6 +74,26 @@
  * snowStart. That is a deliberate split, not drift — see the config for
  * the measurement that forced it.
  *
+ * WIND
+ *
+ * Plants lean along a single travelling wave sampled at their ROOT in
+ * world space, not per instance. That choice is the whole difference
+ * between weather and a fidget: trees standing near each other sit close
+ * together in the field, so a hillside leans, pauses and leans again as
+ * one thing. Sampling per instance, or at the moving vertex rather than
+ * the root, both produce the same wrong result — every crown keeping its
+ * own time.
+ *
+ * The bend is weighted by height above the plant's own base and squared,
+ * so a trunk stays in the ground while its crown travels. It is applied
+ * to `transformed` before project_vertex, which means it costs one
+ * vertex shader branch and nothing on the CPU: no per-frame matrix
+ * writes, no instanceMatrix uploads, no rebuild.
+ *
+ * Only instanced geometry is moved. The terrain shares this material and
+ * `#ifdef USE_INSTANCING` compiles the branch out of it, rather than
+ * leaving a uniform at zero and trusting nobody sets it.
+ *
  * WORLD UP IS NOT ONE DIRECTION
  *
  * On the flat map every surface shares an up: the world group is rotated
@@ -86,6 +106,7 @@
 import * as THREE from 'three'
 import { ALTITUDE } from '../../engine/generation/config.js'
 import { SNOW_RGB } from './biomeColor.js'
+import { WIND, windFrequency } from './environment.js'
 
 /**
  * How square-on to the sky a surface must be before it holds any snow.
@@ -112,6 +133,13 @@ const vertexShader = /* glsl */ `
 
 uniform float uSpherical;
 
+uniform float uTime;
+uniform vec3 uWindDirection;
+uniform float uWindFrequency;
+uniform float uWindSpeed;
+uniform float uSway;
+uniform float uSwayHeight;
+
 // Per vertex on the terrain, per instance on the canopy. Negative means
 // this surface never takes snow, whatever the snowline does.
 attribute float snowHeight;
@@ -128,26 +156,74 @@ void main() {
   #include <defaultnormal_vertex>
   #include <normal_vertex>
   #include <begin_vertex>
+
+  // Where this vertex stands in the world BEFORE the wind moves it.
+  // Sampling the field at the moved position instead would let a swaying
+  // crown drive its own phase, and the sway would feed back on itself.
+  vec4 rootPosition = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+    rootPosition = instanceMatrix * rootPosition;
+  #endif
+  rootPosition = modelMatrix * rootPosition;
+
+  // Flat map: one up for the whole world. Planet: the radial here, or
+  // snow piles on one face of the globe and the wind blows into it.
+  vec3 up = mix(vec3(0.0, 1.0, 0.0), normalize(rootPosition.xyz), uSpherical);
+
+  // Wind moves plants, and a plant is an instance. The terrain shares
+  // this material and is not instanced, so it compiles out entirely
+  // rather than relying on its uSway being left at zero.
+  #ifdef USE_INSTANCING
+    if (uSway > 0.0) {
+      // Keep only the part of the wind lying in the tangent plane here.
+      // On the flat map that changes nothing; on the globe it is what
+      // stops the wind blowing into the surface on one side of the
+      // planet and out of it on the other.
+      vec3 windWorld = uWindDirection - dot(uWindDirection, up) * up;
+      float windLength = length(windWorld);
+      if (windLength > 1e-4) {
+        windWorld /= windLength;
+
+        // One field for the whole world, sampled at the root in world
+        // space. This is the difference between weather and every tree
+        // twitching to its own clock: neighbours sit close together in
+        // the field, so a stand leans, pauses and leans as a stand.
+        float phase = dot(rootPosition.xyz, uWindDirection) * uWindFrequency - uTime * uWindSpeed;
+        // A second faster crest at a ratio that is not a whole number,
+        // so the canopy does not visibly repeat on the wavelength.
+        float wave = sin(phase) + 0.5 * sin(phase * 2.3 + 1.7);
+
+        // Bend grows with height above the plant's OWN base, squared, so
+        // the trunk stays in the ground and the crown does the moving.
+        // uSwayHeight is this archetype's full height — one material per
+        // archetype is what makes that an exact number rather than an
+        // average that would leave a shrub thrashing and an emergent stiff.
+        float lift = clamp(transformed.z / uSwayHeight, 0.0, 1.0);
+        vec3 lean = windWorld * (wave * uSway * uSwayHeight * lift * lift);
+
+        // Back into the instance's own frame. instanceMatrix's columns
+        // ARE this tree's axes in world space, so two dot products are
+        // the whole conversion: no inverse to compute, and it stays
+        // correct for a tree standing on the side of a globe.
+        transformed.x += dot(lean, normalize(instanceMatrix[0].xyz));
+        transformed.y += dot(lean, normalize(instanceMatrix[1].xyz));
+      }
+    }
+  #endif
+
   #include <project_vertex>
 
   vViewPosition = -mvPosition.xyz;
 
   // World space, for the snow. Computed separately from the view normal
   // above because the camera moves and the sky does not.
-  vec4 worldPosition = vec4(transformed, 1.0);
   vec3 worldNormal = objectNormal;
   #ifdef USE_INSTANCING
-    worldPosition = instanceMatrix * worldPosition;
     // Instance scale is uniform per tree, so the rotation survives
     // normalisation and no inverse-transpose is needed.
     worldNormal = mat3(instanceMatrix) * worldNormal;
   #endif
-  worldPosition = modelMatrix * worldPosition;
   worldNormal = normalize(mat3(modelMatrix) * worldNormal);
-
-  // Flat map: one up for the whole world. Planet: the radial at this
-  // vertex, or snow would pile on one face of the globe.
-  vec3 up = mix(vec3(0.0, 1.0, 0.0), normalize(worldPosition.xyz), uSpherical);
 
   vFacingUp = dot(worldNormal, up);
   vSnowHeight = snowHeight;
@@ -226,11 +302,16 @@ void main() {
  * material takes it as a parameter rather than deciding per caller,
  * because which band a mesh uses is a fact about the mesh.
  *
+ * `swayHeight` is the full height of the thing being drawn, in the same
+ * units as its geometry. Left at 0 the wind branch never runs, which is
+ * what the terrain wants; the canopy passes its archetype's height.
+ *
  * @param {{
  *   vertexColors?: boolean,
  *   flatShading?: boolean,
  *   spherical?: boolean,
  *   snowline?: { start: number, full: number },
+ *   swayHeight?: number,
  * }} options
  * @returns {THREE.ShaderMaterial}
  */
@@ -239,6 +320,7 @@ export function createStylizedMaterial({
   flatShading = false,
   spherical = false,
   snowline = { start: ALTITUDE.snowStart, full: ALTITUDE.snowFull },
+  swayHeight = 0,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -247,7 +329,20 @@ export function createStylizedMaterial({
     // keep them up to date as the scene's lights change.
     lights: true,
     vertexColors,
-    flatShading,
+    // A DEFINE, not the `flatShading` property. ShaderMaterial does not
+    // declare that property, and Material.setValues skips any key it
+    // does not already own — logging a warning nobody was reading. So
+    // the canopy asked to be flat shaded and simply was not: every
+    // crown was a smoothly shaded ball, because PolyhedronGeometry
+    // normalises its normals at any detail above 0 and the sphere it
+    // was carved from came back.
+    //
+    // Setting the define is what the call site always meant, and it is
+    // worth more now than it was: normal_fragment_begin derives the
+    // face normal from screen-space derivatives, so a crown the wind
+    // has bent is lit by the shape it actually has this frame rather
+    // than by the normals it was built with.
+    defines: flatShading ? { FLAT_SHADED: '' } : {},
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
       {
@@ -256,9 +351,35 @@ export function createStylizedMaterial({
         uSnowFull: { value: snowline.full },
         uSnowFacingStart: { value: SNOW_FACING_START },
         uSpherical: { value: spherical ? 1 : 0 },
+        uTime: { value: 0 },
+        uWindDirection: { value: new THREE.Vector3(1, 0, 0) },
+        uWindFrequency: { value: windFrequency() },
+        uWindSpeed: { value: WIND.speed },
+        // Zero until a frame is drawn, so a material that nobody drives
+        // is simply still rather than moving on default values.
+        uSway: { value: 0 },
+        uSwayHeight: { value: swayHeight },
       },
     ]),
   })
+}
+
+/**
+ * Writes one frame of weather onto a material.
+ *
+ * Takes the sample from environment.js rather than a time, because what
+ * the shader needs is the answer and not the clock: a frozen environment
+ * hands over a sway of 0 and the wind branch stops, with no second path
+ * here for reduced motion.
+ *
+ * @param {THREE.ShaderMaterial} material
+ * @param {{ time: number, sway: number }} sample from sampleEnvironment
+ * @param {THREE.Vector3} windDirection unit vector in WORLD space
+ */
+export function setWind(material, { time, sway }, windDirection) {
+  material.uniforms.uTime.value = time
+  material.uniforms.uSway.value = sway
+  material.uniforms.uWindDirection.value.copy(windDirection)
 }
 
 /**

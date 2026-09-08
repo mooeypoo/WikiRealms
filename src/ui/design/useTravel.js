@@ -21,6 +21,8 @@ import { computed, onBeforeUnmount, readonly, ref } from 'vue'
  *   idle → diving → washing → rising → idle
  */
 
+import { prefersReducedMotion as detectReducedMotion } from './prefersReducedMotion.js'
+
 export const TRAVEL_PHASES = Object.freeze({
   DIVE: 260,
   /** Floor, not a duration: the wash holds until the world is ready. */
@@ -28,7 +30,7 @@ export const TRAVEL_PHASES = Object.freeze({
   RISE: 320,
 })
 
-export function useTravel({ prefersReducedMotion = defaultReducedMotion } = {}) {
+export function useTravel({ prefersReducedMotion = detectReducedMotion } = {}) {
   const phase = ref('idle')
   const target = ref(null)
 
@@ -119,6 +121,3 @@ export function useTravel({ prefersReducedMotion = defaultReducedMotion } = {}) 
   return { phase: readonly(phase), target: readonly(target), isTravelling, isBusy, travel, cancel }
 }
 
-function defaultReducedMotion() {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-}
