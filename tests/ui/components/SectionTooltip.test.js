@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import SectionTooltip from '../../../src/ui/components/SectionTooltip.vue'
+import { BIOME } from '../../../src/engine/generation/terrain.js'
+import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
+import { LUSHNESS_BAND_COPY } from '../../../src/ui/content/lushnessBands.js'
 
 function makeModel(overrides = {}) {
   return {
     title: 'Scientific career',
     subsectionCount: 3,
     wordsLabel: '1,240 words',
-    densityBucket: 'moderate',
+    densityBand: BIOME.MEADOW,
+    sourcesLabel: '46 refs in 38 sentences',
     ...overrides,
   }
 }
@@ -32,7 +36,9 @@ describe('SectionTooltip', () => {
     const chipTexts = wrapper.findAll('.section-tooltip__chip').map((c) => c.text())
     expect(chipTexts.some((t) => t.includes('3 subsections'))).toBe(true)
     expect(chipTexts.some((t) => t.includes('1,240 words'))).toBe(true)
-    expect(chipTexts.some((t) => t.includes('moderate'))).toBe(true)
+    expect(chipTexts.some((t) => t.includes(LUSHNESS_BAND_COPY[BIOME.MEADOW].name))).toBe(true)
+    // The checkable number: a reader can open the article and count.
+    expect(chipTexts.some((t) => t.includes('46 refs in 38 sentences'))).toBe(true)
   })
 
   it('pluralizes the subsection chip', () => {
@@ -59,10 +65,24 @@ describe('SectionTooltip', () => {
     expect(style).toContain('translate(123px, 456px)')
   })
 
-  it('applies the density bucket class to the color dot', () => {
+  it('paints the dot with the colour the model carries, not a copy of the palette', () => {
+    // The component used to hold its own five hardcoded hex values
+    // "mirroring the biome gradient", which is exactly the drift the
+    // legend module warns about.
     const wrapper = mount(SectionTooltip, {
-      props: { model: makeModel({ densityBucket: 'lush' }), visible: true, screenX: 0, screenY: 0 },
+      props: { model: makeModel({ densityBand: BIOME.JUNGLE }), visible: true, screenX: 0, screenY: 0 },
     })
-    expect(wrapper.find('.section-tooltip__dot--lush').exists()).toBe(true)
+    const style = wrapper.find('.section-tooltip__dot').attributes('style') ?? ''
+
+    expect(style).toContain(biomeColor(BIOME.JUNGLE, 0.6))
+    expect(wrapper.text()).toContain(LUSHNESS_BAND_COPY[BIOME.JUNGLE].name)
+  })
+
+  it('omits the density chip when there is no band to name', () => {
+    const wrapper = mount(SectionTooltip, {
+      props: { model: makeModel({ densityBand: null }), visible: true, screenX: 0, screenY: 0 },
+    })
+
+    expect(wrapper.find('.section-tooltip__chip--density').exists()).toBe(false)
   })
 })

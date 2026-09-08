@@ -32,17 +32,77 @@ export const GRID = Object.freeze({
 })
 
 /**
- * Elevation/moisture thresholds used to classify a cell's biome.
- * Biome is purely a physical/terrain concern (local height + moisture) —
- * independent of article content. Article categories drive a separate
- * global visual "style" layer, not biome placement.
+ * Where the water stops. Below oceanMaxHeight a cell is sea, and the
+ * strip up to beachMaxHeight is shore; everything above is land, and what
+ * colour that land takes is the section's lushness (see LUSHNESS below),
+ * not a terrain property.
+ *
+ * Rock and snow used to live here too, as mountainMinHeight and
+ * snowMinHeight. They are altitude COVER now rather than thresholds — see
+ * ALTITUDE.
+ *
+ * There is no moisture here any more either. Biome was once a purely
+ * physical concern — local height plus an ambient noise field — and
+ * moisture chose between plains and forest. Citations replaced that, and
+ * forestMinMoisture sat here unread for as long.
  */
 export const BIOME_THRESHOLDS = Object.freeze({
   oceanMaxHeight: 0.32,
   beachMaxHeight: 0.36,
-  mountainMinHeight: 0.7,
-  snowMinHeight: 0.85,
-  forestMinMoisture: 0.5,
+})
+
+/**
+ * Altitude, as a second axis over the top of lushness rather than a
+ * replacement for it.
+ *
+ * Height used to REPLACE a cell's lushness band outright: past 0.7 the
+ * ground became bare rock and past 0.85 it became snow, whatever the
+ * section cited. Three things were wrong with that. It drew a hard
+ * contour line at exactly 0.7 on every peak in the world. It deleted all
+ * foliage above the line, because no variants were registered for rock or
+ * snow. And measured on the story fixture it took 24% of land — with the
+ * 0.7 line sitting at about the 89th percentile of land height, so it ate
+ * precisely the summits a reader looks at.
+ *
+ * Now rock and snow arrive as smooth cover, and the rock itself is
+ * tinted by lushness, so a well-cited summit reads as damp, mossy stone
+ * and a barren one as dry scree. The signal survives all the way up.
+ *
+ * Each pair is a smoothstep band: nothing below `start`, complete at
+ * `full`. They overlap on purpose — snow begins before rock has finished,
+ * so there is no altitude at which the ground is uniformly one thing.
+ *
+ * All four heights are placed against the MEASURED distribution of land
+ * height, which on the story fixture runs p50 0.50, p75 0.60, p90 0.72,
+ * p99 0.96. A band that starts at 0.5 is not a mountain band, it is half
+ * the world — the first cut of this group put the treeline there and
+ * thinned the foliage on every second cell of open lowland.
+ */
+export const ALTITUDE = Object.freeze({
+  // Bare stone showing through the vegetation. Starts around the 78th
+  // percentile of land height, so it reads as high ground rather than as
+  // a wash over the whole map.
+  rockStart: 0.62,
+  rockFull: 0.86,
+  // Snow lying on top of whatever the rock band left.
+  snowStart: 0.82,
+  snowFull: 0.97,
+  // The treeline: foliage density falls off across this band rather than
+  // vanishing at a line. Deliberately BELOW rockStart — trees thin out
+  // before the stone starts showing, which is the order it happens in.
+  treelineStart: 0.58,
+  treelineEnd: 0.86,
+  // Where one kind of tree gives way to another (see foliage.js
+  // resolveArchetypeForAltitude). Broadleaf turns to conifer well before
+  // the treeline starts, and conifer to stunted krummholz inside it, so a
+  // slope changes in KIND as it climbs rather than only thinning out.
+  coniferStart: 0.52,
+  krummholzStart: 0.74,
+  // How far a fully-lush section lifts its own treeline, in height units.
+  // Wetter ground grows trees higher up a real mountain, so this reads as
+  // geography rather than as a second helping of the same signal — and it
+  // gives a well-cited range a visibly greener silhouette.
+  treelineLushnessLift: 0.1,
 })
 
 /**
@@ -213,8 +273,8 @@ export const POLAR_CAPS = Object.freeze({
 /**
  * Fractal noise layered on top of the section-driven structural height, for
  * natural roughness/detail. Deliberately a small perturbation, not a
- * replacement for the structural shape — see docs/generation.md brainstorm
- * notes on why moisture stays ambient/independent of article content.
+ * replacement for the structural shape — the section peaks define the
+ * silhouette and this only roughens it.
  */
 export const TERRAIN_DETAIL = Object.freeze({
   noiseWeight: 0.05, // subtle surface texture; section peaks should define the terrain silhouette
@@ -239,41 +299,138 @@ export const WATER_LEVEL = Object.freeze({
 })
 
 /**
- * Citation density thresholds used to classify land biome lushness.
- * Reflects how "cited" or "important" a section is within the article.
- * Thresholds represent the percentile of total article citations for a section:
- * - desert (under-cited): 0-10%
- * - light vegetation (sparse citations): 10-25%
- * - meadow (moderate citations): 25-50%
- * - woodland (well-cited): 50-75%
- * - jungle (heavily-cited): 75%+
- */
-export const CITATION_LUSHNESS = Object.freeze({
-  desertThreshold: 0.1,
-  lightVegThreshold: 0.25,
-  meadowThreshold: 0.5,
-  woodlandThreshold: 0.75,
-})
-
-/**
- * Citation-per-sentence biome calculation. If the article's average
- * citations-per-sentence falls below minAverageThreshold, the entire
- * article's biome is biased toward dry/barren regardless of relative
- * citation density within sections. This prevents sparsely-cited articles
- * from appearing lush just because some sections are relatively
- * over-cited compared to equally under-cited peers.
+ * Land lushness: how a section's citation habits become ground cover.
  *
- * biasStrength controls how strongly to shift biomes toward DESERT when
- * below threshold: 0 = no bias (keep relative ratios), 1 = hard desert floor
- * (all land reads as desert). Values between create a gradual dampening curve.
+ * The signal is a single scalar in [0, 1] per section (see lushness.js),
+ * built in four steps, and the bands below are cut points on it. The
+ * previous system compared a section's raw citations-per-sentence against
+ * ABSOLUTE thresholds, which had two consequences worth not repeating:
+ * only two of its five bands ever rendered on a normal article, and the
+ * whole map slid with the article's overall citation rate, so the
+ * within-article comparison — the one a reader can actually act on while
+ * standing in a world — was lost.
+ *
+ * Every value here is a tunable of the continuous curve, not a cliff.
+ *
+ * CALIBRATED against live English Wikipedia — see
+ * scripts/calibrate-bands.mjs, which is how these numbers were chosen and
+ * how to re-choose them. Measured over ten articles from a stub to a
+ * featured one:
+ *
+ *   article rate (citations per sentence)  0.185 to 0.922, median 0.640
+ *   within-article spread                  0.00 to 3.61 doublings, median 1.01
+ *
+ * The first of those figures is nearly double what this plan estimated
+ * before anyone measured it. Real Wikipedia cites far more densely than
+ * "0.2 to 0.4 even for well-cited articles" — Jupiter runs at 0.92 and
+ * Barack Obama at 0.85 — which had put articleRateSaturation below the
+ * rate of the WORST article in the sample, so the absolute ceiling never
+ * engaged for anything at all.
  */
-export const CITATION_PER_SENTENCE = Object.freeze({
-  minAverageThreshold: 0.15, // if article avg < this, entire article biased toward barren
-  biasStrength: 0.8, // how aggressively to dampen biome lushness below threshold (0-1)
-  desertThresholdAdjusted: 0.05, // citations/sentence threshold for DESERT when below article minimum
-  lightVegThresholdAdjusted: 0.15,
-  meadowThresholdAdjusted: 0.3,
-  woodlandThresholdAdjusted: 0.5,
+export const LUSHNESS = Object.freeze({
+  // Step 1, shrinkage. A section's rate is pulled toward the article's
+  // own rate by this many notional sentences, so a short section reads as
+  // "typical for this article" rather than as an extreme. Without it a
+  // one-sentence section carrying one citation scored 1.0 citations per
+  // sentence and rendered as the lushest land on the map — the most
+  // extreme reading from the least evidence.
+  shrinkageSentences: 6,
+
+  // Step 3, how far from the article's own rate the scale reaches, in
+  // doublings. At 0.7, a section cited 2^0.7 = 1.62x the article's own
+  // rate saturates the top of the scale, and one cited 1/1.62x saturates
+  // the bottom. Doublings rather than a linear ratio because "twice as
+  // cited" is the same perceptual step wherever it starts.
+  //
+  // Chosen by sweeping 0.5 to 1.5 against ten live articles and counting
+  // how many of the six bands each world actually shows. Mean bands per
+  // article: 3.63 at 0.5, 3.75 at 0.6, 3.88 at 0.7, 3.50 at 0.8, 3.38 at
+  // 1.0, 2.50 at 1.5. Wide scales fail the way the ORIGINAL system did —
+  // everything piles into two or three bands — because the median
+  // within-article spread is only about one doubling. Narrow is right
+  // here, and the shrinkage above is what stops that sensitivity
+  // amplifying noise.
+  //
+  // The articles with a much wider spread (Cyclone Tracy at 3.61
+  // doublings, Cassini Division at 2.90) do clip a section to each end of
+  // the scale. That is the intended trade: widening the scale to fit them
+  // would flatten every median article, and a section cited a fifth as
+  // often as its neighbours has genuinely bottomed out.
+  spanDoublings: 0.7,
+
+  // Step 4, the absolute ceiling. An article whose overall rate reaches
+  // this many citations per sentence can use the full scale; below it,
+  // the scale is compressed toward the floor, so a barely-cited article's
+  // best section cannot read as lush. This replaces a binary switch at
+  // 0.15 that made two articles either side of it render visibly
+  // differently.
+  //
+  // 0.6, just under the measured median of 0.640, so a typical article
+  // gets nearly the whole scale and a poorly-sourced one is held down.
+  // Was 0.35, which is BELOW the rate of the worst article in the sample
+  // (a list article at 0.185) — the ceiling was therefore inert, and
+  // "List of Doctor Who episodes", with twelve references across
+  // sixty-five sentences, could reach woodland. At 0.6 its ceiling is
+  // 0.37 and it tops out in light vegetation, which is what it is.
+  //
+  // Saturation barely moves the band COUNT, because it scales every
+  // section of an article together: at span 0.7 the mean is 3.88 bands at
+  // both 0.35 and 0.6. It is chosen on what it is FOR — not letting a
+  // thinly-sourced article look well sourced — which band counting cannot
+  // see.
+  articleRateSaturation: 0.6,
+  ceilingFloor: 0.18,
+
+  // How sharply the per-cell lushness blend favours the nearest peak
+  // (see sectionTerrain.js pass 1). Each peak's weight at a cell is its
+  // Gaussian contribution raised to this power.
+  //
+  // The blend exists to make the boundary between a subsection's ground
+  // and its parent's a few cells wide rather than a hard contour — the
+  // same artefact ALTITUDE was restructured to remove from the rock
+  // line. It is NOT there to average a section with its neighbours: at 1
+  // it would, and a jungle subsection inside a steppe parent would come
+  // out meadow, which is true of neither.
+  //
+  // Chosen against the criterion that matters: EVERY section's own band
+  // has to appear somewhere on the map, or that section is invisible and
+  // hovering it contradicts the ground — the bug this blend was built to
+  // fix. Measured on a deliberately hostile shape, where each parent has
+  // one very lush child and one barren one:
+  //
+  //   k=10   2 of 7 peaks have no ground in their own band
+  //   k=16   0 of 7            gradient 6.1% of land
+  //   k=24   0 of 7            gradient 4.2%
+  //   k=40   0 of 7            gradient 2.7%
+  //
+  // 16 is the lowest that clears it, and lowest is what to want: the
+  // gradient IS the soft boundary, and sharpening past the criterion
+  // just walks back toward the hard edge blending was chosen to avoid.
+  //
+  // KNOWN, and inherent to blending rather than to this value: a section
+  // with a very different immediate neighbour has its reading pulled
+  // about 0.2 toward that neighbour, and no amount of sharpening fixes
+  // it — the hostile shape's worst peak sits 0.199 from the nearest
+  // ground at k=16 and 0.182 at k=24, because the two summits are only a
+  // few cells apart. The BAND still lands correctly; it is the
+  // continuous value, which drives foliage density and the rock tint,
+  // that compresses.
+  blendSharpness: 16,
+
+  // Smallest lushness a section with ANY citation can be given, so that
+  // exactly 0 is reserved for "cites nothing" (see lushness.js). Without
+  // this the bottom of the relative scale collapses into the dunes and
+  // the two bands say the same thing — measured on the fixture, a
+  // section with one citation in 22 sentences landed in the band that
+  // means no citations at all.
+  citedFloor: 0.001,
+
+  // Cut points between the five CITED bands, on the [0, 1] scalar: even
+  // fifths. The sixth band, dunes, is not a cut — it is the reserved
+  // value 0. Even cuts are what let the legend describe the bands
+  // truthfully without restating a table of numbers. Tune spanDoublings
+  // and the ceiling, not these.
+  bandCuts: Object.freeze([1 / 5, 2 / 5, 3 / 5, 4 / 5]),
 })
 
 /**

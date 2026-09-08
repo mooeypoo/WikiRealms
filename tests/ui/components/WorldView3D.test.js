@@ -12,7 +12,7 @@ function makeWorld() {
       width,
       height,
       heightMap: new Float64Array(cellCount).fill(0.5),
-      moistureMap: new Float64Array(cellCount).fill(0.5),
+      lushnessMap: new Float32Array(cellCount).fill(0.5),
       biomeMap: new Uint8Array(cellCount).fill(2),
     },
     portals: [{ portalId: 'portal-0', targetArticleId: 'Physics', gridX: 1, gridY: 2 }],

@@ -3,9 +3,16 @@ import { deriveSeed, createRng } from './rng.js'
 import { applyPeakLimits } from './sectionPeakLimits.js'
 import { annotateSectionIndices, flattenPeaks, generateSectionTerrain, separateSections } from './sectionTerrain.js'
 import { generateSectionPortals } from './sectionPortals.js'
+import { computeArticleCitationRate } from './lushness.js'
 import { GRID, PEAK_LAYOUT, POLAR_CAPS } from './config.js'
 
-const EMPTY_SECTION_TREE = { lead: { ownSize: 0, links: [], citationCount: 0 }, sections: [], totalSize: 0, citationCount: 0 }
+const EMPTY_SECTION_TREE = {
+  lead: { ownSize: 0, links: [], citationCount: 0, sentenceCount: 0 },
+  sections: [],
+  totalSize: 0,
+  citationCount: 0,
+  sentenceCount: 0,
+}
 
 /**
  * Generates a deterministic World from an Article (docs/model.md).
@@ -68,6 +75,10 @@ export function generateWorld(
     rng,
     peaks,
     totalArticleSize: sectionTree.totalSize,
+    // Derived from the whole tree, not from the capped peaks: how well
+    // the article cites is a fact about the article, and folding its
+    // smallest sections into one peak must not change it.
+    articleCitationRate: computeArticleCitationRate(sectionTree),
   })
   const portals = generateSectionPortals(sectionTree, peaks, rng, { width, height })
 

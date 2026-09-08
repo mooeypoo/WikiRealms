@@ -1,6 +1,7 @@
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../engine/generation/config.js'
-import { BIOME } from '../../engine/generation/terrain.js'
+import { ALTITUDE, PORTAL_LIMITS } from '../../engine/generation/config.js'
+import { BIOME, LUSHNESS_BANDS } from '../../engine/generation/terrain.js'
 import { biomeColor } from '../rendering/biomeColor.js'
+import { describeBand } from './lushnessBands.js'
 
 /**
  * What the world is telling you.
@@ -17,34 +18,33 @@ import { biomeColor } from '../rendering/biomeColor.js'
  * is worse than no legend.
  */
 
-/** The land, from least to most cited, with the engine's own colours. */
-export const GROUND_LEGEND = [
-  {
-    biome: BIOME.DESERT,
-    label: 'Barely cited',
-    detail: `Under ${percent(CITATION_LUSHNESS.desertThreshold)} of the article's citation density`,
-  },
-  {
-    biome: BIOME.LIGHT_VEG,
-    label: 'Lightly cited',
-    detail: `${percent(CITATION_LUSHNESS.desertThreshold)}–${percent(CITATION_LUSHNESS.lightVegThreshold)}`,
-  },
-  {
-    biome: BIOME.MEADOW,
-    label: 'Moderately cited',
-    detail: `${percent(CITATION_LUSHNESS.lightVegThreshold)}–${percent(CITATION_LUSHNESS.meadowThreshold)}`,
-  },
-  {
-    biome: BIOME.WOODLAND,
-    label: 'Well cited',
-    detail: `${percent(CITATION_LUSHNESS.meadowThreshold)}–${percent(CITATION_LUSHNESS.woodlandThreshold)}`,
-  },
-  {
-    biome: BIOME.JUNGLE,
-    label: 'Heavily cited',
-    detail: `Over ${percent(CITATION_LUSHNESS.woodlandThreshold)}`,
-  },
-]
+/**
+ * The land, from least to most cited, in the engine's own band order and
+ * with its own colours.
+ *
+ * Both the words and the ordering come from lushnessBands.js, which the
+ * section tooltip reads too — one vocabulary, so the chip under the
+ * cursor cannot disagree with the row in the legend. It used to: the
+ * tooltip had its own thresholds and its own hand-copied palette.
+ *
+ * There are no numbers here, deliberately. The scalar behind the bands is
+ * built from a shrinkage estimator, a log-ratio and a smooth ceiling (see
+ * lushness.js); any single percentage printed against that would be a
+ * number the reader cannot check and the engine does not use. The
+ * previous legend printed exactly such numbers, as percentages "of the
+ * article's citation density", while the engine was comparing raw
+ * citations-per-sentence to fixed thresholds.
+ */
+export const GROUND_LEGEND = LUSHNESS_BANDS.map((biome) => describeBand(biome))
+
+/**
+ * How green a world can get at all, which is a separate question from
+ * which section is greenest. An article that cites little stays dry
+ * everywhere, however unevenly it cites.
+ */
+export const LUSHNESS_CEILING_NOTE =
+  'These compare sections within one article. A poorly sourced article stays dry throughout, ' +
+  'however uneven it is — the greens are only available to an article that cites well overall.'
 
 /** Everything that is not the ground itself. */
 export const FEATURE_LEGEND = [
@@ -75,18 +75,15 @@ export const FEATURE_LEGEND = [
     // reader was told a fact about a fictional mountain rather than
     // something about their article.
     label: 'Rock and snow are how much was written',
-    detail: `A section's own prose is what raises its peak. Push past ${percent(
-      BIOME_THRESHOLDS.mountainMinHeight,
-    )} of the world's height and the ground goes to bare rock; past ${percent(
-      BIOME_THRESHOLDS.snowMinHeight,
-    )} and it takes snow. The polar ice is the exception — every world has it.`,
+    detail:
+      `A section's own prose is what raises its peak. Stone starts showing through at ` +
+      `${percent(ALTITUDE.rockStart)} of the world's height and has covered the ground by ` +
+      `${percent(ALTITUDE.rockFull)}; snow begins at ${percent(ALTITUDE.snowStart)}. Both come ` +
+      `on gradually, and they tint rather than replace: a well-sourced section's high ground is ` +
+      `damp, mossy stone where a barren one's is dry scree, and its trees climb higher before ` +
+      `giving out. The polar ice is the exception — every world has it.`,
   },
 ]
-
-/** Swatch colour for a biome, straight from the renderer's own function. */
-export function swatchFor(biome, height = 0.6) {
-  return biomeColor(biome, height)
-}
 
 export const WATER_SWATCH = biomeColor(BIOME.OCEAN, 0.5)
 export const SNOW_SWATCH = biomeColor(BIOME.SNOW, 0.95)

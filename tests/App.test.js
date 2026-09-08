@@ -459,7 +459,7 @@ describe('App section focus', () => {
     await flushPromises()
   }
 
-  it('renders a card per top-level section, with subsection/word/citation chips', async () => {
+  it('renders a card per top-level section, in the words the tooltip uses', async () => {
     const wrapper = await mountWithArticle()
 
     const cards = [...document.querySelectorAll('.ledger__section')]
@@ -467,8 +467,10 @@ describe('App section focus', () => {
     expect(cards).toHaveLength(2)
     expect(cards[0].dataset.anchor).toBe('Early_life')
     expect(cards[0].querySelector('h4').textContent).toBe('Early life')
-    expect(cards[0].textContent).toContain('1 sub')
-    expect(cards[0].textContent).toContain('4 c')
+    // Spelled out rather than abbreviated. These read "1 SUB" and "4 C"
+    // before, which are not words and do not say what they count.
+    expect(cards[0].textContent).toContain('1 subsection')
+    expect(cards[0].textContent).toContain('4 refs')
     expect(cards[1].dataset.anchor).toBe('Career')
     // Subsections aren't listed as cards of their own.
     expect(sectionCard('Childhood')).toBeNull()
@@ -726,13 +728,23 @@ describe('App view axis', () => {
     withWorld.unmount()
   })
 
+  it('opens on the flat map', async () => {
+    // Pinned so moving the default is a deliberate edit rather than a
+    // silent one. The map shows the whole article at once; the planet can
+    // only ever show the half of it facing you.
+    const wrapper = await mountWithWorld()
+
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    wrapper.unmount()
+  })
+
   it('changes world shape from the helm and remembers it', async () => {
     const wrapper = await mountWithWorld()
 
-    await wrapper.findAll('.helm [role="radio"]')[1].trigger('click')
+    await wrapper.findAll('.helm [role="radio"]')[0].trigger('click')
 
-    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
-    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).worldShape).toBe('flat')
+    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Planet')
+    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).worldShape).toBe('sphere')
     wrapper.unmount()
   })
 
@@ -740,12 +752,20 @@ describe('App view axis', () => {
     // Keys 1 and 3 used to switch RENDERER, while shape hid in settings.
     const wrapper = await mountWithWorld()
 
-    const event = new KeyboardEvent('keydown', { key: 'v', bubbles: true, cancelable: true })
-    Object.defineProperty(event, 'target', { value: document.body })
-    window.dispatchEvent(event)
-    await flushPromises()
+    const press = async () => {
+      const event = new KeyboardEvent('keydown', { key: 'v', bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'target', { value: document.body })
+      window.dispatchEvent(event)
+      await flushPromises()
+    }
+    const active = () => wrapper.find('.helm [role="radio"][aria-checked="true"]').text()
 
-    expect(wrapper.find('.helm [role="radio"][aria-checked="true"]').text()).toBe('Flat')
+    await press()
+    expect(active()).toBe('Planet')
+    // Both ways on the one key, so it is a toggle rather than a switch
+    // that only moves off the default.
+    await press()
+    expect(active()).toBe('Flat')
     wrapper.unmount()
   })
 
@@ -1127,7 +1147,7 @@ describe('App legend', () => {
     await flushPromises()
 
     expect(document.querySelector('.legend')).not.toBeNull()
-    expect(document.body.textContent).toContain('citation density')
+    expect(document.body.textContent).toContain('how well each section cites')
 
     press('l')
     await flushPromises()

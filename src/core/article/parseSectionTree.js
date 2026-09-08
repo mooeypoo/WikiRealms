@@ -1,4 +1,6 @@
 import { EXCLUDED_SECTION_TITLES } from '../../engine/generation/config.js'
+import { CITATION_MARKER_SELECTOR } from './citationMarkers.js'
+import { countSentenceUnits } from './countSentences.js'
 
 const HEADING_SELECTOR = ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'
 const NON_PROSE_SELECTOR = '.mw-references-wrap, .reflist, .navbox, .infobox, style, script'
@@ -48,7 +50,7 @@ function countCitations(sectionEl) {
   for (const nestedSection of clone.querySelectorAll('section')) {
     nestedSection.remove()
   }
-  return clone.querySelectorAll('sup.reference, sup.mw-ref, sup[typeof~="mw:Extension/ref"]').length
+  return clone.querySelectorAll(CITATION_MARKER_SELECTOR).length
 }
 
 function citationDensity(citationCount, ownSize) {
@@ -56,26 +58,16 @@ function citationDensity(citationCount, ownSize) {
 }
 
 /**
- * Counts sentences in prose text. Uses a simple heuristic:
- * splits on sentence-ending punctuation (. ! ?) followed by whitespace
- * and a capital letter or end of string, filtering out abbreviations
- * and common false positives.
- * @param {string} text
- */
-function countSentences(text) {
-  if (!text || text.trim().length === 0) return 0
-  
-  // Split on sentence-ending punctuation followed by space + capital letter or EOL
-  // This catches "word. Word" and "word?" but not "Dr. " or "U.S. "
-  const sentences = text.match(/[.!?]+(?=\s+[A-Z]|\s*$)/g)
-  return sentences ? sentences.length : 0
-}
-
-/**
  * Measures a section's own prose length and sentence count, excluding
  * non-prose wrapper content (citation lists, navboxes, infoboxes, styles)
  * so a citation-heavy section isn't measured as if it were a large amount
  * of real content.
+ *
+ * `ownSize` is read BEFORE the sentence counter runs. The counter needs
+ * block boundaries marked with newlines to see them at all (see
+ * countSentences.js), and those newlines are not prose — ownSize feeds
+ * peak height, so it must stay a count of characters an author wrote.
+ *
  * @param {Element} sectionEl
  * @returns {{ text: string, ownSize: number, sentenceCount: number }}
  */
@@ -91,7 +83,7 @@ function measureOwnText(sectionEl) {
   return {
     text,
     ownSize: text.length,
-    sentenceCount: countSentences(text),
+    sentenceCount: countSentenceUnits(clone, text.length),
   }
 }
 
@@ -140,14 +132,12 @@ function buildHierarchy(flatSections) {
  */
 function computeSubtreeSizes(nodes) {
   let total = 0
-  let sentenceTotal = 0
   for (const node of nodes) {
     const childrenTotal = computeSubtreeSizes(node.children)
     const childrenSentences = node.children.reduce((sum, child) => sum + child.subtreeSentenceCount, 0)
     node.subtreeSize = node.ownSize + childrenTotal
     node.subtreeSentenceCount = node.sentenceCount + childrenSentences
     total += node.subtreeSize
-    sentenceTotal += node.subtreeSentenceCount
   }
   return total
 }
@@ -175,7 +165,7 @@ function countTreeCitations(nodes) {
  * Pure and deterministic: the same HTML always produces the same tree.
  *
  * @param {string} html
- * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number }}
+ * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number, sentenceCount: number }}
  */
 export function parseSectionTree(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -225,5 +215,13 @@ export function parseSectionTree(html) {
   computeSubtreeCitations(sections)
   const citationCount = lead.citationCount + countTreeCitations(sections)
 
-  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount }
+  // Article-wide sentence total, summed over the LEAD plus each top-level
+  // subtree so nothing is counted twice. This is the denominator of the
+  // article's own citation rate (see lushness.js), and it has to be a
+  // ratio of totals rather than an average of per-section ratios — an
+  // average double-counts every nested section and follows outliers.
+  const sentenceCount =
+    (lead.sentenceCount ?? 0) + sections.reduce((sum, section) => sum + section.subtreeSentenceCount, 0)
+
+  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount, sentenceCount }
 }

@@ -5,9 +5,9 @@ import { useOverlays } from '../design/useOverlays.js'
 import {
   FEATURE_LEGEND,
   GROUND_LEGEND,
+  LUSHNESS_CEILING_NOTE,
   SNOW_SWATCH,
   WATER_SWATCH,
-  swatchFor,
 } from '../content/legend.js'
 
 /**
@@ -90,16 +90,17 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
           </header>
 
           <section>
-            <h3>The ground is citation density</h3>
+            <h3>The ground is how well each section cites</h3>
             <ul class="legend__ground">
               <li v-for="entry in GROUND_LEGEND" :key="entry.biome">
-                <span class="legend__swatch" :style="{ background: swatchFor(entry.biome) }" />
+                <span class="legend__swatch" :style="{ background: entry.swatch }" />
                 <span class="legend__text">
-                  <strong>{{ entry.label }}</strong>
+                  <strong>{{ entry.name }}</strong>
                   <span>{{ entry.detail }}</span>
                 </span>
               </li>
             </ul>
+            <p class="legend__note">{{ LUSHNESS_CEILING_NOTE }}</p>
           </section>
 
           <section v-if="keyed.length">
@@ -274,6 +275,13 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
 }
 
 .legend__text > span {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.legend__note {
+  margin: var(--spacing-sm) 0 0;
   color: var(--ink-3);
   font-size: var(--text-xs);
   line-height: 1.45;

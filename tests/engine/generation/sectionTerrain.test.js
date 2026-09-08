@@ -169,7 +169,7 @@ describe('generateSectionTerrain', () => {
     const terrain = generateSectionTerrain({ width: 16, height: 12, rng: createRng(1), peaks: peaksFor(16, 12), totalArticleSize: 2000 })
 
     expect(terrain.heightMap).toHaveLength(192)
-    expect(terrain.moistureMap).toHaveLength(192)
+    expect(terrain.lushnessMap).toHaveLength(192)
     expect(terrain.biomeMap).toHaveLength(192)
   })
 
@@ -263,14 +263,14 @@ describe('generateSectionTerrain', () => {
     expect(terrain.heightMap[32 * width + (width - 1)]).toBeGreaterThan(0.32)
   })
 
-  it('keeps height and moisture within [0, 1]', () => {
+  it('keeps height and lushness within [0, 1]', () => {
     const terrain = generateSectionTerrain({ width: 24, height: 24, rng: createRng(3), peaks: peaksFor(24, 24), totalArticleSize: 2000 })
 
     for (const value of terrain.heightMap) {
       expect(value).toBeGreaterThanOrEqual(0)
       expect(value).toBeLessThanOrEqual(1)
     }
-    for (const value of terrain.moistureMap) {
+    for (const value of terrain.lushnessMap) {
       expect(value).toBeGreaterThanOrEqual(0)
       expect(value).toBeLessThanOrEqual(1)
     }

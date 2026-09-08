@@ -50,11 +50,18 @@ needs to be used now, but it's worth capturing so nothing is forgotten.
 - per-section outbound links — drives per-section portal placement (one
   portal per distinct link *per section*, so the same target can appear
   in multiple sections without being deduplicated away)
-- per-section citation count — parsed from inline reference markers. The
-  citation density of the dominant top-level section selects land lushness:
-  desert, light vegetation, meadow, woodland, or jungle, and modulates how
-  densely that land is planted. Citation density is expressed entirely
-  through the land itself — a well-sourced section is visibly greener.
+- per-section citation count and sentence count — parsed from inline
+  reference markers and from prose punctuation plus list/table structure
+  (see `countSentences.js`). Together they give each section a single
+  lushness scalar in [0, 1] (see `lushness.js`), built from a shrinkage
+  estimator, the article's own citation rate, a log-ratio against it and a
+  smooth absolute ceiling. The dominant top-level section's lushness
+  selects one of six land bands — dunes, steppe, light vegetation,
+  meadow, woodland, jungle — and modulates how densely that land is
+  planted. The comparison is WITHIN the article: a section reads greener
+  than its neighbours when it cites better than they do, and the absolute
+  ceiling stops a barely-sourced article looking green anywhere. Dunes is
+  reserved for a section that cites nothing at all.
 - section anchors (`#Section_Title`) — retained for future click-to-jump
   interactions
 - templates (infoboxes, navboxes, citation lists, etc.) — not represented
@@ -149,8 +156,12 @@ Feature signals currently influence:
 - island size
 - terrain roughness
 - water ratio
-- biome distribution: citation density drives land lushness; elevation still
-  determines ocean, beach, mountain, and snow
+- biome distribution: per-section lushness drives the six land bands, at
+  every altitude. Elevation determines ocean and beach, and adds rock and
+  snow as smooth COVER over whichever band a cell already has — it no
+  longer replaces the band, so a well-cited summit reads as damp mossy
+  stone where a barren one reads as dry scree. A section's lushness also
+  lifts its own treeline, so a well-sourced range keeps its trees higher
 - portal count and placement
 
 ## Section identity in generation output
@@ -200,19 +211,41 @@ to document order, so every linked section places its first portal before
 any section places its second. In document order a link-heavy opening
 section would otherwise swallow the entire budget.
 
-Citation counts remain on peaks (own and subtree totals) but are no longer
-rendered as their own marker: citation density reads through biome
-lushness and foliage density instead.
+Citation counts remain on peaks (own and subtree totals), alongside the
+sentence counts and the derived `lushness` scalar, but are no longer
+rendered as their own marker: they read through the land's lushness band
+and its foliage density instead.
 
-## Biome-Aware Foliage
+## Vegetation
 
-The 3D renderer sparsely samples the generated biome grid using a stable
-coordinate hash and adds lightweight point-sprite foliage above eligible
-land cells. Desert cells receive scrub, light vegetation and meadow cells
-receive grass, woodland cells receive conifers, and jungle cells receive
-broad canopy. Ocean, beach, mountain, and snow cells deliberately receive
-no foliage. These are presentation-only details: they consume the
-deterministic terrain data and do not alter world generation.
+The 3D renderer samples the generated band grid with a stable coordinate
+hash and grows two layers on it.
+
+**Understory** — camera-facing point sprites, one per cell, for grass,
+scrub and ferns. Cheap and numerous; ground texture rather than objects.
+
+**Canopy** — instanced, lit tree meshes on every second cell, from five
+archetypes: broadleaf, conifer, emergent, shrub and krummholz. One
+`InstancedMesh` per archetype, so a stand of two thousand trees is one
+draw call.
+
+Which layer a band grows is what separates the bands from each other. The
+dry bands differ by whether they carry shrubs at all; the top two differ
+by canopy CLOSURE and by an emergent layer breaking through it, rather
+than by a shade of green. Altitude substitutes the archetype as well as
+thinning it — broadleaf gives way to conifer, and conifer to stunted
+krummholz under the treeline — so a slope changes in kind as it climbs.
+
+Ocean, beach, polar-cap snow and the dunes carry nothing: a section that
+cites nothing reads as bare ground.
+
+Sizes are authored in grid cells and scaled per projection: the same
+relief is compressed 5.4x on the planet, so a tree sized for the flat map
+would out-scale the range it stands on there. The canopy is also hidden
+from orbit, where individual trees say nothing and cost a great deal.
+
+These are presentation-only details: they consume the deterministic
+terrain data and do not alter world generation.
 
 ## Generation pipeline
 

@@ -33,6 +33,10 @@ export const HEIGHT_SCALE_RATIO = 0.26
 /** Flat-view render parameters that have a spherical counterpart below. */
 export const FLAT_VIEW = Object.freeze({
   ambientLightIntensity: 0.6,
+  // Foliage sizes are authored in grid cells (see foliage.js), and the
+  // flat map is the view they were authored against, so they pass
+  // through unscaled.
+  foliageScale: 1,
   // Camera pull-back as a fraction of the larger grid axis.
   cameraDistanceRatio: 0.9,
   // Keeps the flat camera above the horizon — a plane viewed edge-on or
@@ -42,6 +46,17 @@ export const FLAT_VIEW = Object.freeze({
 
 /** Planet-view render parameters. Ratios, so they hold at any grid size. */
 export const SPHERE_VIEW = Object.freeze({
+  // Foliage is smaller on the planet than on the flat map, because the
+  // relief around it is. One grid cell is one world unit of arc in both
+  // views, but the HEIGHT range those cells rise through is 66.6 units
+  // flat against 12.2 on the globe — a 5.4x compression. A tree authored
+  // at 3 cells tall is 7% of a flat-view mountain and 36% of the same
+  // mountain on the planet, which is why the old sizes read as a fuzzy
+  // shell from orbit. Not the full 1/5.4: that would put the canopy
+  // below a pixel, and the canopy is distance-gated anyway, so this is
+  // the compromise that keeps a tree readable up close without letting
+  // it out-scale the range it stands on.
+  foliageScale: 0.42,
   // Vertical exaggeration as a fraction of the planet radius. Real
   // planets have imperceptible relief (Everest is 0.14% of Earth's
   // radius); this is the "readable globe" exaggeration, tuned so ranges
@@ -138,6 +153,7 @@ export const flatProjection = Object.freeze({
   id: 'flat',
   isSpherical: false,
   ambientLightIntensity: FLAT_VIEW.ambientLightIntensity,
+  foliageScale: FLAT_VIEW.foliageScale,
 
   heightScale(terrain) {
     return Math.min(terrain.width, terrain.height) * HEIGHT_SCALE_RATIO
@@ -210,6 +226,7 @@ export const sphereProjection = Object.freeze({
   id: 'sphere',
   isSpherical: true,
   ambientLightIntensity: SPHERE_VIEW.ambientLightIntensity,
+  foliageScale: SPHERE_VIEW.foliageScale,
 
   heightScale(terrain) {
     return planetRadius(terrain) * SPHERE_VIEW.reliefRatio

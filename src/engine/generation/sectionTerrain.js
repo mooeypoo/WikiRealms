@@ -1,6 +1,7 @@
 import { createNoise3D } from 'simplex-noise'
-import { BIOME_THRESHOLDS, GRID, PEAK_LAYOUT, POLAR_CAPS, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
-import { BIOME, classifyBiomeWithSentenceAwareness, sampleFractalNoiseWrapped } from './terrain.js'
+import { BIOME_THRESHOLDS, GRID, LUSHNESS, PEAK_LAYOUT, POLAR_CAPS, TERRAIN_DETAIL, WATER_LEVEL, TERRAIN_GENERATION } from './config.js'
+import { BIOME, classifyBiome, sampleFractalNoiseWrapped } from './terrain.js'
+import { annotatePeakLushness } from './lushness.js'
 import { computeRidgeLayout, computeSpiralLayout, relaxPlacements } from './layout.js'
 
 /**
@@ -353,16 +354,43 @@ function buildPeakAxes(peaks, sigmaMultiplier) {
  * every peak (sections and subsections), not just the handful of
  * top-level ones. Cell-by-cell that is an order of magnitude more work.
  *
+ * It also accumulates the LUSHNESS BLEND, if given somewhere to put it.
+ * That is a second job in one loop, and it is here rather than in a pass
+ * of its own because the expensive part — one exp() per peak per cell in
+ * range — is already being paid. A separate pass would double it to save
+ * two array writes.
+ *
+ * The two attributions are deliberately different, which is the whole
+ * point of doing both. `outOwner` records the TOP-LEVEL section, because
+ * that is the granularity hover, halos and the article panel work at.
+ * The lushness blend weights every peak by its own contribution at its
+ * own scale, so a subsection's ground shows the SUBSECTION.
+ *
  * @param {Float64Array} outValue per-cell strongest contribution
  * @param {Int32Array} outOwner per-cell owning peak index, pre-filled with -1
  * @param {number[]} owners owning top-level peak index per contributor
  * @param {Float64Array} warpX per-cell domain-warp displacement
+ * @param {{ weighted: Float32Array, weight: Float32Array, winner: Float32Array, sharpness: number } | null} [lushnessOut]
+ *   accumulators for sum(w^k * lushness), sum(w^k), and the lushness of
+ *   the single strongest peak at each cell
  */
-function accumulateGaussianArgMax(outValue, outOwner, peaks, axes, owners, warpX, warpY, width, height) {
+function accumulateGaussianArgMax(
+  outValue,
+  outOwner,
+  peaks,
+  axes,
+  owners,
+  warpX,
+  warpY,
+  width,
+  height,
+  lushnessOut = null,
+) {
   for (let i = 0; i < peaks.length; i++) {
     const peak = peaks[i]
     const axis = axes[i]
     const owner = owners[i]
+    const lushness = peak.lushness ?? 0
     // Reach must allow for the warp displacing the sample point toward
     // this peak, or warped cells at the rim get clipped out of the box.
     const reach = GAUSSIAN_CUTOFF_SIGMAS * Math.sqrt(Math.max(axis.alongSq, axis.acrossSq) / 2) + WARP_REACH_MARGIN
@@ -384,6 +412,19 @@ function accumulateGaussianArgMax(outValue, outOwner, peaks, axes, owners, warpX
         if (contribution > outValue[index]) {
           outValue[index] = contribution
           outOwner[index] = owner
+          // The strongest peak's own lushness, kept because "cites
+          // nothing" is a categorical claim that no average can carry —
+          // see the dunes veto in the biome pass.
+          if (lushnessOut !== null) lushnessOut.winner[index] = lushness
+        }
+        if (lushnessOut !== null) {
+          // Sharpened so the nearest peak dominates: a subsection's own
+          // ground is its own band, not an average of it with the parent
+          // it sits inside. The blend exists only to make the boundary a
+          // few cells wide instead of a hard contour.
+          const weight = contribution ** lushnessOut.sharpness
+          lushnessOut.weighted[index] += weight * lushness
+          lushnessOut.weight[index] += weight
         }
       }
     }
@@ -489,6 +530,12 @@ export function flattenPeaks(
       citationDensity: node.subtreeCitationDensity ?? node.citationDensity ?? 0,
       citationsPerSentence: node.citationsPerSentence ?? 0,
       subtreeCitationsPerSentence: node.subtreeCitationsPerSentence ?? 0,
+      // Raw sentence counts, not just the ratios above: lushness shrinks a
+      // section's rate toward the article's by a number of sentences, so
+      // it needs the numerator and denominator separately. A ratio alone
+      // cannot say whether it came from 1 sentence or 100.
+      sentenceCount: node.sentenceCount ?? 0,
+      subtreeSentenceCount: node.subtreeSentenceCount ?? node.sentenceCount ?? 0,
     })
 
     if (node.children.length > 0) {
@@ -639,18 +686,21 @@ function computeWaterLevelShift(totalArticleSize) {
  *
  * Each cell's biome uses the section whose continent contribution was
  * largest at that cell (tracked in sectionOwnershipMap during pass 1), fed
- * through classifyBiomeWithSentenceAwareness so under-cited articles
- * lean toward barren as a whole rather than by rank.
+ * through classifyBiome along with that section's lushness (lushness.js).
  *
- * Output shape (heightMap/moistureMap/biomeMap/peaks) is unchanged; the
- * 2D and 3D renderers do not need updating.
- *
- * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number }} options
- * @returns {{ width: number, height: number, heightMap: Float64Array, moistureMap: Float64Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
+ * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number, articleCitationRate?: number }} options
+ * @returns {{ width: number, height: number, heightMap: Float64Array, lushnessMap: Float32Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
  */
-export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize }) {
+export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize, articleCitationRate = 0 }) {
   const cellCount = width * height
   const waterLevelShift = computeWaterLevelShift(totalArticleSize)
+
+  // Annotated FIRST, before anything copies a peak. baseContributors
+  // below spread-copies every subsection to give it its own radius, and
+  // a copy taken before this runs carries `lushness: undefined` — which
+  // reads as 0, which the dunes veto then reports as "cites nothing" on
+  // every subsection summit in the world.
+  annotatePeakLushness(peaks, articleCitationRate)
 
   const sections = peaks.filter((p) => p.depth <= 1)
   const subsections = peaks.filter((p) => p.depth > 1)
@@ -705,6 +755,15 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // bays, headlands and isthmuses at no cost to where land broadly sits.
   const { warpX, warpY } = buildWarpField(width, height, rng, cfg.continent)
 
+  // Transient accumulators for the lushness blend — sum(w^k * lushness)
+  // and sum(w^k). Float32 and freed as soon as lushnessMap is derived.
+  const lushnessOut = {
+    weighted: new Float32Array(cellCount),
+    weight: new Float32Array(cellCount),
+    winner: new Float32Array(cellCount),
+    sharpness: LUSHNESS.blendSharpness,
+  }
+
   const baseContribution = new Float64Array(cellCount)
   accumulateGaussianArgMax(
     baseContribution,
@@ -716,6 +775,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
     warpY,
     width,
     height,
+    lushnessOut,
   )
   for (let idx = 0; idx < cellCount; idx++) {
     heightMap[idx] = cfg.continent.softCeiling * baseContribution[idx]
@@ -788,30 +848,56 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // === PASS 8: Post-erosion polish ===
   terrain = smoothHeightMap(terrain, width, height, cfg.postErosionSmoothing.passes, cfg.postErosionSmoothing.strength)
 
-  // Biome pass: each land cell picks up its dominant section's
-  // citations-per-sentence for the sentence-aware classifier.
-  const totalCitationsPerSentence = peaks.reduce((sum, p) => sum + (p.subtreeCitationsPerSentence ?? 0), 0)
-  const averageCitationsPerSentence = totalCitationsPerSentence / Math.max(peaks.length, 1)
-
-  const moistureMap = new Float64Array(cellCount)
+  // Biome pass: each land cell takes the lushness blended over it in
+  // pass 1 — the SUBSECTION's, where a subsection's footprint covers it,
+  // and its parent's on the ground between them.
+  //
+  // This used to read the lushness of the cell's top-level owner, so a
+  // subsection painted nothing at all. Measured on a fixture whose
+  // children differ sharply from their parents: all four subsections
+  // owned zero cells, and all four fell in a different band from the one
+  // painted over them — a jungle subsection under light-vegetation
+  // ground, a steppe one under meadow. Since halos and tooltips resolve
+  // subsections, hovering one contradicted the ground beneath it every
+  // time.
+  //
+  // lushnessMap is Float32, where the moistureMap it replaces was
+  // Float64. The extra precision bought nothing — the values are a
+  // normalized [0, 1] signal read by a renderer — and half the width
+  // saves 512 KB per world at the current grid.
+  const lushnessMap = new Float32Array(cellCount)
   const biomeMap = new Uint8Array(cellCount)
   for (let i = 0; i < cellCount; i++) {
     if (polarCapMask[i]) {
       // Icecaps belong to no section: leaving them owned would make
       // hovering one light up an unrelated continent's halo.
       sectionOwnershipMap[i] = -1
-      moistureMap[i] = 0
+      lushnessMap[i] = 0
       biomeMap[i] = terrain[i] > BIOME_THRESHOLDS.oceanMaxHeight ? BIOME.SNOW : BIOME.OCEAN
       continue
     }
 
-    const ownerIdx = sectionOwnershipMap[i]
-    const cps = ownerIdx >= 0 && ownerIdx < peaks.length
-      ? peaks[ownerIdx].subtreeCitationsPerSentence ?? 0
-      : 0
-    moistureMap[i] = cps
-    biomeMap[i] = classifyBiomeWithSentenceAwareness(terrain[i], cps, averageCitationsPerSentence)
+    // The dunes veto. Lushness 0 is a RESERVED value meaning "this
+    // section cites nothing" (see lushness.js), and no weighted average
+    // can carry a reserved value: a section citing nothing, sitting next
+    // to one that cites, blends to a small positive number and reads as
+    // steppe — "cited less than the rest" — about text with no sources
+    // at all. Measured: the twelve-section spread shape lost the dunes
+    // band entirely the moment blending was introduced.
+    //
+    // So where the STRONGEST peak at a cell cites nothing, the cell says
+    // so outright. That puts a crisp edge around an uncited section and
+    // leaves the rest of the map soft, which is the right way round:
+    // "no sources" is categorical, everything else is a degree.
+    //
+    // Cells beyond every peak's reach have no weight at all; they are
+    // ocean in practice, and 0 is the honest reading of the rare fringe
+    // cell that is not.
+    const blended = lushnessOut.weight[i] > 0 ? lushnessOut.weighted[i] / lushnessOut.weight[i] : 0
+    const lushness = lushnessOut.winner[i] > 0 ? blended : 0
+    lushnessMap[i] = lushness
+    biomeMap[i] = classifyBiome(terrain[i], lushness)
   }
 
-  return { width, height, heightMap: terrain, moistureMap, biomeMap, sectionOwnershipMap, peaks }
+  return { width, height, heightMap: terrain, lushnessMap, biomeMap, sectionOwnershipMap, peaks }
 }

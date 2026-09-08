@@ -1,123 +1,455 @@
-import { BIOME } from '../../engine/generation/terrain.js'
+/**
+ * What grows on a world, in two layers.
+ *
+ * The layers exist because the two jobs are different. Ground cover needs
+ * COUNT — thousands of blades, no silhouette, no lighting — and
+ * camera-facing point sprites are the cheapest possible way to get it.
+ * The canopy needs FORM: a tree has to read as an object, take the
+ * scene's light, and be recognisable in outline, and a flat billboard
+ * cannot do any of that. So the understory stays sprites and the canopy
+ * becomes instanced geometry.
+ *
+ * That split is the fix for the complaint this work started from — that
+ * the "dense" and "lush" bands were indistinguishable. Measured, they had
+ * only two channels between them: a hue difference of 16 units in one
+ * dark green, and a count. Both rendered as the same smear, because both
+ * were the same unlit blob at the same absurd size — a "tree" sprite was
+ * 3.8 grid cells wide, placed every 4 cells, so at any real density the
+ * crowns fused into a mat. They now differ by canopy CLOSURE and by an
+ * emergent layer breaking through it, which reads at any distance and in
+ * silhouette.
+ *
+ * Sizes here are in GRID CELLS, the unit projection.js promises carries
+ * between the flat map and the planet: one cell is one world unit of arc
+ * in both. The old values were world units chosen for the flat view
+ * alone, and on the planet — where the same relief is compressed 5.4x —
+ * a jungle crown came out at 40% of the planet's entire vertical relief.
+ *
+ * Free of three.js on purpose: the proportions and the picking are data
+ * and arithmetic, unit-testable without a WebGL context. The component
+ * turns an archetype's proportions into geometry.
+ */
+import { ALTITUDE } from '../../engine/generation/config.js'
+import { BIOME, snowCover, treelineFactor } from '../../engine/generation/terrain.js'
 
 /**
- * Foliage variants per biome. Each entry is a weighted probability of
- * being chosen when a land cell rolls for foliage. If chosen, `density`
- * decides whether it's actually placed at that cell (a second roll).
- * A biome not in the map has NO foliage (ocean, beach, mountain, snow).
+ * How densely the grid is sampled for each layer.
  *
- * Kept as pure data so the values can be tuned and the pick logic
- * unit-tested without touching three.js. `size` and `color` flow through
- * to the sprite material; `kind` picks the texture (leaf shape).
+ * The understory samples every cell and the canopy every second one, so a
+ * tree has room for its crown while grass can be continuous. The old
+ * single layer sampled every FOURTH cell in both axes, capping the whole
+ * world at one sprite per 16 cells — measured at 100 to 718 sprites for
+ * an entire planet of 26,000 land cells, about 2.5% ground cover at the
+ * lushest. No density value could have exceeded that ceiling.
  */
-export const FOLIAGE_VARIANTS_BY_BIOME = Object.freeze({
-  [BIOME.DESERT]: [
-    { kind: 'scrub', color: 0x9a7d42, size: 1.5, density: 0.08, weight: 0.85 },
-    { kind: 'scrub', color: 0xb08c50, size: 2.4, density: 0.02, weight: 0.15 },
+export const FOLIAGE_SAMPLING = Object.freeze({
+  understoryStride: 1,
+  canopyStride: 2,
+  // On the planet the canopy is hidden beyond this multiple of the
+  // planet's radius, where a tree is too small to contribute anything but
+  // aliasing.
+  //
+  // THIS HAS TO CLEAR THE DEFAULT CAMERA, and at 1.7 it did not: the
+  // planet view opens at SPHERE_VIEW.cameraDistanceRatio, 3.2 radii out,
+  // so the canopy was hidden the moment a world loaded and stayed hidden
+  // unless you zoomed nearly all the way in. The planet looked like it
+  // had no vegetation at all.
+  //
+  // Measured apparent height of a broadleaf, at a 50-degree field of view
+  // on a 900px viewport:
+  //
+  //   planet, default (3.2R)   4.9 px      flat, default   4.5 px
+  //   planet, closest (1.15R) 71.3 px
+  //   planet, furthest (9R)    1.3 px
+  //
+  // The first two lines are the point: a tree is the SAME apparent size
+  // on the planet as on the flat map at each view's own default. Nothing
+  // about the globe made the canopy too small — it was gated off.
+  //
+  // 5 keeps it drawn through the default view and culls it only as the
+  // camera pulls back past about 2.7 px per tree, where it stops being
+  // texture and starts being noise.
+  canopyVisibleRadiusRatio: 5,
+})
+
+/**
+ * Ground cover, as camera-facing sprites. `size` is the sprite's width in
+ * grid cells; `density` is the chance a sampled cell in this band takes
+ * one, before the lushness and treeline scaling below.
+ *
+ * A band absent from this map has no ground cover: ocean, beach, the
+ * polar-cap snow, and DUNES, which means the section cites nothing and
+ * should read as bare ground rather than as sparse cover.
+ */
+export const UNDERSTORY_BY_BAND = Object.freeze({
+  [BIOME.STEPPE]: [
+    { kind: 'scrub', color: 0x9a7d42, size: 0.7, density: 0.1, weight: 0.8 },
+    { kind: 'grass', color: 0xb5a05c, size: 0.6, density: 0.05, weight: 0.2 }, // bleached, dead
   ],
   [BIOME.LIGHT_VEG]: [
-    { kind: 'grass', color: 0xa7c86b, size: 1.8, density: 0.28, weight: 0.85 },
-    { kind: 'grass', color: 0xe5c04d, size: 2.0, density: 0.03, weight: 0.15 },
+    { kind: 'grass', color: 0xa7c86b, size: 0.75, density: 0.3, weight: 0.85 },
+    { kind: 'grass', color: 0xe5c04d, size: 0.7, density: 0.05, weight: 0.15 },
   ],
   [BIOME.MEADOW]: [
-    { kind: 'grass', color: 0x75ba55, size: 2.1, density: 0.48, weight: 0.75 },
-    { kind: 'grass', color: 0xd66b6b, size: 2.0, density: 0.04, weight: 0.10 },
-    { kind: 'scrub', color: 0x8e9f6a, size: 2.6, density: 0.05, weight: 0.15 },
+    { kind: 'grass', color: 0x75ba55, size: 0.85, density: 0.55, weight: 0.72 },
+    { kind: 'grass', color: 0xd66b6b, size: 0.8, density: 0.06, weight: 0.13 }, // wildflower
+    { kind: 'scrub', color: 0x8e9f6a, size: 0.9, density: 0.08, weight: 0.15 },
   ],
   [BIOME.WOODLAND]: [
-    { kind: 'tree', color: 0x3f793f, size: 3.8, density: 0.66, weight: 0.80 },
-    { kind: 'canopy', color: 0x2f5e2f, size: 4.2, density: 0.06, weight: 0.12 },
-    { kind: 'scrub', color: 0x8a7a55, size: 2.8, density: 0.04, weight: 0.08 },
+    { kind: 'fern', color: 0x4c8348, size: 0.9, density: 0.34, weight: 0.78 },
+    { kind: 'grass', color: 0x6ba85a, size: 0.8, density: 0.14, weight: 0.22 },
   ],
   [BIOME.JUNGLE]: [
-    { kind: 'canopy', color: 0x1f6937, size: 4.8, density: 0.80, weight: 0.85 },
-    { kind: 'grass', color: 0xe5be3f, size: 2.2, density: 0.05, weight: 0.10 },
-    { kind: 'tree', color: 0x2b7548, size: 4.4, density: 0.06, weight: 0.05 },
+    { kind: 'fern', color: 0x2f7a45, size: 1.0, density: 0.46, weight: 0.85 },
+    { kind: 'grass', color: 0xe5be3f, size: 0.85, density: 0.06, weight: 0.15 },
   ],
 })
 
 /**
- * Density scaling factors. Cells whose section is well-cited (relative
- * to the article's average) get denser foliage than the biome default;
- * sparsely-cited cells get sparser. Clamped so pathological articles
- * don't produce empty maps or overgrown blobs.
+ * Tree shapes, in grid cells. Proportions rather than meshes: the
+ * component builds geometry from these, so the shapes stay tunable and
+ * testable without a renderer.
+ *
+ * `crown` is the silhouette — 'cone' for a spire, 'round' for a mass.
  */
-export const FOLIAGE_DENSITY = Object.freeze({
-  min: 0.5, // barren-section floor
-  max: 1.6, // lush-section ceiling
+export const CANOPY_ARCHETYPES = Object.freeze({
+  // Wider than it is tall, which is what makes it read as a broadleaf
+  // rather than as a poplar: crownRadius 0.62 is 1.24 cells across
+  // against 1.15 of height. The first cut had a crown 1.9 tall inside
+  // the same 1.24 width — a vertical egg — while its own comment claimed
+  // it was being squashed.
+  broadleaf: Object.freeze({
+    trunkHeight: 1.0,
+    trunkRadius: 0.09,
+    crownHeight: 1.15,
+    crownRadius: 0.62,
+    crown: 'round',
+  }),
+  conifer: Object.freeze({
+    trunkHeight: 0.65,
+    trunkRadius: 0.08,
+    crownHeight: 3.0,
+    crownRadius: 0.48,
+    crown: 'cone',
+  }),
+  // Deliberately the tallest thing that grows, and thin, so it reads as
+  // breaking THROUGH a canopy rather than as one more tree in it.
+  emergent: Object.freeze({
+    trunkHeight: 3.1,
+    trunkRadius: 0.08,
+    crownHeight: 1.5,
+    crownRadius: 0.68,
+    crown: 'round',
+  }),
+  shrub: Object.freeze({
+    trunkHeight: 0.12,
+    trunkRadius: 0.07,
+    crownHeight: 0.62,
+    crownRadius: 0.46,
+    crown: 'round',
+  }),
+  // Stunted and wind-flattened: what survives just under the treeline.
+  // Wider than it is tall, which is the whole visual point.
+  krummholz: Object.freeze({
+    trunkHeight: 0.14,
+    trunkRadius: 0.1,
+    crownHeight: 0.42,
+    crownRadius: 0.66,
+    crown: 'cone',
+  }),
 })
 
 /**
- * Picks which foliage variant to try placing at a cell in `biome`,
- * using `variantRoll` (0-1) to sample from the biome's weighted
- * distribution. Returns null for biomes without foliage (ocean, beach,
- * mountain, snow).
+ * Which trees each band grows. `density` is the chance a sampled cell
+ * takes one, and it is what separates a wood from a jungle: WOODLAND's
+ * 0.42 leaves ground between the trunks, JUNGLE's 0.86 does not.
  *
- * @param {number} biome BIOME enum value
- * @param {number} variantRoll [0, 1)
+ * MEADOW gets scattered single trees rather than none — an open meadow
+ * with the occasional standard reads as meadow, where bare grass reads as
+ * a lawn. STEPPE and LIGHT_VEG get only shrubs, which is what puts three
+ * distinguishable dry bands on the map instead of two: bare dunes, bare
+ * ground with shrubs, and grass with shrubs.
+ *
+ * OCCUPANCY — the chance a sampled cell takes anything at all, summing
+ * weight x density — has to RISE across the bands, or the ramp inverts
+ * somewhere in the middle and a better-cited section grows less than a
+ * worse-cited one. The first cut of this table had meadow at 0.102
+ * against light vegetation's 0.13, because a meadow honestly carries
+ * fewer shrubs than scrubland does; the trees have to make up the
+ * difference, and they now do.
  */
-export function pickFoliageVariant(biome, variantRoll) {
-  const variants = FOLIAGE_VARIANTS_BY_BIOME[biome]
+export const CANOPY_BY_BAND = Object.freeze({
+  [BIOME.STEPPE]: [{ archetype: 'shrub', color: 0x7c7a48, density: 0.07, weight: 1 }],
+  [BIOME.LIGHT_VEG]: [{ archetype: 'shrub', color: 0x6f8c4a, density: 0.13, weight: 1 }],
+  [BIOME.MEADOW]: [
+    { archetype: 'broadleaf', color: 0x4a8a44, density: 0.17, weight: 0.6 },
+    { archetype: 'shrub', color: 0x5f8a4c, density: 0.15, weight: 0.4 },
+  ],
+  [BIOME.WOODLAND]: [
+    { archetype: 'broadleaf', color: 0x3f793f, density: 0.42, weight: 0.6 },
+    { archetype: 'conifer', color: 0x2f5e3a, density: 0.42, weight: 0.4 },
+  ],
+  [BIOME.JUNGLE]: [
+    { archetype: 'broadleaf', color: 0x24713c, density: 0.86, weight: 0.55 },
+    { archetype: 'conifer', color: 0x1f6937, density: 0.86, weight: 0.15 },
+    { archetype: 'emergent', color: 0x2b7548, density: 0.86, weight: 0.3 },
+  ],
+})
+
+/**
+ * Density scaling factors, applied on top of a variant's own `density`.
+ *
+ * The scale is a straight lerp across the lushness scalar, chosen so
+ * lushness 0.5 — a section citing at exactly its article's own rate —
+ * lands on 1.0 and leaves the band default untouched.
+ */
+export const FOLIAGE_DENSITY = Object.freeze({
+  min: 0.4, // lushness 0
+  max: 1.6, // lushness 1
+})
+
+/** Per-instance variation, so a stand is not a lattice. */
+export const CANOPY_JITTER = Object.freeze({
+  minScale: 0.78,
+  maxScale: 1.34,
+  // Lateral offset from the cell centre, in cells. Without it every tree
+  // sits on a grid point and a wood reads as an orchard.
+  //
+  // Sized against the CANOPY STRIDE, not against one cell. Trees are
+  // sampled every second cell, so an offset of up to half the stride
+  // fills the plane continuously; at 0.42 the offset was a fifth of the
+  // spacing and the lattice showed straight through it. Half the stride
+  // is the ceiling — beyond that a tree crosses into the territory of the
+  // cell next door, which already had its own chance to grow one.
+  maxOffsetCells: 0.95,
+  // Per-instance brightness multiplier, so a stand has depth rather than
+  // being one flat green.
+  minTint: 0.84,
+  maxTint: 1.16,
+})
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, Number(value) || 0))
+}
+
+function mix(from, to, amount) {
+  return from + (to - from) * amount
+}
+
+/**
+ * Weighted pick from one band's variant list, or null when the band grows
+ * nothing in this layer.
+ *
+ * @param {object} table UNDERSTORY_BY_BAND or CANOPY_BY_BAND
+ * @param {number} band BIOME enum value
+ * @param {number} roll [0, 1)
+ */
+function pickWeighted(table, band, roll) {
+  const variants = table[band]
   if (!variants || variants.length === 0) return null
   let cumulative = 0
-  for (const v of variants) {
-    cumulative += v.weight
-    if (variantRoll < cumulative) return v
+  for (const variant of variants) {
+    cumulative += variant.weight
+    if (roll < cumulative) return variant
   }
   return variants[variants.length - 1] // safety for float rounding
 }
 
 /**
- * Density scale ∈ [FOLIAGE_DENSITY.min, FOLIAGE_DENSITY.max] based on
- * this cell's citations-per-sentence relative to the article's mean.
- * Cells in above-average sections get lusher foliage; below-average
- * sections get sparser. Returns 1 when the article-wide average is 0
- * (no citations to compare) or the cell has no cps assigned.
+ * Picks the ground-cover variant to try at a cell in `band`. Null for
+ * bands with no cover: ocean, beach, polar-cap snow, and dunes.
  *
- * @param {number} citationsPerSentence
- * @param {number} articleAverage
+ * @param {number} band BIOME enum value
+ * @param {number} variantRoll [0, 1)
  */
-export function computeFoliageDensityScale(citationsPerSentence, articleAverage) {
-  if (!articleAverage || articleAverage <= 0) return 1
-  const cps = Number(citationsPerSentence) || 0
-  const ratio = cps / articleAverage
-  return Math.min(FOLIAGE_DENSITY.max, Math.max(FOLIAGE_DENSITY.min, ratio))
+export function pickUnderstoryVariant(band, variantRoll) {
+  return pickWeighted(UNDERSTORY_BY_BAND, band, variantRoll)
 }
 
 /**
- * Deterministic per-cell hash yielding two independent-ish [0, 1) rolls
- * — one for variant pick, one for density check. Same hash mixing the
- * previous flat-density implementation used, just split by bit range so
- * the two decisions don't correlate.
+ * Picks the tree to try at a cell in `band`. Null for bands with no
+ * trees, which includes dunes and every non-land biome.
+ *
+ * @param {number} band BIOME enum value
+ * @param {number} variantRoll [0, 1)
+ */
+export function pickCanopyVariant(band, variantRoll) {
+  return pickWeighted(CANOPY_BY_BAND, band, variantRoll)
+}
+
+/**
+ * Substitutes an archetype for the one that actually grows at this
+ * altitude.
+ *
+ * A mountain is not a taller version of its foothills: broadleaf gives
+ * way to conifer, and conifer to stunted krummholz just below the
+ * treeline. So altitude reads as a change in KIND rather than only as a
+ * thinning, and a rocky slope carries recognisable alpine vegetation
+ * instead of a sparser copy of the valley.
+ *
+ * `emergent` is deliberately exempt from the conifer substitution. It is
+ * the jungle band's signature — the layer separating it from woodland —
+ * and swapping it out at altitude would erase that distinction on exactly
+ * the high ground where the two are hardest to tell apart.
+ *
+ * @param {string} archetype name from CANOPY_ARCHETYPES
+ * @param {number} height [0, 1]
+ * @returns {string} name from CANOPY_ARCHETYPES
+ */
+export function resolveArchetypeForAltitude(archetype, height) {
+  const h = Number(height) || 0
+  if (h >= ALTITUDE.krummholzStart) return 'krummholz'
+  if (h >= ALTITUDE.coniferStart && archetype === 'broadleaf') return 'conifer'
+  return archetype
+}
+
+/**
+ * Density scale from this cell's lushness and its altitude.
+ *
+ * The lushness part reads the same scalar the ground colour and the band
+ * name read, which is the point: foliage used to normalize
+ * citations-per-sentence against the article average on its own, while the
+ * biome under it classified on absolute thresholds, so the two disagreed
+ * about what "lush" meant.
+ *
+ * The altitude part is the treeline, and it is a multiplier rather than a
+ * gate. Foliage above the old rock threshold was not thinned, it was
+ * deleted — no variants existed for rock or snow — so a quarter of every
+ * world's land was bare by construction. Now it tapers, and a well-cited
+ * section's treeline sits higher than a barren one's.
+ *
+ * @param {number} lushness [0, 1] from lushness.js
+ * @param {number} [height] [0, 1] cell height; omit for ground-level cells
+ */
+export function computeFoliageDensityScale(lushness, height = 0) {
+  const value = clamp01(lushness)
+  const byLushness = FOLIAGE_DENSITY.min + (FOLIAGE_DENSITY.max - FOLIAGE_DENSITY.min) * value
+  return byLushness * treelineFactor(height, value)
+}
+
+/**
+ * One instance's colour: the variant's own green, varied per instance so
+ * a stand has depth, then dusted white by however much snow lies at this
+ * height.
+ *
+ * The dusting is what puts vegetation INSIDE the snow band instead of
+ * stopping at its edge — dark conifers going pale as they climb, rather
+ * than a clean line with trees below and nothing above.
+ *
+ * @param {number} baseColor 0xRRGGBB
+ * @param {number} height [0, 1]
+ * @param {number} tintRoll [0, 1)
+ * @returns {{ r: number, g: number, b: number }} channels in [0, 1]
+ */
+export function foliageInstanceColor(baseColor, height, tintRoll) {
+  const brightness = mix(CANOPY_JITTER.minTint, CANOPY_JITTER.maxTint, clamp01(tintRoll))
+  const dust = snowCover(height)
+  const channel = (shift) => {
+    const base = ((baseColor >> shift) & 0xff) / 255
+    return clamp01(mix(base * brightness, 1, dust))
+  }
+  return { r: channel(16), g: channel(8), b: channel(0) }
+}
+
+/**
+ * One instance's scale multiplier, yaw, and lateral offset from the cell
+ * centre, from four independent rolls.
+ *
+ * The offset takes its own angle AND its own radius. It used to derive
+ * the radius from `scaleRoll` — the same roll that sets the tree's size —
+ * which quietly correlated the two: every small tree sat near its cell
+ * centre and every large one at the rim. The sqrt is still there, and is
+ * not cosmetic: sampling radius uniformly would pile instances toward the
+ * centre, because the area of a ring grows with its radius.
+ *
+ * @param {number} scaleRoll [0, 1)
+ * @param {number} rotationRoll [0, 1)
+ * @param {number} offsetAngleRoll [0, 1)
+ * @param {number} offsetRadiusRoll [0, 1)
+ */
+export function canopyInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll = 0, offsetRadiusRoll = 0) {
+  const angle = clamp01(offsetAngleRoll) * Math.PI * 2
+  const radius = CANOPY_JITTER.maxOffsetCells * Math.sqrt(clamp01(offsetRadiusRoll))
+  return {
+    scale: mix(CANOPY_JITTER.minScale, CANOPY_JITTER.maxScale, clamp01(scaleRoll)),
+    yaw: clamp01(rotationRoll) * Math.PI * 2,
+    offsetX: Math.cos(angle) * radius,
+    offsetY: Math.sin(angle) * radius,
+  }
+}
+
+/**
+ * Whether the canopy is worth drawing from where the camera is.
+ *
+ * The flat map always shows it — the camera never gets far enough away
+ * for it to be wasted. On the planet it fades in on descent.
+ *
+ * @param {number} cameraDistance from the world's centre, in world units
+ * @param {number} planetRadius 0 or absent for the flat map
+ */
+export function shouldShowCanopy(cameraDistance, planetRadius) {
+  if (!planetRadius || planetRadius <= 0) return true
+  return cameraDistance <= planetRadius * FOLIAGE_SAMPLING.canopyVisibleRadiusRatio
+}
+
+/**
+ * Murmur3's 32-bit finalizer: the avalanche step that turns a combined
+ * hash into something that actually looks random.
+ *
+ * `Math.imul` rather than `*` throughout, because these products overflow
+ * 32 bits and JavaScript's `*` promotes to double — imul is the only way
+ * to get the wrapping multiply the mixing depends on.
+ */
+function fmix32(hash) {
+  let h = hash
+  h ^= h >>> 16
+  h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13
+  h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return h >>> 0
+}
+
+/**
+ * Deterministic per-cell rolls: two independent-ish [0, 1) values from
+ * one hash, salted so the layers do not correlate.
+ *
+ * Each layer and each decision takes its own salt. Without that the
+ * understory and the canopy would agree about which cells are populated,
+ * and every tree would stand in its own patch of grass with bare ground
+ * between.
+ *
+ * THE FINALIZER IS LOAD-BEARING. This was `(x * 73856093) ^ (y * 19349663)
+ * ^ seed` with no mixing step, and the two halves of the result behaved
+ * completely differently. `variantRoll` reads the LOW bits, which depend
+ * on the low bits of x and y and so vary per cell; `densityRoll` reads
+ * the HIGH bits, which for a multiply barely change between neighbours.
+ * Measured over a 64x64 patch:
+ *
+ *   sd of column means      0.1868   against 0.0361 for independent rolls
+ *   mean |delta| x-neighbour  0.0971   against 0.3333
+ *   mean |delta| y-neighbour  0.0326   against 0.3333
+ *
+ * Neighbouring cells drew nearly the SAME density roll, so trees arrived
+ * in solid blocks striped on a ~29-column period — which is exactly the
+ * period bits 16-31 of `x * 73856093` cycle on at a stride of 2. Because
+ * the variant roll was fine, those blocks were correctly mixed in species
+ * while being placed in bands. With fmix32 the same measurements come out
+ * at 0.0376, 0.3284 and 0.3301.
  *
  * @param {number} gridX
  * @param {number} gridY
  * @param {number} seed world seed
+ * @param {number} [salt] which decision this roll is for — see the call
+ *   sites in WorldView3D.vue; each layer and each per-instance property
+ *   takes its own, or they correlate
  */
-export function cellFoliageRolls(gridX, gridY, seed) {
-  const hash = ((gridX * 73856093) ^ (gridY * 19349663) ^ seed) >>> 0
+export function cellFoliageRolls(gridX, gridY, seed, salt = 0) {
+  const combined =
+    Math.imul(gridX, 0x27d4eb2d) ^ Math.imul(gridY, 0x165667b1) ^ Math.imul(seed ^ salt, 0x9e3779b1)
+  const hash = fmix32(combined)
   return {
     variantRoll: (hash & 0xffff) / 0x10000,
     densityRoll: ((hash >>> 16) & 0xffff) / 0x10000,
   }
-}
-
-/**
- * Convenience: article-wide average citations-per-sentence across the
- * top-level sections, used as the denominator for
- * `computeFoliageDensityScale`. Pure — takes a peaks array, returns a
- * single number.
- *
- * @param {object[]} peaks
- */
-export function computeArticleAverageCps(peaks) {
-  if (!Array.isArray(peaks) || peaks.length === 0) return 0
-  let sum = 0
-  let count = 0
-  for (const peak of peaks) {
-    if ((peak.depth ?? 0) > 1) continue
-    sum += peak.subtreeCitationsPerSentence ?? 0
-    count++
-  }
-  return count > 0 ? sum / count : 0
 }

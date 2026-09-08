@@ -17,13 +17,48 @@ const ARTICLE = {
     totalSize: 900,
     citationCount: 24,
     sections: [
-      { title: 'Discovery', anchor: 'Discovery', ownSize: 400, subtreeSize: 900, subtreeCitationCount: 6, children: [{ title: 'Early', anchor: 'Early', ownSize: 500, subtreeSize: 500, children: [] }] },
-      { title: 'Structure', anchor: 'Structure', ownSize: 6600, subtreeSize: 6600, subtreeCitationCount: 9, children: [] },
+      {
+        title: 'Discovery',
+        anchor: 'Discovery',
+        ownSize: 400,
+        subtreeSize: 900,
+        subtreeCitationCount: 6,
+        subtreeSentenceCount: 20,
+        children: [
+          { title: 'Early', anchor: 'Early', ownSize: 500, subtreeSize: 500, children: [] },
+          { title: 'Late', anchor: 'Late', ownSize: 200, subtreeSize: 200, children: [] },
+        ],
+      },
+      {
+        title: 'Structure',
+        anchor: 'Structure',
+        ownSize: 6600,
+        subtreeSize: 6600,
+        subtreeCitationCount: 9,
+        subtreeSentenceCount: 40,
+        children: [],
+      },
     ],
   },
 }
 
-const WORLD = { portals: [{ portalId: 'p1' }, { portalId: 'p2' }, { portalId: 'p3' }] }
+/**
+ * Lushness lives on the generated PEAKS, not on the parsed section tree,
+ * so the Ledger matches the two up by heading anchor. These stand in for
+ * a generated world: Discovery well cited, its two children far apart,
+ * Structure citing nothing.
+ */
+const WORLD = {
+  portals: [{ portalId: 'p1' }, { portalId: 'p2' }, { portalId: 'p3' }],
+  terrain: {
+    peaks: [
+      { title: 'Discovery', anchor: 'Discovery', depth: 1, lushness: 0.72 },
+      { title: 'Early', anchor: 'Early', depth: 2, lushness: 0.95 },
+      { title: 'Late', anchor: 'Late', depth: 2, lushness: 0.1 },
+      { title: 'Structure', anchor: 'Structure', depth: 1, lushness: 0 },
+    ],
+  },
+}
 
 function mountLedger(props = {}) {
   return mount(Ledger, {
@@ -158,7 +193,7 @@ describe('Ledger', () => {
       const values = [...document.querySelectorAll('.ledger__stats dd')].map((dd) => dd.textContent.trim())
 
       // sections through the whole tree, citations, portals, words
-      expect(values).toEqual(['3', '24', '3', '164'])
+      expect(values).toEqual(['4', '24', '3', '164'])
     })
 
     it('counts words rather than links', () => {
@@ -174,12 +209,61 @@ describe('Ledger', () => {
       expect(labels).not.toContain('Links')
     })
 
-    it('lists top-level sections only, with a reading-length chip', () => {
+    it('lists top-level sections only, in the words the tooltip uses', () => {
       mountLedger()
 
       expect(cards().map((card) => card.querySelector('h4').textContent)).toEqual(['Discovery', 'Structure'])
-      // 6600 characters ≈ 1.2k words, rounded to a signal rather than a figure.
-      expect(cards()[1].textContent).toContain('1.2k w')
+      // The same figure the tooltip shows for the same section, spelled
+      // the same way. It used to read "1.2K W" here and "1,200 words"
+      // there, from two copies of the same arithmetic.
+      expect(cards()[1].textContent).toContain('1,200 words')
+      expect(cards()[1].textContent).toContain('9 refs in 40 sentences')
+    })
+
+    it('names the band the map painted, and says what it means', () => {
+      // Clicking a section used to give LESS than hovering it: the chips
+      // carried a word count and a bare citation number, and the band —
+      // the thing the reader had just seen on the ground — appeared
+      // nowhere in the panel at all.
+      mountLedger()
+
+      expect(cards()[0].textContent).toContain('Wooded')
+      expect(cards()[0].textContent).toContain('above this article’s average')
+      expect(cards()[1].textContent).toContain('Barren')
+      expect(cards()[1].textContent).toContain('no references at all')
+    })
+
+    it('puts the band on the title row, so the list can be scanned', () => {
+      // A column of band names down the panel reads the shape of the
+      // article without opening a single section.
+      mountLedger()
+
+      for (const card of cards()) {
+        expect(card.querySelector('.ledger__section-head .ledger__band')).not.toBeNull()
+      }
+    })
+
+    it('takes the band swatch from the renderer rather than a copy of it', () => {
+      mountLedger()
+
+      expect(cards()[0].querySelector('.ledger__swatch').getAttribute('style')).toContain('rgb(')
+    })
+
+    it('reports the spread of a range whose subsections disagree', () => {
+      // Subsections are painted their OWN band now rather than inheriting
+      // their parent's, so a reader seeing a lush patch inside a drier
+      // range needs somewhere to find out which child that is. "2
+      // subsections" alone does not explain why the range is not one
+      // colour.
+      mountLedger()
+
+      expect(cards()[0].textContent).toContain('2 subsections, Sparse to Lush')
+    })
+
+    it('does not spell out a range when a section has no subsections', () => {
+      mountLedger()
+
+      expect(cards()[1].textContent).not.toContain('subsection')
     })
 
     it('links each section to its own place on Wikipedia', () => {

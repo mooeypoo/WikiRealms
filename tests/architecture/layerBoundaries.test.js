@@ -38,8 +38,19 @@ const RULES = [
   },
   {
     layer: 'src/ui/rendering',
+    // ui/content/ is forbidden in this direction because content already
+    // depends on rendering — the legend and the band table take their
+    // swatches from biomeColor. A renderer reaching back for copy would
+    // make the two mutually dependent, and the tooltip nearly did: it
+    // wanted the words for the band it had just classified. It returns
+    // the band id instead and lets the component resolve them.
+    mayNotImport: ['adapters/', 'ui/components/', 'ui/content/'],
+    because: 'renderers turn world data into geometry; they do not fetch, own components, or hold copy',
+  },
+  {
+    layer: 'src/ui/content',
     mayNotImport: ['adapters/', 'ui/components/'],
-    because: 'renderers turn world data into geometry; they do not fetch, and they do not own components',
+    because: 'copy may read the engine it describes and the colours it shows, but it does not fetch or own components',
   },
 ]
 

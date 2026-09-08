@@ -60,8 +60,33 @@ describe('Cassini Division story fixture', () => {
 
   it('builds HTML the parser recognises as Parsoid output', () => {
     expect(cassiniDivisionHtml).toContain('rel="mw:WikiLink"')
-    expect(cassiniDivisionHtml).toContain('<sup class="mw-ref">')
+    expect(cassiniDivisionHtml).toContain('typeof="mw:Extension/ref"')
     // Nested <section> elements, so a parent's ownSize excludes its children.
     expect(cassiniDivisionHtml).toContain('<section><h3 id="Early_observations">')
+  })
+
+  it('emits the markup shapes the parser has to survive', () => {
+    // The fixture used to emit one paragraph per section with EMPTY
+    // citation markers, so it could not exhibit either sentence-counting
+    // bug the parser was built against: a paragraph boundary swallowing
+    // its last sentence, and a marker's own text hiding the full stop it
+    // follows. A fixture that cannot produce those is not exercising the
+    // parser.
+    expect(cassiniDivisionHtml.match(/<p>/g).length).toBeGreaterThan(
+      cassiniDivisionArticle.sections.sections.length,
+    )
+    expect(cassiniDivisionHtml).toContain('mw-reflink-text')
+    // A marker landing directly after a full stop, which is where a
+    // citation actually goes and what defeats a naive sentence pattern.
+    expect(cassiniDivisionHtml).toMatch(/\.<sup/)
+  })
+
+  it('counts more sentences than it has paragraphs, so none were lost', () => {
+    // The bug this guards: textContent runs "world.Next" together at a
+    // block boundary, so every paragraph used to lose its last sentence.
+    const tree = cassiniDivisionArticle.sections
+    const paragraphs = cassiniDivisionHtml.match(/<p>/g).length
+
+    expect(tree.sentenceCount).toBeGreaterThan(paragraphs)
   })
 })

@@ -1,7 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import Legend from '../../../src/ui/components/Legend.vue'
-import { BIOME_THRESHOLDS, CITATION_LUSHNESS, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
+import { ALTITUDE, PORTAL_LIMITS } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
@@ -40,16 +40,44 @@ describe('Legend', () => {
     mountLegend()
     const swatches = [...document.querySelectorAll('.legend__ground .legend__swatch')]
 
-    expect(swatches).toHaveLength(5)
-    expect(swatches[0].getAttribute('style')).toContain(biomeColor(BIOME.DESERT, 0.6))
+    expect(swatches).toHaveLength(6)
+    expect(swatches[0].getAttribute('style')).toContain(biomeColor(BIOME.DUNES, 0.6))
+    expect(swatches.at(-1).getAttribute('style')).toContain(biomeColor(BIOME.JUNGLE, 0.6))
   })
 
-  it('takes its thresholds from the engine too', () => {
+  it('names the bands as an ordered scale and explains each one', () => {
+    // The bands are relative by construction. The legend used to state
+    // them as absolute percentages the engine never computed, and then as
+    // clauses ("cited far better than the rest") that read as prose
+    // rather than as a key.
     mountLegend()
     const text = document.querySelector('.legend__ground').textContent
 
-    expect(text).toContain(`${Math.round(CITATION_LUSHNESS.desertThreshold * 100)}%`)
-    expect(text).toContain(`${Math.round(CITATION_LUSHNESS.woodlandThreshold * 100)}%`)
+    expect(text).toContain('Barren')
+    expect(text).toContain('Lush')
+    expect(text).toContain('average')
+    // Still no percentages: the scalar behind the bands is not one.
+    expect(text).not.toMatch(/\d+%/)
+  })
+
+  it('says that a poorly sourced article stays dry throughout', () => {
+    // Without this the relative bands overclaim: a stub's best section
+    // would read as if it were well sourced.
+    mountLegend()
+
+    expect(document.querySelector('.legend__note').textContent).toContain('stays dry')
+  })
+
+  it('never renders a NaN where an engine number should be', () => {
+    // This is not hypothetical. When rock and snow stopped being
+    // thresholds, this entry kept interpolating the deleted constants and
+    // rendered "Push past NaN% of the world's height" — and the test
+    // above passed, because it asserted the text contained the same NaN
+    // it was building.
+    mountLegend()
+
+    expect(document.querySelector('.legend__key').textContent).not.toContain('NaN')
+    expect(document.querySelector('.legend__key').textContent).not.toContain('undefined')
   })
 
   it('says what causes the height, not just what sits on it', () => {
@@ -60,8 +88,11 @@ describe('Legend', () => {
     const text = document.querySelector('.legend__features').textContent
 
     expect(text).toContain('how much was written')
-    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.mountainMinHeight * 100)}%`)
-    expect(text).toContain(`${Math.round(BIOME_THRESHOLDS.snowMinHeight * 100)}%`)
+    expect(text).toContain(`${Math.round(ALTITUDE.rockStart * 100)}%`)
+    expect(text).toContain(`${Math.round(ALTITUDE.snowStart * 100)}%`)
+    // Says that altitude tints rather than replaces, which is the whole
+    // difference from the thresholds it used to describe.
+    expect(text).toContain('mossy')
   })
 
   it('says portals are a selection, not every link', () => {
