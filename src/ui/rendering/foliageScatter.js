@@ -35,7 +35,7 @@ import {
   canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
-  foliageInstanceColor,
+  foliageTintColor,
   pickCanopyVariant,
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
@@ -185,6 +185,11 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
     const colors = new Float32Array(count * 3)
     const yaws = new Float32Array(count)
     const scales = new Float32Array(count)
+    // How high each tree stands, in the same [0, 1] the height map uses.
+    // Emitted rather than folded into the colour so a shader can decide
+    // how much snow lies on which of its surfaces, and so a snowline can
+    // move without any of this being recomputed.
+    const heights = new Float32Array(count)
 
     cells.forEach((cell, instance) => {
       const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
@@ -228,13 +233,15 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
       yaws[instance] = transform.yaw
       scales[instance] = transform.scale
 
-      const { r, g, b } = foliageInstanceColor(cell.color, heightMap[cell.index], tintRoll)
+      const { r, g, b } = foliageTintColor(cell.color, tintRoll)
       colors[instance * 3] = r
       colors[instance * 3 + 1] = g
       colors[instance * 3 + 2] = b
+
+      heights[instance] = heightMap[cell.index]
     })
 
-    layers.push({ archetype, count, positions, normals, yaws, scales, colors })
+    layers.push({ archetype, count, positions, normals, yaws, scales, colors, heights })
   }
 
   return layers

@@ -342,12 +342,39 @@ export function computeFoliageDensityScale(lushness, height = 0) {
  * @returns {{ r: number, g: number, b: number }} channels in [0, 1]
  */
 export function foliageInstanceColor(baseColor, height, tintRoll) {
-  const brightness = mix(CANOPY_JITTER.minTint, CANOPY_JITTER.maxTint, clamp01(tintRoll))
+  // No longer what the renderer uploads — the canopy shader mixes snow
+  // itself, per surface rather than per tree, so that a crown is capped
+  // and the underside of it is not. This stays as the testable statement
+  // of the rule that shader implements: tint, then mix toward white by
+  // snowCover at the tree's own altitude. GLSL cannot be unit tested; a
+  // reference it must agree with can.
+  const { r, g, b } = foliageTintColor(baseColor, tintRoll)
   const dust = snowCover(height)
-  const channel = (shift) => {
-    const base = ((baseColor >> shift) & 0xff) / 255
-    return clamp01(mix(base * brightness, 1, dust))
+  return {
+    r: clamp01(mix(r, 1, dust)),
+    g: clamp01(mix(g, 1, dust)),
+    b: clamp01(mix(b, 1, dust)),
   }
+}
+
+/**
+ * The tree's own colour, with its brightness jitter and no snow.
+ *
+ * Split from the dusting above for the same reason biomeGroundRgb was
+ * split from the snow over it: baked together, a snowline cannot move
+ * without rebuilding every instance colour in the world, and a uniform
+ * mix is the wrong look anyway — it whitens the shaded underside of a
+ * crown as much as the top, where snow actually settles. A renderer that
+ * applies snow itself wants this and the instance's height, and gates on
+ * the surface normal.
+ *
+ * @param {number} baseColor packed 0xRRGGBB from the variant table
+ * @param {number} tintRoll [0, 1)
+ * @returns {{ r: number, g: number, b: number }} channels in [0, 1]
+ */
+export function foliageTintColor(baseColor, tintRoll) {
+  const brightness = mix(CANOPY_JITTER.minTint, CANOPY_JITTER.maxTint, clamp01(tintRoll))
+  const channel = (shift) => clamp01((((baseColor >> shift) & 0xff) / 255) * brightness)
   return { r: channel(16), g: channel(8), b: channel(0) }
 }
 

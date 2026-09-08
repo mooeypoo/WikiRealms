@@ -244,22 +244,33 @@ describe('scatterCanopy', () => {
     expect(directions.size).toBeGreaterThan(1)
   })
 
-  it('dusts vegetation white inside the snow band rather than at its edge', () => {
-    // Dark conifers going pale as they climb, rather than a clean line
-    // with trees below and nothing above.
-    // Both heights sit inside the snow band AND below the lushness-lifted
-    // treeline, which is the only window where trees and snow coexist —
-    // at snowFull nothing grows at all to be dusted.
-    const brightness = (height01) => {
-      const layers = scatterCanopy(uniformTerrain(BIOME.WOODLAND, { height01, lushness: 1 }), 47, FLAT)
-      const total = layers.reduce((sum, layer) => sum + layer.colors.reduce((a, b) => a + b, 0), 0)
-      const channels = layers.reduce((sum, layer) => sum + layer.colors.length, 0)
+  it('leaves the snow out of the colours entirely', () => {
+    // Dusting used to be mixed into the instance colour here, so a tree
+    // at 0.92 came out paler than the same tree at 0.84. It is the
+    // shader's job now, gated on the surface normal — snow on a crown
+    // and not on the shaded underside, which a whole-instance mix could
+    // never express. Colour is the tree's own again.
+    const layers = scatterCanopy(uniformTerrain(BIOME.WOODLAND, { height01: 0.95, lushness: 1 }), 47, FLAT)
+    const channels = layers.flatMap((layer) => Array.from(layer.colors))
 
-      expect(channels).toBeGreaterThan(0)
-      return total / channels
+    expect(channels.length).toBeGreaterThan(0)
+    // 0.95 sits near the top of the snow band, where the old dusting was
+    // over 0.9 — every channel of every tree came out nearly white. A
+    // woodland canopy's own greens do not reach anywhere near this.
+    expect(Math.max(...channels)).toBeLessThan(0.8)
+  })
+
+  it('carries each tree height for the shader to snow it by', () => {
+    // The replacement for the baked dusting: the altitude goes to the
+    // GPU as an attribute, so a snowline is a uniform and not a rebuild.
+    const height01 = 0.88
+    const layers = scatterCanopy(uniformTerrain(BIOME.WOODLAND, { height01, lushness: 1 }), 47, FLAT)
+
+    expect(layers.length).toBeGreaterThan(0)
+    for (const layer of layers) {
+      expect(layer.heights).toHaveLength(layer.count)
+      for (const height of layer.heights) expect(height).toBeCloseTo(height01, 5)
     }
-
-    expect(brightness(0.92)).toBeGreaterThan(brightness(0.84))
   })
 })
 

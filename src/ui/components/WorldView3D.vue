@@ -3,7 +3,8 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
-import { computePeakFlagPosition, computeVertexColors } from '../rendering/terrainMesh.js'
+import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
+import { createStylizedMaterial } from '../rendering/stylizedMaterial.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
 import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import {
@@ -244,12 +245,19 @@ function buildTerrainMesh(world) {
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   geometry.setIndex(new THREE.BufferAttribute(indices, 1))
-  geometry.setAttribute('color', new THREE.BufferAttribute(computeVertexColors(terrain), 3))
+
+  // Colour is the ground WITHOUT its snow, and the snow arrives as an
+  // eligible height per vertex for the shader to gate on. Baked together
+  // the snowline could not move, and it whitened overhangs and cliff
+  // faces as readily as the ground that faces the sky.
+  const ground = computeGroundAttributes(terrain)
+  geometry.setAttribute('color', new THREE.BufferAttribute(ground.colors, 3))
+  geometry.setAttribute('snowHeight', new THREE.BufferAttribute(ground.snowHeights, 1))
   geometry.computeVertexNormals()
 
   // Smooth normals soften the grid's artificial triangular facets while the
   // section-derived height field preserves the world's distinct peak layout.
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
+  const material = createStylizedMaterial({ vertexColors: true, spherical: projection.isSpherical })
   const mesh = new THREE.Mesh(geometry, material)
 
   const waterMaterial = new THREE.MeshStandardMaterial({
@@ -324,10 +332,20 @@ function buildFoliage(world, heightScale) {
           map: makeFoliageTexture(layer.variant.kind),
           size: layer.variant.size * cellScale,
           sizeAttenuation: true,
-          transparent: true,
-          alphaTest: 0.1,
-          opacity: 0.9,
-          depthWrite: false,
+          // Opaque cutout, not alpha blending. This is the densest layer
+          // in the scene and the cheapest to get wrong: blended sprites
+          // with depthWrite off cannot reject a fragment early, so every
+          // overlapping sprite in a thicket shades every pixel it covers,
+          // and the layer costs its overdraw rather than its area.
+          //
+          // Writing depth also fixes the sort artefacts that come free
+          // with unsorted blended points — a near tuft no longer shows
+          // the one behind it through its own middle.
+          //
+          // alphaTest is high because the texture is a soft radial
+          // gradient. At 0.1 the discard kept a wide, nearly transparent
+          // skirt which, once opaque, reads as a disc rather than a tuft.
+          alphaTest: 0.5,
         }),
       ),
     )
@@ -346,10 +364,15 @@ function buildFoliage(world, heightScale) {
 
   for (const layer of scatter.canopy) {
     const geometry = buildArchetypeGeometry(CANOPY_ARCHETYPES[layer.archetype], cellScale)
+    // Per-instance, so each tree's crown is snowed according to its own
+    // altitude while the geometry stays shared. An InstancedBufferAttribute
+    // on a geometry that is only used by this one InstancedMesh.
+    geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+
     // Lit, so a tree has a shaded side and reads as an object. The point
     // sprites this replaces took no light at all, which is why two bands
     // of trees were distinguishable only by hue and count.
-    const material = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: true })
+    const material = createStylizedMaterial({ flatShading: true, spherical: projection.isSpherical })
     const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
 

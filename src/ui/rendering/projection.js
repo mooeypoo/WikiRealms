@@ -86,7 +86,7 @@ function clamp(value, min, max) {
  * Shared grid → indexed-triangle-mesh builder. Both projections lay out
  * exactly width × height vertices in row-major order, so a vertex index
  * is always `gridY * width + gridX` — the same index space as heightMap,
- * biomeMap and computeVertexColors' output. Only the vertex POSITIONS
+ * biomeMap and computeGroundAttributes' output. Only the vertex POSITIONS
  * and whether the last column stitches back to the first differ.
  *
  * Winding matches three.js PlaneGeometry's (a, b, d) / (b, c, d) order so

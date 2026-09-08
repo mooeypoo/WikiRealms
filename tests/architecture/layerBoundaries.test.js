@@ -119,9 +119,10 @@ describe('layer boundaries', () => {
    * The allowlist is the pairing: for every module here there should be a
    * pure one holding the decisions it draws. canopyGeometry.js builds
    * tree shapes for foliageScatter.js's buffers; portalForms.js draws
-   * portals for portalPlacement.js's placements.
+   * portals for portalPlacement.js's placements; stylizedMaterial.js
+   * shades what biomeColor.js and terrainMesh.js decided the colour of.
    */
-  const MAY_IMPORT_THREE = ['canopyGeometry.js', 'portalForms.js']
+  const MAY_IMPORT_THREE = ['canopyGeometry.js', 'portalForms.js', 'stylizedMaterial.js']
 
   it('keeps three.js out of ui/rendering bar the geometry builders', () => {
     const violations = []
