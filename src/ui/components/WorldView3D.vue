@@ -42,7 +42,14 @@ import {
 } from '../rendering/portalMarkers.js'
 import { placePortals } from '../rendering/portalPlacement.js'
 import { DEFAULT_PORTAL_FORM, createPortalForm } from '../rendering/portalForms.js'
-import { CANOPY_ARCHETYPES, UNDERSTORY_FORMS, shouldShowCanopy } from '../rendering/foliage.js'
+import {
+  CANOPY_ARCHETYPES,
+  UNDERSTORY_FORMS,
+  apparentPixels,
+  foliageDetailFraction,
+  shouldShowCanopy,
+} from '../rendering/foliage.js'
+import { QUALITY_TIERS, detectQualityTier, readDeviceProfile, resolvePixelRatio } from '../rendering/quality.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -126,6 +133,12 @@ let ambientLight = null
 // less motion. Built with defaults up front so the first frames have a
 // clock even if they land before the first rebuild.
 let environment = createEnvironment()
+
+// How hard to push this device (see rendering/quality.js). Decided once
+// when the renderer is created, since the drawing buffer's pixel ratio
+// is set there and the vegetation density hangs off the same call.
+let qualityTier = QUALITY_TIERS.high
+const drawingBufferSize = new THREE.Vector2()
 
 /**
  * How long to keep drawing after something changes, in seconds.
@@ -303,9 +316,16 @@ function buildTerrainMesh(world) {
  *   yaws: Float32Array, scales: Float32Array, colors: Float32Array }} layer
  * @returns {THREE.InstancedMesh}
  */
-function buildInstancedLayer(geometry, material, layer) {
+function buildInstancedLayer(geometry, material, layer, plantHeight) {
   const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
   mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+
+  // What updateFoliageDetail needs to thin this layer: how many there
+  // are in total, since mesh.count is about to stop meaning that, and
+  // how tall one is, which is what decides whether it is still worth
+  // drawing from here.
+  mesh.userData.fullCount = layer.count
+  mesh.userData.plantHeight = plantHeight
 
   for (let instance = 0; instance < layer.count; instance += 1) {
     const base = instance * 3
@@ -393,7 +413,9 @@ function buildFoliage(world, heightScale) {
       side: THREE.DoubleSide,
     })
     windMaterials.push(material)
-    understory.add(buildInstancedLayer(geometry, material, layer))
+    understory.add(
+      buildInstancedLayer(geometry, material, layer, understoryHeight(form, layer.variant.size, cellScale)),
+    )
   }
 
   // === Canopy: one InstancedMesh per archetype ===
@@ -421,7 +443,7 @@ function buildFoliage(world, heightScale) {
       swayHeight: archetypeHeight(spec, cellScale),
     })
     windMaterials.push(material)
-    canopy.add(buildInstancedLayer(geometry, material, layer))
+    canopy.add(buildInstancedLayer(geometry, material, layer, archetypeHeight(spec, cellScale)))
   }
 
   return { understory, canopy }
@@ -1083,10 +1105,65 @@ function resizeToContainer() {
   const { clientWidth, clientHeight } = containerRef.value
   if (clientWidth === 0 || clientHeight === 0) return
 
+  // Re-resolved on every resize, not just at setup: dragging a window to
+  // a monitor with a different density changes devicePixelRatio without
+  // reloading anything.
+  renderer.setPixelRatio(resolvePixelRatio(qualityTier))
   renderer.setSize(clientWidth, clientHeight)
   camera.aspect = clientWidth / clientHeight
   camera.updateProjectionMatrix()
   markRestless()
+}
+
+/**
+ * Thins both vegetation layers to what the camera can actually resolve.
+ *
+ * An InstancedMesh draws its first `count` instances, and the scatter
+ * hands them over in hash order, so lowering the count sheds plants
+ * evenly across the whole world (see inThinningOrder in
+ * foliageScatter.js). Nothing is rebuilt and no buffer is touched — the
+ * work simply is not submitted.
+ *
+ * The understory needed this. As point sprites it was one vertex per
+ * clump and leaving all of it on from orbit was free; as blade clumps it
+ * is 20 triangles each, and the comment that used to sit here claiming
+ * the layer "reads as ground texture at any distance and costs one draw
+ * call per variant" stopped being true the moment that changed.
+ *
+ * Distance is measured to the nearest GROUND, not to the world's
+ * centre, and on the planet those differ by a whole radius. Using the
+ * centre would have thinned the vegetation hardest exactly where the
+ * camera gets closest to it: at the nearest zoom the camera sits 1.15
+ * radii out but only 0.15 above the surface, so plants would have been
+ * judged 7.7x smaller than they appear and thinned to the floor.
+ *
+ * It is the same distance the measurements in FOLIAGE_SAMPLING were
+ * taken at, and those only reproduce this way.
+ *
+ * It is still one distance for the whole layer rather than one per
+ * plant — the same approximation shouldShowCanopy makes, and a good one
+ * here, since the point is a decision that changes as the camera pulls
+ * away from the world rather than one that differs across it.
+ */
+function updateFoliageDetail() {
+  if (!camera || !renderer) return
+
+  const radius = projection.isSpherical && props.world ? planetRadius(props.world.terrain) : 0
+  const distance = Math.max(camera.position.length() - radius, 1e-3)
+  const viewportHeight = renderer.getDrawingBufferSize(drawingBufferSize).y
+
+  for (const group of [understoryGroup, canopyGroup]) {
+    if (!group?.visible) continue
+    for (const mesh of group.children) {
+      const { fullCount, plantHeight } = mesh.userData
+      if (!fullCount) continue
+
+      const apparent = apparentPixels(plantHeight, distance, viewportHeight, camera.fov)
+      const fraction = foliageDetailFraction(apparent, qualityTier.foliageDensity)
+      // At least one, so a layer never vanishes outright and pops back.
+      mesh.count = Math.max(1, Math.round(fullCount * fraction))
+    }
+  }
 }
 
 function animate() {
@@ -1110,13 +1187,14 @@ function animate() {
   const hoveredTopLevel = resolveHoveredTopLevel(attentionIndex(), peaks)
 
   // Individual trees are meaningless from orbit and expensive to draw
-  // there, so the canopy fades in on descent. The understory stays on:
-  // it reads as ground texture at any distance and costs one draw call
-  // per variant. On the flat map the gate is always open.
+  // there, so the canopy is gated off entirely past a few radii. On the
+  // flat map the gate is always open.
   if (canopyGroup && props.showFoliage) {
     const radius = projection.isSpherical ? planetRadius(props.world.terrain) : 0
     canopyGroup.visible = shouldShowCanopy(camera.position.length(), radius)
   }
+
+  updateFoliageDetail()
 
   // Only the numbers are computed here; how a portal wears them is the
   // form's business (see portalForms.js). Skipped while the layer is
@@ -1183,6 +1261,15 @@ onMounted(() => {
   // what reads as "far away".
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setClearColor(0x000000, 0)
+
+  // Nothing set this before, and three defaults it to 1 — which means
+  // the drawing buffer was sized in CSS pixels and the browser upscaled
+  // it to the screen. On a 1x monitor that is correct and free; on a 2x
+  // laptop the world was drawn at a quarter of the pixels it was shown
+  // at, and on a 3x phone a ninth. See rendering/quality.js for why this
+  // is a tier and not simply 2.
+  qualityTier = detectQualityTier(readDeviceProfile())
+  renderer.setPixelRatio(resolvePixelRatio(qualityTier))
   containerRef.value.appendChild(renderer.domElement)
 
   // A single rotated group so terrain/water/portals/halos/vegetation all

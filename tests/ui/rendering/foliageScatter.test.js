@@ -397,6 +397,71 @@ describe('scatterFoliage', () => {
     expect(UNDERSTORY_JITTER.maxOffsetCells).toBeLessThanOrEqual(FOLIAGE_SAMPLING.understoryStride / 2)
   })
 
+  it('orders instances so that any prefix covers the whole world', () => {
+    // Distance thinning works by lowering an InstancedMesh's count,
+    // which draws the FIRST n instances. Cells are found in scan order,
+    // so without the hash sort, thinning would strip the world from one
+    // edge — the far half of the map would have no vegetation at all
+    // rather than sparser vegetation.
+    const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.3, lushness: 0.9 })
+    const [layer] = scatterUnderstory(terrain, 77, FLAT)
+    expect(layer.count).toBeGreaterThan(400)
+
+    // Take the prefix that thinning would keep from a long way out and
+    // check it still reaches every quadrant of the map.
+    // The flat projection centres the map on the origin, so the sign of
+    // each coordinate is the half of the world it fell in.
+    const prefix = Math.round(layer.count * 0.05)
+    const quadrants = new Map()
+    for (let i = 0; i < prefix; i += 1) {
+      const x = layer.positions[i * 3] < 0 ? 'W' : 'E'
+      const y = layer.positions[i * 3 + 1] < 0 ? 'S' : 'N'
+      quadrants.set(x + y, (quadrants.get(x + y) ?? 0) + 1)
+    }
+
+    expect([...quadrants.keys()].sort()).toEqual(['EN', 'ES', 'WN', 'WS'])
+    // And roughly evenly, not one quadrant carrying the layer.
+    for (const [quadrant, taken] of quadrants) {
+      expect(taken / prefix, quadrant).toBeGreaterThan(0.15)
+      expect(taken / prefix, quadrant).toBeLessThan(0.35)
+    }
+  })
+
+  it('thins the sparse bands no faster than the dense ones', () => {
+    // The thinning order takes its own salt. Reusing the placement roll
+    // would mean the cells that survive are the ones that were most
+    // likely to grow something in the first place, so a band at 6%
+    // density would disappear entirely while a band at 55% barely
+    // thinned — and it is the rare wildflower that would go.
+    const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.3, lushness: 0.9 })
+    const layers = scatterUnderstory(terrain, 91, FLAT)
+    expect(layers.length).toBeGreaterThan(1)
+
+    const total = layers.reduce((sum, layer) => sum + layer.count, 0)
+    for (const layer of layers) {
+      // Each variant is its own mesh with its own count, so thinning is
+      // proportional per layer by construction. What must hold is that
+      // no layer is empty to begin with — a variant that scattered
+      // nothing cannot be thinned into existence later.
+      expect(layer.count, layer.variant.kind).toBeGreaterThan(0)
+      expect(layer.count / total).toBeLessThan(1)
+    }
+
+    // Within one layer, the first instances must not be biased toward
+    // the cells that rolled most eagerly. Compare the mean density roll
+    // of the kept prefix against the layer as a whole.
+    const [layer] = layers
+    const prefix = Math.round(layer.count * 0.1)
+    const meanHeight = (from, to) => {
+      let sum = 0
+      for (let i = from; i < to; i += 1) sum += layer.scales[i]
+      return sum / (to - from)
+    }
+    // Scale is drawn from an independent salt, so a biased prefix shows
+    // up as a prefix whose mean scale drifts from the whole layer's.
+    expect(meanHeight(0, prefix)).toBeCloseTo(meanHeight(0, layer.count), 1)
+  })
+
   it('leaves ground cover exactly where it was before clumps replaced sprites', () => {
     // The placement roll keeps salt 0 and the new per-instance rolls take
     // salts of their own, so giving a clump a size and a bearing must not

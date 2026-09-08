@@ -544,6 +544,101 @@ export function shouldShowCanopy(cameraDistance, planetRadius) {
 }
 
 /**
+ * How tall something is on screen, in device pixels.
+ *
+ * The same arithmetic behind the measurements in FOLIAGE_SAMPLING above,
+ * written down instead of done by hand: at the camera's distance the
+ * frustum spans a known height in world units, and an object occupies
+ * its own share of that.
+ *
+ * `cameraDistance` is to the OBJECT, which on the planet means the
+ * camera's distance from the centre less the planet's radius. Those
+ * measurements above only reproduce that way, and the difference is not
+ * small — at the closest zoom the camera is 1.15 radii from the centre
+ * and 0.15 from the ground.
+ *
+ * @param {number} objectHeight in world units
+ * @param {number} cameraDistance in world units, to the object
+ * @param {number} viewportHeight in device pixels
+ * @param {number} fieldOfView vertical, in degrees
+ */
+export function apparentPixels(objectHeight, cameraDistance, viewportHeight, fieldOfView) {
+  if (!(cameraDistance > 0)) return Infinity
+  const frustumHeight = 2 * cameraDistance * Math.tan((fieldOfView * Math.PI) / 360)
+  return (objectHeight / frustumHeight) * viewportHeight
+}
+
+/**
+ * What fraction of a vegetation layer's instances are worth drawing.
+ *
+ * WHY A COUNT AND NOT A SIZE
+ *
+ * Pull the camera back and each plant covers fewer pixels, but they all
+ * stay on screen — so the number of plants PER PIXEL grows with the
+ * square of the distance. Past a certain point that is not detail, it is
+ * noise: a pixel covered by six blades of grass shows the average of
+ * six blades, which is a flat colour we could have drawn with one.
+ *
+ * So the fraction falls with the square of the apparent size, which is
+ * exactly the rate that holds plants-per-pixel — and with it the
+ * triangles per pixel — constant as the camera retreats. The layer stops
+ * getting more expensive per pixel the further away it is, which is the
+ * opposite of how it behaved before.
+ *
+ * The threshold is per PLANT and not per layer, which matters and was
+ * got wrong first: a tree measures about 5 px at either view's default
+ * camera and a grass clump about 2 px, because grass is short. Judging
+ * both against the tree's figure thinned ground cover to 12% at the
+ * view every world opens in — the layer was culled hardest in the only
+ * view most readers ever see.
+ *
+ * This became necessary rather than merely nice when ground cover
+ * stopped being point sprites. A sprite cost one vertex, so leaving all
+ * 3,890 of them on from orbit was genuinely free; a clump of blades
+ * costs 20 triangles, and 3,890 of those drawn across a planet the size
+ * of a thumbnail is 67,000 triangles resolving to a few hundred pixels.
+ *
+ * @param {number} apparent the layer's apparent height in device pixels
+ * @param {number} [ceiling] the quality tier's own density, as a cap
+ * @returns {number} in [FOLIAGE_LOD.minFraction, ceiling]
+ */
+export function foliageDetailFraction(apparent, ceiling = 1) {
+  if (!Number.isFinite(apparent)) return ceiling
+  if (apparent >= FOLIAGE_LOD.fullDetailPixels) return ceiling
+
+  const ratio = Math.max(0, apparent) / FOLIAGE_LOD.fullDetailPixels
+  return Math.min(ceiling, Math.max(FOLIAGE_LOD.minFraction, ratio * ratio))
+}
+
+/**
+ * Where the detail fraction turns over, and how far it is allowed to
+ * fall.
+ *
+ * `fullDetailPixels` is the apparent height below which a plant has
+ * stopped being a plant. Under about one pixel a triangle either misses
+ * the raster grid or catches it intermittently, which with MSAA on is
+ * shimmer rather than texture — worse than not drawing it. 1.5 is that
+ * point with a little margin.
+ *
+ * Deliberately BELOW what anything measures at either view's default
+ * camera — grass is the smallest thing here at about 2.1 px on the flat
+ * map and 2.3 px on the planet, so a world opens at full density in
+ * both. Thinning is for the orbit the camera can pull back to, where
+ * ground cover reaches 0.6 px and 3,890 clumps of it are 67,000
+ * triangles resolving to shimmer. The first value tried here was 6 px,
+ * which culled 88% of the ground cover in the default view.
+ *
+ * `minFraction` is a floor rather than zero because a layer that thins
+ * to nothing pops when it comes back. At 4% of a lush world's ground
+ * cover there are still a few hundred clumps carrying the ground's
+ * colour, which is all the layer contributes from that far out anyway.
+ */
+export const FOLIAGE_LOD = Object.freeze({
+  fullDetailPixels: 1.5,
+  minFraction: 0.04,
+})
+
+/**
  * Murmur3's 32-bit finalizer: the avalanche step that turns a combined
  * hash into something that actually looks random.
  *

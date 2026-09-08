@@ -68,7 +68,42 @@ const SALT = Object.freeze({
   understoryScale: 5,
   understoryOffset: 6,
   understoryTint: 7,
+  thinning: 8,
 })
+
+/**
+ * Puts a layer's cells in a deterministic random order.
+ *
+ * WHY THE ORDER OF INSTANCES MATTERS
+ *
+ * An InstancedMesh draws the FIRST `count` of its instances, and that is
+ * the whole mechanism behind distance thinning: lower the count and the
+ * rest stop costing anything, with no rebuild and no second buffer.
+ *
+ * Which makes the order load-bearing. Cells arrive here in scan order,
+ * so truncating that count would strip the world from the bottom up —
+ * the far half of the map would simply have no vegetation. Sorted by a
+ * hash, any prefix is a spatially uniform sample of the whole layer, so
+ * thinning reads as ground cover growing sparser everywhere.
+ *
+ * The hash takes its own salt: reusing the placement roll would mean the
+ * cells that survive thinning are the ones that were most likely to grow
+ * something, which correlates density with survival and thins the sparse
+ * bands to nothing first.
+ *
+ * Ties are broken by cell index so the order is total, not merely
+ * mostly-determined — two cells sharing a roll must not depend on the
+ * sort's stability for their order.
+ */
+function inThinningOrder(cells, seed) {
+  return cells
+    .map((cell) => ({
+      cell,
+      key: cellFoliageRolls(cell.gridX, cell.gridY, seed, SALT.thinning).variantRoll,
+    }))
+    .sort((a, b) => a.key - b.key || a.cell.index - b.cell.index)
+    .map((entry) => entry.cell)
+}
 
 /**
  * Whether a cell takes a variant, given its own density roll.
@@ -135,7 +170,8 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
     }
   }
 
-  return [...byVariant].map(([variant, cells]) => {
+  return [...byVariant].map(([variant, unordered]) => {
+    const cells = inThinningOrder(unordered, seed)
     const count = cells.length
     const positions = new Float32Array(count * 3)
     const normals = new Float32Array(count * 3)
@@ -241,7 +277,8 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
   }
 
   const layers = []
-  for (const [archetype, cells] of byArchetype) {
+  for (const [archetype, unordered] of byArchetype) {
+    const cells = inThinningOrder(unordered, seed)
     // An archetype the table names but CANOPY_ARCHETYPES does not
     // describe has no geometry to instance, so it is dropped here rather
     // than handed to the component to discover.

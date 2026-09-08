@@ -14,8 +14,11 @@ import {
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
   shouldShowCanopy,
+  apparentPixels,
+  foliageDetailFraction,
+  FOLIAGE_LOD,
 } from '../../../src/ui/rendering/foliage.js'
-import { SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
+import { FLAT_VIEW, SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
@@ -348,6 +351,138 @@ describe('shouldShowCanopy', () => {
       SPHERE_VIEW.cameraDistanceRatio * 1.25,
     )
     expect(FOLIAGE_SAMPLING.canopyVisibleRadiusRatio).toBeLessThan(SPHERE_VIEW.maxDistanceRatio)
+  })
+})
+
+describe('apparentPixels', () => {
+  it('reproduces the measurements FOLIAGE_SAMPLING was tuned against', () => {
+    // Those figures were taken by hand at a 50-degree field of view on a
+    // 900px viewport, and canopyVisibleRadiusRatio rests on them. If
+    // this arithmetic disagrees with them, one of the two is wrong.
+    //
+    // They reproduce to a tenth of a pixel — but ONLY when the distance
+    // is measured to the planet's surface rather than its centre, which
+    // is how this function's contract came to say so. Measured to the
+    // centre, the same three come out 3.3, 24.6 and 1.2, and a caller
+    // making that mistake thins the vegetation hardest exactly where the
+    // camera gets closest to it.
+    const radius = 512 / (Math.PI * 2)
+    const treeHeight = 2.15 * SPHERE_VIEW.foliageScale
+    const at = (ratio) => apparentPixels(treeHeight, radius * (ratio - 1), 900, 50)
+
+    expect(at(SPHERE_VIEW.cameraDistanceRatio)).toBeCloseTo(4.9, 1)
+    expect(at(SPHERE_VIEW.minDistanceRatio)).toBeCloseTo(71.3, 0)
+    expect(at(SPHERE_VIEW.maxDistanceRatio)).toBeCloseTo(1.3, 1)
+  })
+
+  it('halves when the camera doubles its distance', () => {
+    expect(apparentPixels(2, 100, 900, 50)).toBeCloseTo(apparentPixels(2, 200, 900, 50) * 2, 6)
+  })
+
+  it('grows with the drawing buffer, not the CSS size', () => {
+    // Which is why the caller passes the drawing buffer height: raising
+    // the pixel ratio genuinely does make a plant bigger in pixels, and
+    // so worth drawing from further away.
+    expect(apparentPixels(2, 100, 1800, 50)).toBeCloseTo(apparentPixels(2, 100, 900, 50) * 2, 6)
+  })
+
+  it('does not divide by a camera sitting on the origin', () => {
+    expect(apparentPixels(2, 0, 900, 50)).toBe(Infinity)
+  })
+})
+
+describe('foliageDetailFraction', () => {
+  it('draws everything while a plant is still worth drawing', () => {
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels)).toBe(1)
+    expect(foliageDetailFraction(50)).toBe(1)
+    expect(foliageDetailFraction(Infinity)).toBe(1)
+  })
+
+  it('holds plants-per-pixel constant as the camera retreats', () => {
+    // The whole justification for the curve. Apparent size falls as 1/d
+    // and the count of plants on screen does not fall at all, so plants
+    // per pixel would grow as d^2 — a pixel covered by six blades of
+    // grass shows the average of six blades, which is a flat colour one
+    // blade could have drawn.
+    //
+    // Thinning by the SQUARE of apparent size is exactly the rate that
+    // cancels it, so the layer costs the same per pixel at any distance.
+    const half = FOLIAGE_LOD.fullDetailPixels / 2
+    const quarter = FOLIAGE_LOD.fullDetailPixels / 4
+
+    expect(foliageDetailFraction(half)).toBeCloseTo(0.25, 6)
+    expect(foliageDetailFraction(quarter)).toBeCloseTo(0.0625, 6)
+  })
+
+  it('keeps a floor, so a layer thins rather than popping', () => {
+    expect(foliageDetailFraction(0)).toBe(FOLIAGE_LOD.minFraction)
+    expect(foliageDetailFraction(-5)).toBe(FOLIAGE_LOD.minFraction)
+    expect(FOLIAGE_LOD.minFraction).toBeGreaterThan(0)
+  })
+
+  it("never exceeds the tier's own density", () => {
+    // The two multiply: a low tier thins everywhere, and distance thins
+    // it further. A tier ceiling that distance could climb back over
+    // would make the low tier the more expensive one up close.
+    expect(foliageDetailFraction(100, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(Infinity, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels / 2, 0.45)).toBeCloseTo(0.25, 6)
+  })
+
+  it('never increases as the camera pulls away', () => {
+    let previous = Infinity
+    for (let apparent = 40; apparent >= 0; apparent -= 0.25) {
+      const fraction = foliageDetailFraction(apparent)
+      expect(fraction).toBeLessThanOrEqual(previous)
+      previous = fraction
+    }
+  })
+
+  it('thins nothing at the camera a world opens in', () => {
+    // The bug this exists to prevent, which was written before it was
+    // caught: the threshold was set from a TREE's apparent size, about 5
+    // px at either default camera, and then applied per layer using each
+    // layer's own height. Grass is short — 2.1 px on the flat map, 2.3
+    // on the planet — so ground cover was culled to 12% in the view
+    // every reader arrives in, undoing the layer it was meant to
+    // protect.
+    //
+    // The smallest thing that grows is the measure, not the largest.
+    const radius = 512 / (Math.PI * 2)
+    const shortestGrass = 1.15 * 0.6 * 0.9665 // grass form, steppe size, tilt
+    const flat = apparentPixels(shortestGrass, 512 * FLAT_VIEW.cameraDistanceRatio, 1080, 50)
+    const planet = apparentPixels(
+      shortestGrass * SPHERE_VIEW.foliageScale,
+      radius * (SPHERE_VIEW.cameraDistanceRatio - 1),
+      1080,
+      50,
+    )
+
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeLessThan(Math.min(flat, planet))
+    expect(foliageDetailFraction(flat)).toBe(1)
+    expect(foliageDetailFraction(planet)).toBe(1)
+  })
+
+  it('still thins hard at the orbit the camera can reach', () => {
+    // Which is the whole point: at the furthest zoom a grass clump is
+    // under a pixel, and 3,890 of them is 67,000 triangles of shimmer.
+    const radius = 512 / (Math.PI * 2)
+    const grass = 1.15 * 0.75 * 0.9665 * SPHERE_VIEW.foliageScale
+    const furthest = apparentPixels(grass, radius * (SPHERE_VIEW.maxDistanceRatio - 1), 1080, 50)
+
+    expect(furthest).toBeLessThan(1)
+    expect(foliageDetailFraction(furthest)).toBeLessThan(0.25)
+  })
+
+  it('stays under a pixel of shimmer, which is what the threshold means', () => {
+    // Below about one pixel a triangle catches the raster grid
+    // intermittently, and with MSAA on that is shimmer rather than
+    // texture. The threshold is that point with a little margin, so it
+    // has to sit near one pixel and not wander up into the range where
+    // plants are plainly visible.
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeGreaterThan(1)
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeLessThan(2)
   })
 })
 
