@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
+import { computeSkyVisibility } from '../rendering/occlusion.js'
 import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
@@ -259,11 +260,28 @@ function buildTerrainMesh(world) {
   const ground = computeGroundAttributes(terrain)
   geometry.setAttribute('color', new THREE.BufferAttribute(ground.colors, 3))
   geometry.setAttribute('snowHeight', new THREE.BufferAttribute(ground.snowHeights, 1))
+
+  // How much sky each cell can see, traced once from the height map (see
+  // occlusion.js for why this is not a shadow map). It takes the
+  // PROJECTION'S height scale, not the height map alone: the flat view
+  // exaggerates relief to five times what the globe does, so the same
+  // world genuinely is more enclosed when laid out flat, and the two
+  // views want different answers.
+  const skyVisibility = computeSkyVisibility(terrain, {
+    heightScale,
+    wrapX: projection.isSpherical,
+    curvatureRadius: projection.isSpherical ? planetRadius(terrain) : 0,
+  })
+  geometry.setAttribute('occlusion', new THREE.BufferAttribute(skyVisibility, 1))
   geometry.computeVertexNormals()
 
   // Smooth normals soften the grid's artificial triangular facets while the
   // section-derived height field preserves the world's distinct peak layout.
-  const material = createStylizedMaterial({ vertexColors: true, spherical: projection.isSpherical })
+  const material = createStylizedMaterial({
+    vertexColors: true,
+    spherical: projection.isSpherical,
+    occlusion: true,
+  })
   const mesh = new THREE.Mesh(geometry, material)
 
   const waterMaterial = new THREE.MeshStandardMaterial({
@@ -295,7 +313,7 @@ function buildTerrainMesh(world) {
 
   const halos = buildSectionHalos(world, heightScale)
 
-  const { understory, canopy } = buildFoliage(world, heightScale)
+  const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility)
 
   return { mesh, water, portals, halos, understory, canopy, heightScale }
 }
@@ -381,13 +399,18 @@ const instanceTint = new THREE.Color()
  * @param {number} heightScale
  * @returns {{ understory: THREE.Group, canopy: THREE.Group }}
  */
-function buildFoliage(world, heightScale) {
+function buildFoliage(world, heightScale, skyVisibility) {
   // Foliage proportions are in grid cells, and one cell is one world unit
   // of arc in both projections — but the RELIEF those cells rise through
   // is compressed on the planet, so a tree sized for the flat map
   // out-scales the range it stands on there. See SPHERE_VIEW.foliageScale.
   const cellScale = projection.foliageScale ?? 1
-  const scatter = scatterFoliage(world.terrain, world.seed, { projection, heightScale, cellScale })
+  const scatter = scatterFoliage(world.terrain, world.seed, {
+    projection,
+    heightScale,
+    cellScale,
+    skyVisibility,
+  })
 
   // === Understory: one InstancedMesh of blade clumps per variant ===
   const understory = new THREE.Group()
@@ -397,6 +420,7 @@ function buildFoliage(world, heightScale) {
 
     const geometry = buildUnderstoryGeometry(form, layer.variant.size, cellScale)
     geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+    geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
 
     const material = createStylizedMaterial({
       // The blade's own root-dark gradient, which is what stops a clump
@@ -406,6 +430,8 @@ function buildFoliage(world, heightScale) {
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
       swayHeight: understoryHeight(form, layer.variant.size, cellScale),
+      // Per instance: a clump is lit by the sky its own cell can see.
+      occlusion: true,
       // A blade is a strip with no thickness, so half of every clump is
       // seen from behind. three flips the normal for the back face when
       // this is set, so the lighting stays right rather than going black
@@ -427,6 +453,7 @@ function buildFoliage(world, heightScale) {
     // altitude while the geometry stays shared. An InstancedBufferAttribute
     // on a geometry that is only used by this one InstancedMesh.
     geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+    geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
 
     // The frost band, not the ground's snowline: a crown takes snow far
     // lower than open ground holds it, and on the ground's band no tree
@@ -441,6 +468,8 @@ function buildFoliage(world, heightScale) {
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
       swayHeight: archetypeHeight(spec, cellScale),
+      // Per instance: a tree in a ravine is as dark as the ravine.
+      occlusion: true,
     })
     windMaterials.push(material)
     canopy.add(buildInstancedLayer(geometry, material, layer, archetypeHeight(spec, cellScale)))

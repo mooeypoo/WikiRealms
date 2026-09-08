@@ -119,6 +119,28 @@ import { WIND, windFrequency } from './environment.js'
  */
 const SNOW_FACING_START = 0.35
 
+/**
+ * How far to exaggerate sky occlusion, as an exponent.
+ *
+ * 1 would be the geometrically honest answer, and it was measured: with
+ * the raw sky fraction, occlusion darkened the terrain by a mean of 5
+ * levels out of 255, about 4.6%. Correct, and too small to see. The
+ * reason is that it can only touch the ambient term, which is a little
+ * over half the light, and the raw fraction sits near 0.87 across most
+ * of a world.
+ *
+ * At 2 the same measurement roughly doubles while the open ground it
+ * should not affect stays put — an exponent leaves 1.0 at 1.0 and bends
+ * only the occluded end, which is the reason to shape it this way
+ * rather than scaling or subtracting.
+ *
+ * This is a look, and it is worth being plain about that: nothing in the
+ * scene is physically lit, the sun is one unshadowed directional light,
+ * and there is no bounce. Overstating the one term that knows about
+ * enclosure is how the terrain reads as carved rather than painted.
+ */
+const OCCLUSION_STRENGTH = 2
+
 /** Snow's albedo, from the palette the 2D map and the legend also use. */
 const SNOW_COLOR = new THREE.Color(
   SNOW_RGB[0] / 255,
@@ -144,11 +166,22 @@ uniform float uSwayHeight;
 // this surface never takes snow, whatever the snowline does.
 attribute float snowHeight;
 
+// How much of the sky this surface can see, in [0, 1], baked from the
+// height map (see occlusion.js). Behind a define because an attribute
+// with no buffer bound reads as 0, and 0 here means "lit by no sky at
+// all" — a mesh that simply forgot to supply it would come out black
+// rather than merely unoccluded.
+#ifdef USE_OCCLUSION
+  attribute float occlusion;
+  uniform float uOcclusionStrength;
+#endif
+
 // Needed by normal_fragment_begin, which derives a face normal from its
 // screen-space derivatives when the material is flat shaded.
 varying vec3 vViewPosition;
 varying float vSnowHeight;
 varying float vFacingUp;
+varying float vOcclusion;
 
 void main() {
   #include <color_vertex>
@@ -227,6 +260,16 @@ void main() {
 
   vFacingUp = dot(worldNormal, up);
   vSnowHeight = snowHeight;
+
+  vOcclusion = 1.0;
+  #ifdef USE_OCCLUSION
+    // Shaped here rather than baked into the buffer, so the attribute
+    // stays a true sky fraction and the exaggeration stays a look that
+    // can be turned without retracing anything. Per vertex rather than
+    // per fragment because the curve is smooth, so interpolating the
+    // result costs one pow per vertex instead of one per pixel.
+    vOcclusion = pow(occlusion, uOcclusionStrength);
+  #endif
 }
 `
 
@@ -244,6 +287,7 @@ uniform float uSnowFacingStart;
 varying vec3 vViewPosition;
 varying float vSnowHeight;
 varying float vFacingUp;
+varying float vOcclusion;
 
 void main() {
   vec3 albedo = vec3(1.0);
@@ -265,7 +309,19 @@ void main() {
   // faceted crowns faceted.
   #include <normal_fragment_begin>
 
-  vec3 irradiance = ambientLightColor;
+  // Occlusion attenuates the AMBIENT term and only that term, which is
+  // what it means: the ambient light stands in for a sky shining from
+  // every direction, and this is the fraction of that sky the surface
+  // can actually see. The sun is one direction and either reaches a
+  // surface or does not — that is a shadow, a different question, and
+  // scaling the directional term by sky visibility would answer it
+  // wrongly by dimming slopes that are in full sunlight.
+  //
+  // It is also why this shows up at all. A ravine floor and a plateau
+  // top can face the same way, so half-Lambert hands them the same
+  // colour and the ravine reads as a line painted on flat ground. This
+  // is the only term in the shader that knows one is enclosed.
+  vec3 irradiance = ambientLightColor * vOcclusion;
 
   // Half-Lambert, squared: never black on the far side, soft across the
   // terminator. Only the first directional light is read, because the
@@ -322,6 +378,7 @@ export function createStylizedMaterial({
   snowline = { start: ALTITUDE.snowStart, full: ALTITUDE.snowFull },
   swayHeight = 0,
   side = THREE.FrontSide,
+  occlusion = false,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -350,7 +407,13 @@ export function createStylizedMaterial({
     // face normal from screen-space derivatives, so a crown the wind
     // has bent is lit by the shape it actually has this frame rather
     // than by the normals it was built with.
-    defines: flatShading ? { FLAT_SHADED: '' } : {},
+    defines: {
+      ...(flatShading ? { FLAT_SHADED: '' } : {}),
+      // Opt in, so that the attribute is only read where a buffer is
+      // actually bound. An unbound attribute reads as 0, which here
+      // would mean a surface that sees no sky at all.
+      ...(occlusion ? { USE_OCCLUSION: '' } : {}),
+    },
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
       {
@@ -358,6 +421,7 @@ export function createStylizedMaterial({
         uSnowStart: { value: snowline.start },
         uSnowFull: { value: snowline.full },
         uSnowFacingStart: { value: SNOW_FACING_START },
+        uOcclusionStrength: { value: OCCLUSION_STRENGTH },
         uSpherical: { value: spherical ? 1 : 0 },
         uTime: { value: 0 },
         uWindDirection: { value: new THREE.Vector3(1, 0, 0) },

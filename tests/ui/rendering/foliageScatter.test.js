@@ -397,6 +397,42 @@ describe('scatterFoliage', () => {
     expect(UNDERSTORY_JITTER.maxOffsetCells).toBeLessThanOrEqual(FOLIAGE_SAMPLING.understoryStride / 2)
   })
 
+  it('lights each plant by the sky its own cell can see', () => {
+    // Otherwise the ground darkens in a ravine and the trees standing in
+    // it do not, and the vegetation reads as cut out and laid on top of
+    // the terrain rather than growing from it.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.8 })
+    const skyVisibility = new Float32Array(terrain.width * terrain.height).fill(1)
+    // A BAND of deeply occluded cells across the middle of the world,
+    // not a single row: the canopy samples every other cell, so one row
+    // can fall entirely between samples and be found nowhere.
+    const middle = Math.floor(terrain.height / 2)
+    for (let y = middle - 4; y <= middle + 4; y += 1) {
+      for (let x = 0; x < terrain.width; x += 1) skyVisibility[y * terrain.width + x] = 0.25
+    }
+
+    const [layer] = scatterCanopy(terrain, 31, { ...FLAT, skyVisibility })
+
+    expect(layer.occlusions).toHaveLength(layer.count)
+    const shaded = [...layer.occlusions].filter((value) => value < 0.5)
+    const open = [...layer.occlusions].filter((value) => value === 1)
+    expect(shaded.length).toBeGreaterThan(0)
+    expect(open.length).toBeGreaterThan(0)
+    for (const value of shaded) expect(value).toBeCloseTo(0.25, 6)
+  })
+
+  it('lights every plant fully when no occlusion map is supplied', () => {
+    // The default has to be "sees the whole sky". Zero-filled would mean
+    // a caller without a map — every test here, and any future one —
+    // gets vegetation lit by no sky at all.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.8 })
+    const [canopy] = scatterCanopy(terrain, 31, FLAT)
+    const [understory] = scatterUnderstory(terrain, 31, FLAT)
+
+    for (const value of canopy.occlusions) expect(value).toBe(1)
+    for (const value of understory.occlusions) expect(value).toBe(1)
+  })
+
   it('orders instances so that any prefix covers the whole world', () => {
     // Distance thinning works by lowering an InstancedMesh's count,
     // which draws the FIRST n instances. Cells are found in scan order,

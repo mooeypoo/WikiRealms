@@ -148,7 +148,7 @@ function takesVariant(variant, densityRoll, lushness, height) {
  *   normals: Float32Array, yaws: Float32Array, scales: Float32Array,
  *   colors: Float32Array, heights: Float32Array }>}
  */
-export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
+export function scatterUnderstory(terrain, seed, { projection, heightScale, skyVisibility }) {
   const { width, height, heightMap, biomeMap, lushnessMap } = terrain
   const stride = FOLIAGE_SAMPLING.understoryStride
   const byVariant = new Map()
@@ -179,6 +179,7 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
     const yaws = new Float32Array(count)
     const scales = new Float32Array(count)
     const heights = new Float32Array(count)
+    const occlusions = occlusionBuffer(count)
 
     cells.forEach((cell, instance) => {
       const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
@@ -227,10 +228,22 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
       colors[instance * 3 + 2] = b
 
       heights[instance] = heightMap[cell.index]
+      if (skyVisibility) occlusions[instance] = skyVisibility[cell.index]
     })
 
-    return { variant, count, positions, normals, yaws, scales, colors, heights }
+    return { variant, count, positions, normals, yaws, scales, colors, heights, occlusions }
   })
+}
+
+/**
+ * A per-instance occlusion buffer, filled with "sees the whole sky".
+ *
+ * The default matters: a caller with no occlusion map — every test here,
+ * and any future one — must get plants lit exactly as before rather than
+ * plants lit by no sky at all.
+ */
+function occlusionBuffer(count) {
+  return new Float32Array(count).fill(1)
 }
 
 /**
@@ -253,7 +266,7 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
  * @returns {Array<{ archetype: string, count: number, positions: Float32Array,
  *   normals: Float32Array, yaws: Float32Array, scales: Float32Array, colors: Float32Array }>}
  */
-export function scatterCanopy(terrain, seed, { projection, heightScale, cellScale = 1 }) {
+export function scatterCanopy(terrain, seed, { projection, heightScale, cellScale = 1, skyVisibility }) {
   const { width, height, heightMap, biomeMap, lushnessMap } = terrain
   const stride = FOLIAGE_SAMPLING.canopyStride
   const byArchetype = new Map()
@@ -295,6 +308,7 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
     // how much snow lies on which of its surfaces, and so a snowline can
     // move without any of this being recomputed.
     const heights = new Float32Array(count)
+    const occlusions = occlusionBuffer(count)
 
     cells.forEach((cell, instance) => {
       const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
@@ -344,9 +358,10 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
       colors[instance * 3 + 2] = b
 
       heights[instance] = heightMap[cell.index]
+      if (skyVisibility) occlusions[instance] = skyVisibility[cell.index]
     })
 
-    layers.push({ archetype, count, positions, normals, yaws, scales, colors, heights })
+    layers.push({ archetype, count, positions, normals, yaws, scales, colors, heights, occlusions })
   }
 
   return layers
@@ -361,14 +376,21 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
  * the same relief 5.4x, so a tree sized for the map out-scales the range
  * it stands on there.
  *
+ * `skyVisibility` is the occlusion map for the same terrain, if the
+ * caller has one. A plant is lit by the sky its own cell can see, which
+ * is what keeps a stand of trees in a ravine as dark as the ravine —
+ * without it the ground darkens and the vegetation standing on it does
+ * not, and the trees read as cut out and laid on top.
+ *
  * @param {object} terrain see scatterUnderstory
  * @param {number} seed world seed
- * @param {{ projection: object, heightScale: number, cellScale?: number }} options
+ * @param {{ projection: object, heightScale: number, cellScale?: number,
+ *   skyVisibility?: Float32Array }} options
  */
-export function scatterFoliage(terrain, seed, { projection, heightScale, cellScale }) {
+export function scatterFoliage(terrain, seed, { projection, heightScale, cellScale, skyVisibility }) {
   const scale = cellScale ?? projection.foliageScale ?? 1
   return {
-    understory: scatterUnderstory(terrain, seed, { projection, heightScale }),
-    canopy: scatterCanopy(terrain, seed, { projection, heightScale, cellScale: scale }),
+    understory: scatterUnderstory(terrain, seed, { projection, heightScale, skyVisibility }),
+    canopy: scatterCanopy(terrain, seed, { projection, heightScale, cellScale: scale, skyVisibility }),
   }
 }

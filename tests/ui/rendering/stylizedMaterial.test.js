@@ -50,6 +50,56 @@ describe('createStylizedMaterial', () => {
     expect(canopy.flatShading).toBeUndefined()
   })
 
+  it('reads the occlusion attribute only where one is supplied', () => {
+    // An attribute with no buffer bound reads as 0 in GLSL, and 0 here
+    // means "lit by no sky at all" — so a mesh that forgot to provide
+    // occlusion would render black rather than merely unoccluded. The
+    // define is what keeps the failure mode absent instead of dramatic.
+    const withOcclusion = createStylizedMaterial({ occlusion: true })
+    const without = createStylizedMaterial()
+
+    expect(withOcclusion.defines).toHaveProperty('USE_OCCLUSION')
+    expect(without.defines).not.toHaveProperty('USE_OCCLUSION')
+    expect(withOcclusion.vertexShader).toContain('attribute float occlusion;')
+  })
+
+  it('combines its defines rather than replacing them', () => {
+    // The canopy needs both: flat shading for its faceted crowns and
+    // occlusion for standing in a ravine. A define object built by
+    // assignment rather than merge would silently drop one.
+    const canopy = createStylizedMaterial({ flatShading: true, occlusion: true })
+
+    expect(canopy.defines).toHaveProperty('FLAT_SHADED')
+    expect(canopy.defines).toHaveProperty('USE_OCCLUSION')
+  })
+
+  it('exaggerates occlusion through a uniform, not the baked buffer', () => {
+    // Measured with the raw sky fraction, occlusion moved the terrain by
+    // a mean of 5 levels out of 255 — geometrically right, too small to
+    // see, because it can only touch the ambient term. The exponent
+    // doubles that while leaving open ground exactly where it was, since
+    // any power of 1 is still 1.
+    //
+    // In a uniform so the shaped value is a look that can be turned
+    // without retracing the scan, and so the attribute stays a true sky
+    // fraction that the tests above can reason about.
+    const material = createStylizedMaterial({ occlusion: true })
+
+    expect(material.uniforms.uOcclusionStrength.value).toBeGreaterThan(1)
+    expect(material.vertexShader).toContain('pow(occlusion, uOcclusionStrength)')
+  })
+
+  it('attenuates the ambient term and not the sun', () => {
+    // Sky visibility says how much of a hemispherical source reaches a
+    // surface. The sun is one direction and either arrives or does not,
+    // which is a shadow — a different question. Scaling the directional
+    // term by this would dim slopes standing in full sunlight.
+    const material = createStylizedMaterial({ occlusion: true })
+
+    expect(material.fragmentShader).toContain('ambientLightColor * vOcclusion')
+    expect(material.fragmentShader).not.toContain('directionalLights[0].color * vOcclusion')
+  })
+
   it('carries the wavelength the environment states', () => {
     // Two modules agreeing by construction rather than by two constants
     // that happen to match today.
