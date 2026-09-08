@@ -106,6 +106,110 @@ export const UNDERSTORY_BY_BAND = Object.freeze({
 })
 
 /**
+ * Ground-cover shapes, as proportions of a variant's own `size`.
+ *
+ * WHY THESE EXIST
+ *
+ * The understory used to be point sprites wearing a canvas texture: a
+ * tuft of blades, a low bush, a fan of fronds, drawn in 2D. Sprites are
+ * screen-aligned on every axis, so tilting the camera down laid the
+ * grass flat on the ground, `gl_PointSize` is driver-capped so it
+ * stopped growing when you zoomed in, and a point is one vertex, so it
+ * could not bend and therefore could not take the wind.
+ *
+ * These describe the same three silhouettes as real geometry. Each is a
+ * CLUMP of a few tapered blades rather than one blade: a single strip
+ * per instance would leave the ground barer than the sprite it replaced,
+ * because a sprite covered its whole `size` in width.
+ *
+ * All figures multiply the variant's `size`, so a bleached steppe grass
+ * at 0.6 and a jungle fern at 1.0 keep their relative stature.
+ *
+ * `segments` is the only cost knob here. It is what lets a blade CURVE
+ * under the wind rather than pivot as a rigid spike, since the shader
+ * weights its bend by height, and it multiplies the triangle count
+ * directly: blades x segments x 2.
+ *
+ * The three shapes are told apart by their PROPORTIONS, since they share
+ * one primitive. Measured across a clump's own `size`, with the sprite
+ * they replace being a disc exactly `size` wide:
+ *
+ *   grass   0.85 wide, 1.10 tall   upright, narrow, barely curled
+ *   scrub   0.95 wide, 0.48 tall   low and splayed, nearly stiff
+ *   fern    1.00 wide, 0.78 tall   a wide fan of drooping fronds
+ *
+ * Lean, arch and spread all push a blade outward AND rob it of height,
+ * so those figures are not independent — see understoryHeight in
+ * bladeGeometry.js, and the geometry test that measures them.
+ */
+export const UNDERSTORY_FORMS = Object.freeze({
+  // Five blades rather than three, and one segment fewer to pay for
+  // them. Three narrow blades read as a bird's foot rather than a tuft,
+  // and the arch here is slight enough that the extra segment was buying
+  // very little curve — where a blade count buys coverage, which is the
+  // whole job of this layer.
+  grass: Object.freeze({
+    blades: 5,
+    segments: 2,
+    height: 1.15,
+    width: 0.15,
+    // Outward tilt of a blade from vertical, in radians. Together with
+    // spread this sets how much ground the clump covers — the sprite
+    // this replaces was `size` across, and a narrow bunch of verticals
+    // would read as the whole layer thinning out.
+    lean: 0.14,
+    // How far the tip curls over beyond the lean, as a fraction of
+    // height. Grass arches a little; a perfectly straight blade reads
+    // as wire.
+    arch: 0.17,
+    // Radius of the base ring the blades rise from, so a clump has a
+    // footprint instead of every blade meeting at one point.
+    spread: 0.09,
+  }),
+  // Three overlapping domes in the sprite. Low, splayed and stiff: the
+  // arch stays small so it reads as woody rather than as long grass.
+  scrub: Object.freeze({
+    blades: 5,
+    segments: 2,
+    height: 0.62,
+    width: 0.26,
+    lean: 0.5,
+    arch: 0.13,
+    spread: 0.13,
+  }),
+  // A fan of fronds from a common base. Four of them, wider and more
+  // curled than a grass blade and on a shorter stem — drooping is what
+  // distinguishes it at a glance, which is the only job this layer has.
+  fern: Object.freeze({
+    blades: 4,
+    segments: 3,
+    height: 0.95,
+    width: 0.26,
+    lean: 0.35,
+    arch: 0.36,
+    spread: 0.06,
+  }),
+})
+
+/**
+ * Per-instance jitter for ground cover.
+ *
+ * Separate from CANOPY_JITTER for one concrete reason: `maxOffsetCells`
+ * is sized against its layer's STRIDE, and the understory samples every
+ * cell where the canopy samples every second one. Half a stride is the
+ * ceiling in both cases — past that an instance wanders into a cell
+ * that already had its own chance to grow something — so the canopy's
+ * 0.95 is exactly twice what ground cover can take.
+ */
+export const UNDERSTORY_JITTER = Object.freeze({
+  minScale: 0.72,
+  maxScale: 1.3,
+  maxOffsetCells: 0.5,
+  minTint: 0.82,
+  maxTint: 1.18,
+})
+
+/**
  * Tree shapes, in grid cells. Proportions rather than meshes: the
  * component builds geometry from these, so the shapes stay tunable and
  * testable without a renderer.
@@ -370,10 +474,11 @@ export function foliageInstanceColor(baseColor, height, tintRoll) {
  *
  * @param {number} baseColor packed 0xRRGGBB from the variant table
  * @param {number} tintRoll [0, 1)
+ * @param {object} [jitter] CANOPY_JITTER or UNDERSTORY_JITTER
  * @returns {{ r: number, g: number, b: number }} channels in [0, 1]
  */
-export function foliageTintColor(baseColor, tintRoll) {
-  const brightness = mix(CANOPY_JITTER.minTint, CANOPY_JITTER.maxTint, clamp01(tintRoll))
+export function foliageTintColor(baseColor, tintRoll, jitter = CANOPY_JITTER) {
+  const brightness = mix(jitter.minTint, jitter.maxTint, clamp01(tintRoll))
   const channel = (shift) => clamp01((((baseColor >> shift) & 0xff) / 255) * brightness)
   return { r: channel(16), g: channel(8), b: channel(0) }
 }
@@ -395,10 +500,29 @@ export function foliageTintColor(baseColor, tintRoll) {
  * @param {number} offsetRadiusRoll [0, 1)
  */
 export function canopyInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll = 0, offsetRadiusRoll = 0) {
+  return instanceTransform(CANOPY_JITTER, scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll)
+}
+
+/**
+ * The same, for one clump of ground cover.
+ *
+ * Its own function only because the jitter table differs — see
+ * UNDERSTORY_JITTER on why the offset ceiling is half the canopy's.
+ *
+ * @param {number} scaleRoll [0, 1)
+ * @param {number} rotationRoll [0, 1)
+ * @param {number} offsetAngleRoll [0, 1)
+ * @param {number} offsetRadiusRoll [0, 1)
+ */
+export function understoryInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll = 0, offsetRadiusRoll = 0) {
+  return instanceTransform(UNDERSTORY_JITTER, scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll)
+}
+
+function instanceTransform(jitter, scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll) {
   const angle = clamp01(offsetAngleRoll) * Math.PI * 2
-  const radius = CANOPY_JITTER.maxOffsetCells * Math.sqrt(clamp01(offsetRadiusRoll))
+  const radius = jitter.maxOffsetCells * Math.sqrt(clamp01(offsetRadiusRoll))
   return {
-    scale: mix(CANOPY_JITTER.minScale, CANOPY_JITTER.maxScale, clamp01(scaleRoll)),
+    scale: mix(jitter.minScale, jitter.maxScale, clamp01(scaleRoll)),
     yaw: clamp01(rotationRoll) * Math.PI * 2,
     offsetX: Math.cos(angle) * radius,
     offsetY: Math.sin(angle) * radius,

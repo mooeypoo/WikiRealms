@@ -321,6 +321,7 @@ export function createStylizedMaterial({
   spherical = false,
   snowline = { start: ALTITUDE.snowStart, full: ALTITUDE.snowFull },
   swayHeight = 0,
+  side = THREE.FrontSide,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -329,6 +330,13 @@ export function createStylizedMaterial({
     // keep them up to date as the scene's lights change.
     lights: true,
     vertexColors,
+    // Unlike flatShading below, `side` IS declared on Material, so
+    // setting it here works. It matters for anything built from strips
+    // with no thickness — a grass blade is seen from behind half the
+    // time, and DoubleSide makes the renderer define DOUBLE_SIDED,
+    // which is what lets normal_fragment_begin flip the normal for the
+    // back face instead of shading it as if it faced away from us.
+    side,
     // A DEFINE, not the `flatShading` property. ShaderMaterial does not
     // declare that property, and Material.setValues skips any key it
     // does not already own — logging a warning nobody was reading. So

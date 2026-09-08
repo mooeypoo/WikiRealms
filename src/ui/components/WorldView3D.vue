@@ -8,7 +8,8 @@ import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.j
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
-import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
+import { archetypeHeight, buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
+import { buildUnderstoryGeometry, understoryHeight } from '../rendering/bladeGeometry.js'
 import {
   buildHaloFillArrays,
   buildHaloRingArrays,
@@ -41,7 +42,7 @@ import {
 } from '../rendering/portalMarkers.js'
 import { placePortals } from '../rendering/portalPlacement.js'
 import { DEFAULT_PORTAL_FORM, createPortalForm } from '../rendering/portalForms.js'
-import { CANOPY_ARCHETYPES, shouldShowCanopy } from '../rendering/foliage.js'
+import { CANOPY_ARCHETYPES, UNDERSTORY_FORMS, shouldShowCanopy } from '../rendering/foliage.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -225,46 +226,6 @@ function buildPortalLayer(world, terrain, heightScale) {
   return group
 }
 
-function makeFoliageTexture(kind) {
-  const canvas = document.createElement('canvas')
-  const size = 64
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const center = size / 2
-
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  if (kind === 'scrub') {
-    ctx.arc(center - 10, center + 8, 10, Math.PI, 0)
-    ctx.arc(center + 4, center + 4, 13, Math.PI, 0)
-    ctx.arc(center + 15, center + 10, 9, Math.PI, 0)
-  } else if (kind === 'grass') {
-    ctx.moveTo(center - 18, center + 20)
-    ctx.lineTo(center - 12, center - 10)
-    ctx.lineTo(center - 3, center + 17)
-    ctx.lineTo(center + 4, center - 18)
-    ctx.lineTo(center + 10, center + 16)
-    ctx.lineTo(center + 20, center - 8)
-    ctx.lineTo(center + 17, center + 20)
-    ctx.closePath()
-  } else {
-    // Fern: a fan of fronds. The understory's job is to break up bare
-    // ground under a canopy, so it needs a silhouette distinct from
-    // grass without pretending to be a plant you could identify.
-    for (let frond = -2; frond <= 2; frond += 1) {
-      const lean = frond * 9
-      ctx.moveTo(center, center + 22)
-      ctx.lineTo(center + lean - 4, center - 14)
-      ctx.lineTo(center + lean + 4, center - 12)
-      ctx.closePath()
-    }
-  }
-  ctx.fill()
-
-  return new THREE.CanvasTexture(canvas)
-}
-
 function buildTerrainMesh(world) {
   const terrain = world.terrain
   const { width, height, heightMap } = terrain
@@ -327,12 +288,69 @@ function buildTerrainMesh(world) {
 }
 
 /**
- * Turns the scatter's attribute buffers into the two vegetation layers:
- * ground-cover sprites, and instanced tree meshes.
+ * Places one layer's instances into an InstancedMesh.
+ *
+ * Both vegetation layers now come through here, which they could not
+ * before: ground cover was a Points cloud, and a point has no
+ * orientation to place — it faced the camera whatever the ground did.
+ * Now a clump of grass stands up along its surface normal exactly as a
+ * tree does, so the two layers differ in their geometry and their
+ * material and in nothing else.
+ *
+ * @param {THREE.BufferGeometry} geometry shared by every instance
+ * @param {THREE.Material} material
+ * @param {{ count: number, positions: Float32Array, normals: Float32Array,
+ *   yaws: Float32Array, scales: Float32Array, colors: Float32Array }} layer
+ * @returns {THREE.InstancedMesh}
+ */
+function buildInstancedLayer(geometry, material, layer) {
+  const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
+  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+
+  for (let instance = 0; instance < layer.count; instance += 1) {
+    const base = instance * 3
+    instancePosition.set(layer.positions[base], layer.positions[base + 1], layer.positions[base + 2])
+
+    // Plants stand up out of the ground they are on. On the flat map
+    // that is +Z everywhere; on the planet it is the surface normal, so
+    // nothing on the far side of the globe is lying on its side.
+    instanceNormal.set(layer.normals[base], layer.normals[base + 1], layer.normals[base + 2]).normalize()
+    instanceQuaternion.setFromUnitVectors(GEOMETRY_UP, instanceNormal)
+    instanceYaw.setFromAxisAngle(instanceNormal, layer.yaws[instance])
+    instanceQuaternion.premultiply(instanceYaw)
+
+    instanceScale.setScalar(layer.scales[instance])
+    mesh.setMatrixAt(instance, instanceMatrix.compose(instancePosition, instanceQuaternion, instanceScale))
+
+    mesh.setColorAt(
+      instance,
+      instanceTint.setRGB(layer.colors[base], layer.colors[base + 1], layer.colors[base + 2]),
+    )
+  }
+
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  return mesh
+}
+
+// Scratch objects for buildInstancedLayer, so placing twenty thousand
+// plants allocates nothing.
+const GEOMETRY_UP = new THREE.Vector3(0, 0, 1)
+const instanceNormal = new THREE.Vector3()
+const instancePosition = new THREE.Vector3()
+const instanceScale = new THREE.Vector3()
+const instanceQuaternion = new THREE.Quaternion()
+const instanceYaw = new THREE.Quaternion()
+const instanceMatrix = new THREE.Matrix4()
+const instanceTint = new THREE.Color()
+
+/**
+ * Turns the scatter's attribute buffers into the two vegetation layers,
+ * both as instanced meshes.
  *
  * WHERE things grow is foliageScatter.js's decision and is tested without
  * a renderer; everything here is the part that needs a GL context —
- * materials, textures, and the instance matrices three wants.
+ * materials and the instance matrices three wants.
  *
  * They are separate groups so the canopy can be hidden on its own — from
  * orbit it says nothing and costs a lot (see shouldShowCanopy), while the
@@ -351,60 +369,43 @@ function buildFoliage(world, heightScale) {
   const cellScale = projection.foliageScale ?? 1
   const scatter = scatterFoliage(world.terrain, world.seed, { projection, heightScale, cellScale })
 
-  // === Understory: one Points cloud per variant ===
+  // === Understory: one InstancedMesh of blade clumps per variant ===
   const understory = new THREE.Group()
   for (const layer of scatter.understory) {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(layer.positions, 3))
-    understory.add(
-      new THREE.Points(
-        geometry,
-        new THREE.PointsMaterial({
-          color: layer.variant.color,
-          map: makeFoliageTexture(layer.variant.kind),
-          size: layer.variant.size * cellScale,
-          sizeAttenuation: true,
-          // Opaque cutout, not alpha blending. This is the densest layer
-          // in the scene and the cheapest to get wrong: blended sprites
-          // with depthWrite off cannot reject a fragment early, so every
-          // overlapping sprite in a thicket shades every pixel it covers,
-          // and the layer costs its overdraw rather than its area.
-          //
-          // Writing depth also fixes the sort artefacts that come free
-          // with unsorted blended points — a near tuft no longer shows
-          // the one behind it through its own middle.
-          //
-          // alphaTest is high because the texture is a soft radial
-          // gradient. At 0.1 the discard kept a wide, nearly transparent
-          // skirt which, once opaque, reads as a disc rather than a tuft.
-          alphaTest: 0.5,
-        }),
-      ),
-    )
+    const form = UNDERSTORY_FORMS[layer.variant.kind]
+    if (!form) continue
+
+    const geometry = buildUnderstoryGeometry(form, layer.variant.size, cellScale)
+    geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+
+    const material = createStylizedMaterial({
+      // The blade's own root-dark gradient, which is what stops a clump
+      // reading as one flat green. It multiplies with the per-instance
+      // tint rather than replacing it.
+      vertexColors: true,
+      spherical: projection.isSpherical,
+      snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
+      swayHeight: understoryHeight(form, layer.variant.size, cellScale),
+      // A blade is a strip with no thickness, so half of every clump is
+      // seen from behind. three flips the normal for the back face when
+      // this is set, so the lighting stays right rather than going black
+      // on whichever side faces away.
+      side: THREE.DoubleSide,
+    })
+    windMaterials.push(material)
+    understory.add(buildInstancedLayer(geometry, material, layer))
   }
 
   // === Canopy: one InstancedMesh per archetype ===
   const canopy = new THREE.Group()
-  const up = new THREE.Vector3(0, 0, 1)
-  const normal = new THREE.Vector3()
-  const position = new THREE.Vector3()
-  const scaleVec = new THREE.Vector3()
-  const quaternion = new THREE.Quaternion()
-  const yawQuaternion = new THREE.Quaternion()
-  const matrix = new THREE.Matrix4()
-  const instanceColor = new THREE.Color()
-
   for (const layer of scatter.canopy) {
-    const geometry = buildArchetypeGeometry(CANOPY_ARCHETYPES[layer.archetype], cellScale)
+    const spec = CANOPY_ARCHETYPES[layer.archetype]
+    const geometry = buildArchetypeGeometry(spec, cellScale)
     // Per-instance, so each tree's crown is snowed according to its own
     // altitude while the geometry stays shared. An InstancedBufferAttribute
     // on a geometry that is only used by this one InstancedMesh.
     geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
 
-    // Lit, so a tree has a shaded side and reads as an object. The point
-    // sprites this replaces took no light at all, which is why two bands
-    // of trees were distinguishable only by hue and count.
-    //
     // The frost band, not the ground's snowline: a crown takes snow far
     // lower than open ground holds it, and on the ground's band no tree
     // in the world was high enough to carry a cap.
@@ -413,38 +414,14 @@ function buildFoliage(world, heightScale) {
     // reason a material per archetype earns its keep: the wind weights
     // its bend by height above the base, and a single shared number
     // would leave a shrub thrashing and an emergent barely moving.
-    const spec = CANOPY_ARCHETYPES[layer.archetype]
     const material = createStylizedMaterial({
       flatShading: true,
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
-      swayHeight: (spec.trunkHeight + spec.crownHeight) * cellScale,
+      swayHeight: archetypeHeight(spec, cellScale),
     })
     windMaterials.push(material)
-    const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
-    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
-
-    for (let instance = 0; instance < layer.count; instance += 1) {
-      const base = instance * 3
-      position.set(layer.positions[base], layer.positions[base + 1], layer.positions[base + 2])
-
-      // Trees stand up out of the ground they are on. On the flat map
-      // that is +Z everywhere; on the planet it is the surface normal, so
-      // a tree at the far side of the globe is not lying on its side.
-      normal.set(layer.normals[base], layer.normals[base + 1], layer.normals[base + 2]).normalize()
-      quaternion.setFromUnitVectors(up, normal)
-      yawQuaternion.setFromAxisAngle(normal, layer.yaws[instance])
-      quaternion.premultiply(yawQuaternion)
-
-      scaleVec.setScalar(layer.scales[instance])
-      mesh.setMatrixAt(instance, matrix.compose(position, quaternion, scaleVec))
-
-      mesh.setColorAt(instance, instanceColor.setRGB(layer.colors[base], layer.colors[base + 1], layer.colors[base + 2]))
-    }
-
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    canopy.add(mesh)
+    canopy.add(buildInstancedLayer(geometry, material, layer))
   }
 
   return { understory, canopy }

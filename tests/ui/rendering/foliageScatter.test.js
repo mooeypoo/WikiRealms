@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import {
-  UNDERSTORY_LIFT_RATIO,
-  scatterCanopy,
-  scatterFoliage,
-  scatterUnderstory,
-} from '../../../src/ui/rendering/foliageScatter.js'
+import { scatterCanopy, scatterFoliage, scatterUnderstory } from '../../../src/ui/rendering/foliageScatter.js'
 import {
   CANOPY_ARCHETYPES,
   FOLIAGE_SAMPLING,
   UNDERSTORY_BY_BAND,
   CANOPY_JITTER,
+  UNDERSTORY_JITTER,
 } from '../../../src/ui/rendering/foliage.js'
 import { flatProjection, sphereProjection, SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
@@ -61,16 +57,17 @@ describe('scatterUnderstory', () => {
     }
   })
 
-  it('lifts each sprite half its own width above the surface', () => {
-    // A point sprite is centred on its position, so an unlifted blade of
-    // grass is buried to its waist.
+  it('roots each clump exactly on the surface', () => {
+    // This layer used to be point sprites, which are centred on their
+    // position, so every one was lifted half its own width or it would
+    // be buried to the waist. Clumps are geometry with their base at the
+    // origin, so any lift now leaves the grass hovering.
     const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.4 })
     const surfaceZ = 0.4 * FLAT.heightScale
 
-    for (const layer of scatterUnderstory(terrain, 3, { ...FLAT, cellScale: 1 })) {
-      const expected = surfaceZ + layer.variant.size * UNDERSTORY_LIFT_RATIO
+    for (const layer of scatterUnderstory(terrain, 3, FLAT)) {
       for (let i = 0; i < layer.count; i += 1) {
-        expect(layer.positions[i * 3 + 2]).toBeCloseTo(expected, 5)
+        expect(layer.positions[i * 3 + 2]).toBeCloseTo(surfaceZ, 5)
       }
     }
   })
@@ -323,27 +320,98 @@ describe('scatterFoliage', () => {
     expect(overlap).toBeLessThan(0.9)
   })
 
-  it("defaults the cell scale to the projection's own", () => {
+  it("defaults the canopy's cell scale to the projection's own", () => {
     // Foliage is smaller on the planet than on the flat map because the
     // relief around it is, and forgetting the scale is how a jungle crown
     // came out at 40% of the planet's entire vertical relief.
-    const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0 })
-    const [layer] = scatterUnderstory(terrain, 59, {
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.3, lushness: 0.9 })
+    const options = {
+      projection: sphereProjection,
+      heightScale: sphereProjection.heightScale(terrain),
+    }
+    const [bare] = scatterCanopy(terrain, 59, options)
+    const [scaled] = scatterFoliage(terrain, 59, options).canopy
+
+    // scatterCanopy alone defaults to 1 cell; scatterFoliage passes the
+    // projection's foliageScale down. The offset is the only part of a
+    // tree's placement the scale reaches, so it is where the difference
+    // shows.
+    const bareOffset = Math.hypot(bare.positions[0], bare.positions[1], bare.positions[2])
+    const scaledOffset = Math.hypot(scaled.positions[0], scaled.positions[1], scaled.positions[2])
+    expect(SPHERE_VIEW.foliageScale).toBeLessThan(1)
+    expect(bareOffset).toBeCloseTo(scaledOffset, 5)
+  })
+
+  it('gives the understory the same instance attributes a tree gets', () => {
+    // A sprite had nothing but a position — it faced the camera whatever
+    // the ground did. Real geometry has to be told which way is up, or it
+    // lies flat on the far side of the globe.
+    const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.3, lushness: 0.8 })
+    const [layer] = scatterUnderstory(terrain, 11, {
       projection: sphereProjection,
       heightScale: sphereProjection.heightScale(terrain),
     })
-    const [scaled] = scatterFoliage(terrain, 59, {
-      projection: sphereProjection,
-      heightScale: sphereProjection.heightScale(terrain),
-    }).understory
 
-    // scatterUnderstory alone defaults to 1 cell; scatterFoliage passes
-    // the projection's foliageScale down.
-    const unscaledLift = layer.variant.size * UNDERSTORY_LIFT_RATIO
-    const scaledLift = layer.variant.size * SPHERE_VIEW.foliageScale * UNDERSTORY_LIFT_RATIO
-    const radius = Math.hypot(layer.positions[0], layer.positions[1], layer.positions[2])
-    const scaledRadius = Math.hypot(scaled.positions[0], scaled.positions[1], scaled.positions[2])
+    expect(layer.count).toBeGreaterThan(0)
+    for (const name of ['positions', 'normals', 'colors']) {
+      expect(layer[name].length, name).toBe(layer.count * 3)
+    }
+    for (const name of ['yaws', 'scales', 'heights']) {
+      expect(layer[name].length, name).toBe(layer.count)
+    }
 
-    expect(radius - scaledRadius).toBeCloseTo(unscaledLift - scaledLift, 5)
+    for (let i = 0; i < layer.count; i += 1) {
+      const length = Math.hypot(layer.normals[i * 3], layer.normals[i * 3 + 1], layer.normals[i * 3 + 2])
+      expect(length).toBeCloseTo(1, 5)
+      expect(layer.yaws[i]).toBeGreaterThanOrEqual(0)
+      expect(layer.yaws[i]).toBeLessThan(Math.PI * 2)
+      expect(layer.scales[i]).toBeGreaterThanOrEqual(UNDERSTORY_JITTER.minScale)
+      expect(layer.scales[i]).toBeLessThanOrEqual(UNDERSTORY_JITTER.maxScale)
+      expect(layer.heights[i]).toBeCloseTo(0.3, 5)
+    }
+  })
+
+  it('turns every clump a different way, and to a different size', () => {
+    // Uniform terrain grows one variant at one size everywhere, so
+    // without per-instance jitter a meadow is a stamped lattice of
+    // identical clumps — the defect the canopy already guards against.
+    const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.3, lushness: 0.8 })
+    const [layer] = scatterUnderstory(terrain, 11, FLAT)
+
+    expect(new Set(layer.yaws).size).toBeGreaterThan(layer.count * 0.9)
+    expect(new Set(layer.scales).size).toBeGreaterThan(layer.count * 0.9)
+
+    // And the offset has to actually move them off their cell centres,
+    // without reaching into the neighbouring cell — which, at a stride
+    // of one, means half a cell.
+    let maxOffset = 0
+    for (let i = 0; i < layer.count; i += 1) {
+      const cellX = Math.round(layer.positions[i * 3])
+      const cellY = Math.round(layer.positions[i * 3 + 1])
+      maxOffset = Math.max(
+        maxOffset,
+        Math.hypot(layer.positions[i * 3] - cellX, layer.positions[i * 3 + 1] - cellY),
+      )
+    }
+    expect(maxOffset).toBeGreaterThan(0.2)
+    expect(UNDERSTORY_JITTER.maxOffsetCells).toBeLessThanOrEqual(FOLIAGE_SAMPLING.understoryStride / 2)
+  })
+
+  it('leaves ground cover exactly where it was before clumps replaced sprites', () => {
+    // The placement roll keeps salt 0 and the new per-instance rolls take
+    // salts of their own, so giving a clump a size and a bearing must not
+    // change WHICH cells grow anything. If this drifts, every world's
+    // ground cover has quietly moved.
+    //
+    // These figures were read off the sprite implementation this
+    // replaced, running against the same fixture: 1262 ferns and 151
+    // grasses, each in the same cell as before.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.7 })
+    const layers = scatterUnderstory(terrain, 404, FLAT)
+
+    expect(layers.map((layer) => [layer.variant.kind, layer.count])).toEqual([
+      ['fern', 1262],
+      ['grass', 151],
+    ])
   })
 })

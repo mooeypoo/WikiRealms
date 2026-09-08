@@ -32,6 +32,7 @@
 import {
   CANOPY_ARCHETYPES,
   FOLIAGE_SAMPLING,
+  UNDERSTORY_JITTER,
   canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
@@ -39,19 +40,8 @@ import {
   pickCanopyVariant,
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
+  understoryInstanceTransform,
 } from './foliage.js'
-
-/**
- * A point sprite is centred on its position, so to stand ON the ground it
- * has to be lifted half its own height.
- *
- * A ratio rather than a fixed distance, and that is the point: the flat
- * 0.8 world units this replaced was tuned for sprites 1.5 to 4.8 units
- * across, and at the sizes ground cover is now authored in — under one
- * grid cell — the same lift floated every blade of grass a full
- * sprite-width above the terrain.
- */
-export const UNDERSTORY_LIFT_RATIO = 0.5
 
 /**
  * Which decision each per-cell hash is for.
@@ -62,6 +52,12 @@ export const UNDERSTORY_LIFT_RATIO = 0.5
  * and every tree stands in its own patch of grass with bare ground
  * between; without separating scale from offset, every small tree sits at
  * its cell's centre and every large one at the rim.
+ *
+ * The understory's three new salts are appended rather than slotted in
+ * beside its old one, because a salt IS the identity of a decision: the
+ * placement roll has to keep reading 0 or every world's ground cover
+ * moves. Which cells grow what is unchanged by giving each clump a size
+ * and a bearing.
  */
 const SALT = Object.freeze({
   understory: 0,
@@ -69,6 +65,9 @@ const SALT = Object.freeze({
   canopyScale: 2,
   canopyOffset: 3,
   canopyTint: 4,
+  understoryScale: 5,
+  understoryOffset: 6,
+  understoryTint: 7,
 })
 
 /**
@@ -84,7 +83,7 @@ function takesVariant(variant, densityRoll, lushness, height) {
 }
 
 /**
- * Ground cover, as one position buffer per variant.
+ * Ground cover, as one set of instance attributes per variant.
  *
  * Grouped by variant IDENTITY, not by kind or colour: two bands can both
  * grow "grass" at different greens and densities, and they are different
@@ -92,18 +91,34 @@ function takesVariant(variant, densityRoll, lushness, height) {
  * the order the component adds them to the scene is stable across
  * rebuilds of the same world.
  *
+ * This used to emit positions alone, because a clump of ground cover was
+ * a point sprite and a sprite has no orientation to describe — it faced
+ * the camera whatever the ground did. Now it is real geometry, so it
+ * needs everything a tree needs: the normal to stand up along, a bearing
+ * so a field is not a comb, a size, and its altitude for frost. The one
+ * thing it no longer needs is a lift off the ground, which existed only
+ * because a sprite is centred on its position rather than rooted at it.
+ *
+ * It takes no cellScale, where scatterCanopy does. Nothing here is
+ * measured in world units any more: the clump's own size is applied when
+ * its geometry is built, and its lateral offset is in grid cells, which
+ * both projections agree on. The scale used to be needed for the sprite
+ * lift alone.
+ *
  * @param {{ width: number, height: number, heightMap: Float64Array,
  *   biomeMap: Uint8Array, lushnessMap: Float64Array }} terrain
  * @param {number} seed world seed
- * @param {{ projection: object, heightScale: number, cellScale?: number }} options
- * @returns {Array<{ variant: object, count: number, positions: Float32Array }>}
+ * @param {{ projection: object, heightScale: number }} options
+ * @returns {Array<{ variant: object, count: number, positions: Float32Array,
+ *   normals: Float32Array, yaws: Float32Array, scales: Float32Array,
+ *   colors: Float32Array, heights: Float32Array }>}
  */
-export function scatterUnderstory(terrain, seed, { projection, heightScale, cellScale = 1 }) {
+export function scatterUnderstory(terrain, seed, { projection, heightScale }) {
   const { width, height, heightMap, biomeMap, lushnessMap } = terrain
   const stride = FOLIAGE_SAMPLING.understoryStride
   const byVariant = new Map()
 
-  // The border row and column are skipped: a sprite there has no
+  // The border row and column are skipped: a clump there has no
   // neighbouring cell on one side, so it can sit over the seam between
   // the terrain mesh and nothing.
   for (let gridY = 1; gridY < height - 1; gridY += stride) {
@@ -114,19 +129,72 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale, cell
       if (!variant) continue
       if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index])) continue
 
-      const positions = byVariant.get(variant) ?? []
-      const lift = variant.size * cellScale * UNDERSTORY_LIFT_RATIO
-      const local = projection.toLocal(gridX, gridY, heightMap[index], terrain, heightScale, lift)
-      positions.push(local.x, local.y, local.z)
-      byVariant.set(variant, positions)
+      const cells = byVariant.get(variant) ?? []
+      cells.push({ gridX, gridY, index })
+      byVariant.set(variant, cells)
     }
   }
 
-  return [...byVariant].map(([variant, positions]) => ({
-    variant,
-    count: positions.length / 3,
-    positions: new Float32Array(positions),
-  }))
+  return [...byVariant].map(([variant, cells]) => {
+    const count = cells.length
+    const positions = new Float32Array(count * 3)
+    const normals = new Float32Array(count * 3)
+    const colors = new Float32Array(count * 3)
+    const yaws = new Float32Array(count)
+    const scales = new Float32Array(count)
+    const heights = new Float32Array(count)
+
+    cells.forEach((cell, instance) => {
+      const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
+        cell.gridX,
+        cell.gridY,
+        seed,
+        SALT.understoryScale,
+      )
+      const { variantRoll: offsetAngleRoll, densityRoll: offsetRadiusRoll } = cellFoliageRolls(
+        cell.gridX,
+        cell.gridY,
+        seed,
+        SALT.understoryOffset,
+      )
+      const { variantRoll: tintRoll } = cellFoliageRolls(cell.gridX, cell.gridY, seed, SALT.understoryTint)
+      const transform = understoryInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll)
+
+      // Height and normal are read at the CELL, while the clump itself
+      // sits at the offset — the same trade the canopy makes, and for
+      // the same reason: reading them at the offset needs a bilinear
+      // sample of the height field, and across half a cell the
+      // difference is smaller than a blade is wide.
+      const local = projection.toLocal(
+        cell.gridX + transform.offsetX,
+        cell.gridY + transform.offsetY,
+        heightMap[cell.index],
+        terrain,
+        heightScale,
+        0,
+      )
+      positions[instance * 3] = local.x
+      positions[instance * 3 + 1] = local.y
+      positions[instance * 3 + 2] = local.z
+
+      const surface = projection.normalAt(cell.gridX, cell.gridY, terrain)
+      normals[instance * 3] = surface.x
+      normals[instance * 3 + 1] = surface.y
+      normals[instance * 3 + 2] = surface.z
+
+      yaws[instance] = transform.yaw
+      scales[instance] = transform.scale
+
+      const { r, g, b } = foliageTintColor(variant.color, tintRoll, UNDERSTORY_JITTER)
+      colors[instance * 3] = r
+      colors[instance * 3 + 1] = g
+      colors[instance * 3 + 2] = b
+
+      heights[instance] = heightMap[cell.index]
+    })
+
+    return { variant, count, positions, normals, yaws, scales, colors, heights }
+  })
 }
 
 /**
@@ -263,7 +331,7 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
 export function scatterFoliage(terrain, seed, { projection, heightScale, cellScale }) {
   const scale = cellScale ?? projection.foliageScale ?? 1
   return {
-    understory: scatterUnderstory(terrain, seed, { projection, heightScale, cellScale: scale }),
+    understory: scatterUnderstory(terrain, seed, { projection, heightScale }),
     canopy: scatterCanopy(terrain, seed, { projection, heightScale, cellScale: scale }),
   }
 }

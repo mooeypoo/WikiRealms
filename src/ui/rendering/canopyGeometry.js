@@ -46,22 +46,34 @@ export function mergeGeometries(geometries) {
     return { flat, owned: flat !== geometry }
   })
 
-  const total = parts.reduce((sum, part) => sum + part.flat.getAttribute('position').array.length, 0)
-  const positions = new Float32Array(total)
-  const normals = new Float32Array(total)
+  // Whatever the first geometry carries, every geometry must carry. The
+  // trees bring position and normal; a clump of grass blades also brings
+  // a per-vertex colour, and hardcoding that pair silently dropped it —
+  // leaving the root-dark gradient in the source and not on the screen.
+  const merged = new THREE.BufferGeometry()
 
-  let offset = 0
-  for (const part of parts) {
-    const position = part.flat.getAttribute('position').array
-    positions.set(position, offset)
-    normals.set(part.flat.getAttribute('normal').array, offset)
-    offset += position.length
-    if (part.owned) part.flat.dispose()
+  for (const [name, first] of Object.entries(parts[0].flat.attributes)) {
+    let total = 0
+    for (const part of parts) {
+      const attribute = part.flat.getAttribute(name)
+      if (!attribute) {
+        throw new Error(`mergeGeometries: a geometry is missing the '${name}' attribute`)
+      }
+      total += attribute.array.length
+    }
+
+    const buffer = new Float32Array(total)
+    let offset = 0
+    for (const part of parts) {
+      const attribute = part.flat.getAttribute(name)
+      buffer.set(attribute.array, offset)
+      offset += attribute.array.length
+    }
+    merged.setAttribute(name, new THREE.BufferAttribute(buffer, first.itemSize))
   }
 
-  const merged = new THREE.BufferGeometry()
-  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  for (const part of parts) if (part.owned) part.flat.dispose()
+
   return merged
 }
 
