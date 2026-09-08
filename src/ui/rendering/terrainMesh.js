@@ -1,12 +1,17 @@
-import { biomeColor } from './biomeColor.js'
+import { biomeGroundRgb, biomeRgb, biomeSnowCover } from './biomeColor.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 import { flatProjection } from './projection.js'
 
 /**
  * Computes per-vertex RGB colors (0..1 floats, matching three.js's
- * expected vertex color format) for a terrain grid, reusing the exact
- * same biomeColor() function the 2D view uses — no duplicated color
- * logic between the 2D and 3D renderers.
+ * expected vertex color format) for a terrain grid, from the same
+ * palette the 2D view uses — no duplicated color logic between the 2D
+ * and 3D renderers.
+ *
+ * It used to call biomeColor() and unpick the `rgb(...)` string it
+ * returned with a regex, once per vertex, 131,072 times per world, on
+ * the main thread during load. biomeRgb is that function's arithmetic
+ * without the round trip through text.
  *
  * @param {{ width: number, height: number, heightMap: Float64Array, biomeMap: Uint8Array }} terrain
  * @returns {Float32Array} length = width * height * 3
@@ -16,7 +21,7 @@ export function computeVertexColors(terrain) {
   const colors = new Float32Array(width * height * 3)
 
   for (let i = 0; i < width * height; i++) {
-    const [r, g, b] = parseRgbColor(biomeColor(biomeMap[i], heightMap[i]))
+    const [r, g, b] = biomeRgb(biomeMap[i], heightMap[i])
     colors[i * 3] = r / 255
     colors[i * 3 + 1] = g / 255
     colors[i * 3 + 2] = b / 255
@@ -26,14 +31,33 @@ export function computeVertexColors(terrain) {
 }
 
 /**
- * Parses a `rgb(r, g, b)` CSS color string into a [r, g, b] tuple (0..255).
- * @param {string} rgbString
- * @returns {[number, number, number]}
+ * The same colors with the snow left off, plus how much snow each vertex
+ * carries, for a renderer that applies it in a shader instead.
+ *
+ * Two buffers rather than one, because they answer different questions.
+ * `colors` is the ground, which a moving snowline does not change.
+ * `snow` is the cover, which is the only thing a snowline moves — so it
+ * can be reuploaded on its own, or left alone and reinterpreted against
+ * a uniform, without touching the world's geometry.
+ *
+ * @param {{ width: number, height: number, heightMap: Float64Array, biomeMap: Uint8Array }} terrain
+ * @returns {{ colors: Float32Array, snow: Float32Array }}
  */
-export function parseRgbColor(rgbString) {
-  const match = rgbString.match(/(\d+(?:\.\d+)?)/g)
-  if (!match || match.length < 3) return [0, 0, 0]
-  return [Number(match[0]), Number(match[1]), Number(match[2])]
+export function computeGroundAttributes(terrain) {
+  const { width, height, heightMap, biomeMap } = terrain
+  const cells = width * height
+  const colors = new Float32Array(cells * 3)
+  const snow = new Float32Array(cells)
+
+  for (let i = 0; i < cells; i++) {
+    const [r, g, b] = biomeGroundRgb(biomeMap[i], heightMap[i])
+    colors[i * 3] = r / 255
+    colors[i * 3 + 1] = g / 255
+    colors[i * 3 + 2] = b / 255
+    snow[i] = biomeSnowCover(biomeMap[i], heightMap[i])
+  }
+
+  return { colors, snow }
 }
 
 /**

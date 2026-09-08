@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { BIOME, LUSHNESS_BANDS } from '../../../src/engine/generation/terrain.js'
-import { biomeColor, rockColor } from '../../../src/ui/rendering/biomeColor.js'
+import {
+  SNOW_RGB,
+  biomeColor,
+  biomeGroundRgb,
+  biomeRgb,
+  biomeSnowCover,
+  rockColor,
+} from '../../../src/ui/rendering/biomeColor.js'
 
 describe('biomeColor', () => {
   it('is deterministic for the same biome and height', () => {
@@ -139,6 +146,65 @@ describe('altitude cover', () => {
     expect(biomeColor(BIOME.OCEAN, 0.9)).toBe(biomeColor(BIOME.OCEAN, 0.9))
     const [r, g, b] = channels(biomeColor(BIOME.OCEAN, 0.9))
     expect(b).toBeGreaterThan(r)
+  })
+})
+
+describe('biomeRgb', () => {
+  it('is the same answer biomeColor gives, as numbers', () => {
+    // The whole point of the split: one palette, two spellings. If these
+    // ever disagree the 2D map and the 3D mesh have drifted apart.
+    for (const biome of [BIOME.OCEAN, BIOME.BEACH, ...LUSHNESS_BANDS, BIOME.SNOW]) {
+      for (const height of [0, 0.25, 0.5, 0.7, 0.85, 0.95, 1]) {
+        const [r, g, b] = biomeRgb(biome, height)
+        expect(`rgb(${r}, ${g}, ${b})`).toBe(biomeColor(biome, height))
+      }
+    }
+  })
+})
+
+describe('biomeGroundRgb and biomeSnowCover', () => {
+  it('mix back into the colour they were split from', () => {
+    // A renderer that applies snow itself must land in the same place as
+    // one that took it baked, or moving a snowline would also reshade
+    // the ground under it.
+    for (const biome of LUSHNESS_BANDS) {
+      for (const height of [0.5, 0.8, 0.9, 1]) {
+        const ground = biomeGroundRgb(biome, height)
+        const cover = biomeSnowCover(biome, height)
+        const mixed = ground.map((channel, i) => Math.round(channel + (SNOW_RGB[i] - channel) * cover))
+
+        expect(mixed).toEqual(biomeRgb(biome, height))
+      }
+    }
+  })
+
+  it('keeps the band colour under full cover', () => {
+    // Baked, a covered summit is white and nothing else. The point of
+    // holding the ground separately is that it still knows what it was.
+    const jungle = biomeGroundRgb(BIOME.JUNGLE, ALTITUDE.snowFull)
+    const dunes = biomeGroundRgb(BIOME.DUNES, ALTITUDE.snowFull)
+
+    expect(biomeSnowCover(BIOME.JUNGLE, ALTITUDE.snowFull)).toBeCloseTo(1, 5)
+    expect(jungle).not.toEqual(dunes)
+  })
+
+  it('reports no cover below the snowline and full cover above it', () => {
+    expect(biomeSnowCover(BIOME.MEADOW, ALTITUDE.snowStart - 0.01)).toBe(0)
+    expect(biomeSnowCover(BIOME.MEADOW, ALTITUDE.snowFull)).toBeCloseTo(1, 5)
+  })
+
+  it('gives water no cover at any height', () => {
+    expect(biomeSnowCover(BIOME.OCEAN, 1)).toBe(0)
+    expect(biomeSnowCover(BIOME.BEACH, 1)).toBe(0)
+  })
+
+  it('leaves water out of the rock cover too', () => {
+    // Water is excluded from both, so the ground colour of a deep cell
+    // is its shaded base and nothing else.
+    const ocean = biomeGroundRgb(BIOME.OCEAN, 0.9)
+    const shade = 0.7 + 0.9 * 0.5
+
+    expect(ocean[0]).toBeCloseTo(20 * shade, 5)
   })
 })
 

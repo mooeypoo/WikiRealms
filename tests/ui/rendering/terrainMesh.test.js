@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  computeGroundAttributes,
   computePeakFlagPosition,
   computePortalLocalPosition,
   computeVertexColors,
-  parseRgbColor,
 } from '../../../src/ui/rendering/terrainMesh.js'
+import { biomeGroundRgb, biomeRgb } from '../../../src/ui/rendering/biomeColor.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
+import { ALTITUDE } from '../../../src/engine/generation/config.js'
 
 function makeTerrain(overrides = {}) {
   const width = 4
@@ -20,13 +22,62 @@ function makeTerrain(overrides = {}) {
   }
 }
 
-describe('parseRgbColor', () => {
-  it('parses an rgb() string into a [r,g,b] tuple', () => {
-    expect(parseRgbColor('rgb(10, 20, 30)')).toEqual([10, 20, 30])
+describe('computeGroundAttributes', () => {
+  it('produces a colour per cell and a snow amount per cell', () => {
+    const terrain = makeTerrain()
+    const { colors, snow } = computeGroundAttributes(terrain)
+
+    expect(colors).toHaveLength(terrain.width * terrain.height * 3)
+    expect(snow).toHaveLength(terrain.width * terrain.height)
   })
 
-  it('returns black for an unparseable string', () => {
-    expect(parseRgbColor('not-a-color')).toEqual([0, 0, 0])
+  it('leaves the snow out of the colour', () => {
+    // A cell high enough to be fully covered: the ground buffer must
+    // still carry its band colour, or a snowline could never move off it.
+    const terrain = makeTerrain({
+      heightMap: new Float64Array(16).fill(ALTITUDE.snowFull),
+      biomeMap: new Uint8Array(16).fill(BIOME.JUNGLE),
+    })
+    const { colors, snow } = computeGroundAttributes(terrain)
+    const [r, g, b] = biomeGroundRgb(BIOME.JUNGLE, ALTITUDE.snowFull)
+
+    expect(snow[0]).toBeCloseTo(1, 5)
+    expect(colors[0]).toBeCloseTo(r / 255, 5)
+    expect(colors[1]).toBeCloseTo(g / 255, 5)
+    expect(colors[2]).toBeCloseTo(b / 255, 5)
+    // Not already white, which is what baking the two together gives.
+    expect(colors[0]).toBeLessThan(0.9)
+  })
+
+  it('reconstructs the baked colour when mixed back with snow', () => {
+    // The two halves have to add back up to what the 2D view draws, or
+    // the snowline moving would also silently reshade the world.
+    const heights = [0.2, 0.5, 0.7, 0.85, 0.95, 1]
+    const terrain = makeTerrain({
+      width: heights.length,
+      height: 1,
+      heightMap: Float64Array.from(heights),
+      biomeMap: new Uint8Array(heights.length).fill(BIOME.WOODLAND),
+    })
+    const { colors, snow } = computeGroundAttributes(terrain)
+
+    heights.forEach((h, i) => {
+      const expected = biomeRgb(BIOME.WOODLAND, h)
+      for (let channel = 0; channel < 3; channel += 1) {
+        const ground = colors[i * 3 + channel]
+        const white = [245, 245, 250][channel] / 255
+        expect(ground + (white - ground) * snow[i]).toBeCloseTo(expected[channel] / 255, 2)
+      }
+    })
+  })
+
+  it('gives water no snow, however the thresholds move', () => {
+    const terrain = makeTerrain({
+      heightMap: new Float64Array(16).fill(1),
+      biomeMap: new Uint8Array(16).fill(BIOME.OCEAN),
+    })
+
+    expect(computeGroundAttributes(terrain).snow.every((value) => value === 0)).toBe(true)
   })
 })
 
