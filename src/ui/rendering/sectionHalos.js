@@ -254,26 +254,6 @@ export function resolveHoveredTopLevel(hoveredIndex, peaks) {
 }
 
 /**
- * Anchor (the source Wikipedia heading id) of the top-level section that
- * owns `peakIndex` — the peak itself when it is already top-level, its
- * parent range when it is a subsection. This is the granularity the
- * article panel lists, so a subsection click focuses its parent card.
- *
- * Returns `null` when the peak is unknown or carries no anchor — the
- * synthetic folded "Miscellaneous" range (see sectionPeakLimits.js) has
- * no heading of its own, and consumers read `null` as "nothing to focus".
- *
- * @param {number | null | undefined} peakIndex
- * @param {object[]} peaks
- * @returns {string | null}
- */
-export function resolveSectionAnchor(peakIndex, peaks) {
-  const topLevelIndex = resolveHoveredTopLevel(peakIndex, peaks)
-  if (topLevelIndex < 0) return null
-  return peaks[topLevelIndex]?.anchor ?? null
-}
-
-/**
  * Breathing pulse offset (± amplitude) added on top of the base hovered
  * opacity. Callers pass performance.now()/1000 or an animation clock.
  * @param {number} timeSeconds

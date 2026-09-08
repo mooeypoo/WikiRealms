@@ -13,16 +13,19 @@ const ARTICLE = {
   summary: 'A gap between Saturn\'s A and B rings.',
   links: ['Saturn', 'Titan'],
   sections: {
-    lead: { ownSize: 100, links: [] },
+    lead: { ownSize: 100, sentenceCount: 5, citationCount: 2, links: [] },
     totalSize: 900,
     citationCount: 24,
+    sentenceCount: 65,
     sections: [
       {
         title: 'Discovery',
         anchor: 'Discovery',
         ownSize: 400,
         subtreeSize: 900,
+        citationCount: 6,
         subtreeCitationCount: 6,
+        sentenceCount: 20,
         subtreeSentenceCount: 20,
         children: [
           { title: 'Early', anchor: 'Early', ownSize: 500, subtreeSize: 500, children: [] },
@@ -34,7 +37,9 @@ const ARTICLE = {
         anchor: 'Structure',
         ownSize: 6600,
         subtreeSize: 6600,
+        citationCount: 9,
         subtreeCitationCount: 9,
+        sentenceCount: 40,
         subtreeSentenceCount: 40,
         children: [],
       },
@@ -43,19 +48,73 @@ const ARTICLE = {
 }
 
 /**
- * Lushness lives on the generated PEAKS, not on the parsed section tree,
- * so the Ledger matches the two up by heading anchor. These stand in for
- * a generated world: Discovery well cited, its two children far apart,
- * Structure citing nothing.
+ * The generated world, which is what the list is built from — see
+ * sectionRows.js for why that is not the same tree as the article's.
+ *
+ * Deliberately in the engine's own order (largest subtree first, which
+ * is how peak folding leaves it) rather than the article's, so the
+ * ordering the Ledger has to restore is actually exercised.
  */
 const WORLD = {
-  portals: [{ portalId: 'p1' }, { portalId: 'p2' }, { portalId: 'p3' }],
+  portals: [
+    { portalId: 'p1', sectionAnchor: 'Structure' },
+    { portalId: 'p2', sectionAnchor: 'Early' },
+    { portalId: 'p3', sectionAnchor: null },
+  ],
   terrain: {
     peaks: [
-      { title: 'Discovery', anchor: 'Discovery', depth: 1, lushness: 0.72 },
-      { title: 'Early', anchor: 'Early', depth: 2, lushness: 0.95 },
-      { title: 'Late', anchor: 'Late', depth: 2, lushness: 0.1 },
-      { title: 'Structure', anchor: 'Structure', depth: 1, lushness: 0 },
+      {
+        title: 'Structure',
+        anchor: 'Structure',
+        depth: 1,
+        sectionIndex: 0,
+        lushness: 0,
+        ownSize: 6600,
+        subtreeSize: 6600,
+        ownCitationCount: 9,
+        citationCount: 9,
+        sentenceCount: 40,
+        subtreeSentenceCount: 40,
+      },
+      {
+        title: 'Discovery',
+        anchor: 'Discovery',
+        depth: 1,
+        sectionIndex: 1,
+        lushness: 0.72,
+        ownSize: 400,
+        subtreeSize: 900,
+        ownCitationCount: 6,
+        citationCount: 6,
+        sentenceCount: 20,
+        subtreeSentenceCount: 20,
+      },
+      {
+        title: 'Early',
+        anchor: 'Early',
+        depth: 2,
+        sectionIndex: 1,
+        lushness: 0.95,
+        ownSize: 500,
+        subtreeSize: 500,
+        ownCitationCount: 5,
+        citationCount: 5,
+        sentenceCount: 12,
+        subtreeSentenceCount: 12,
+      },
+      {
+        title: 'Late',
+        anchor: 'Late',
+        depth: 2,
+        sectionIndex: 1,
+        lushness: 0.1,
+        ownSize: 200,
+        subtreeSize: 200,
+        ownCitationCount: 1,
+        citationCount: 1,
+        sentenceCount: 8,
+        subtreeSentenceCount: 8,
+      },
     ],
   },
 }
@@ -68,7 +127,10 @@ function mountLedger(props = {}) {
 }
 
 const surface = () => document.querySelector('.sheet')
-const cards = () => [...document.querySelectorAll('.ledger__section')]
+const rows = () => [...document.querySelectorAll('.ledger__row')]
+const titles = () => rows().map((row) => row.querySelector('.ledger__row-title').textContent.trim())
+const rowFor = (title) => rows().find((row) => row.querySelector('.ledger__row-title').textContent.trim() === title)
+const clickRow = (title) => rowFor(title).querySelector('.ledger__cells').dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
 beforeEach(() => {
   // jsdom does no layout and so has no scrollIntoView at all.
@@ -122,7 +184,7 @@ describe('Ledger', () => {
 
       expect(document.querySelector('.ledger__title').textContent).toBe('Cassini Division')
       expect(document.querySelectorAll('.ledger__stats dd')).toHaveLength(4)
-      expect(cards()).toHaveLength(0)
+      expect(rows()).toHaveLength(0)
       expect(document.querySelector('.ledger__summary')).toBeNull()
     })
 
@@ -149,7 +211,7 @@ describe('Ledger', () => {
       mountLedger({ state: 'open' })
 
       expect(document.querySelector('.ledger__summary')).not.toBeNull()
-      expect(cards()).toHaveLength(2)
+      expect(rows().length).toBeGreaterThan(0)
     })
 
     it('steps one state at a time rather than jumping to an extreme', async () => {
@@ -187,7 +249,7 @@ describe('Ledger', () => {
     })
   })
 
-  describe('content', () => {
+  describe('readouts', () => {
     it('reads out the four things worth knowing at a glance', () => {
       mountLedger()
       const values = [...document.querySelectorAll('.ledger__stats dd')].map((dd) => dd.textContent.trim())
@@ -207,71 +269,6 @@ describe('Ledger', () => {
 
       expect(labels).toEqual(['Sections', 'Citations', 'Portals', 'Words'])
       expect(labels).not.toContain('Links')
-    })
-
-    it('lists top-level sections only, in the words the tooltip uses', () => {
-      mountLedger()
-
-      expect(cards().map((card) => card.querySelector('h4').textContent)).toEqual(['Discovery', 'Structure'])
-      // The same figure the tooltip shows for the same section, spelled
-      // the same way. It used to read "1.2K W" here and "1,200 words"
-      // there, from two copies of the same arithmetic.
-      expect(cards()[1].textContent).toContain('1,200 words')
-      expect(cards()[1].textContent).toContain('9 refs in 40 sentences')
-    })
-
-    it('names the band the map painted, and says what it means', () => {
-      // Clicking a section used to give LESS than hovering it: the chips
-      // carried a word count and a bare citation number, and the band —
-      // the thing the reader had just seen on the ground — appeared
-      // nowhere in the panel at all.
-      mountLedger()
-
-      expect(cards()[0].textContent).toContain('Wooded')
-      expect(cards()[0].textContent).toContain('above this article’s average')
-      expect(cards()[1].textContent).toContain('Barren')
-      expect(cards()[1].textContent).toContain('no references at all')
-    })
-
-    it('puts the band on the title row, so the list can be scanned', () => {
-      // A column of band names down the panel reads the shape of the
-      // article without opening a single section.
-      mountLedger()
-
-      for (const card of cards()) {
-        expect(card.querySelector('.ledger__section-head .ledger__band')).not.toBeNull()
-      }
-    })
-
-    it('takes the band swatch from the renderer rather than a copy of it', () => {
-      mountLedger()
-
-      expect(cards()[0].querySelector('.ledger__swatch').getAttribute('style')).toContain('rgb(')
-    })
-
-    it('reports the spread of a range whose subsections disagree', () => {
-      // Subsections are painted their OWN band now rather than inheriting
-      // their parent's, so a reader seeing a lush patch inside a drier
-      // range needs somewhere to find out which child that is. "2
-      // subsections" alone does not explain why the range is not one
-      // colour.
-      mountLedger()
-
-      expect(cards()[0].textContent).toContain('2 subsections, Sparse to Lush')
-    })
-
-    it('does not spell out a range when a section has no subsections', () => {
-      mountLedger()
-
-      expect(cards()[1].textContent).not.toContain('subsection')
-    })
-
-    it('links each section to its own place on Wikipedia', () => {
-      mountLedger()
-
-      expect(cards()[0].querySelector('a').getAttribute('href')).toBe(
-        'https://en.wikipedia.org/wiki/Cassini_Division#Discovery',
-      )
     })
 
     it('says so plainly when there is no summary', () => {
@@ -299,15 +296,265 @@ describe('Ledger', () => {
     })
   })
 
-  describe('a section clicked on the map', () => {
-    it('flashes the matching card', async () => {
+  describe('the section list', () => {
+    it('lists ranges and their summits, in the order the article puts them', () => {
+      // The world's peaks arrive largest-subtree-first, because that is
+      // the order peak folding leaves them in. Structure is the bigger
+      // range and Discovery comes first in the article.
+      mountLedger()
+
+      expect(titles()).toEqual(['Discovery', 'Early', 'Late', 'Structure'])
+    })
+
+    it('marks a summit as one, so its title can be indented under its range', () => {
+      // Only the title indents. Stepping the whole row in and out would
+      // take the ground column with it, and a column that does not run
+      // straight down the page cannot be scanned.
+      mountLedger()
+
+      expect(rowFor('Early').classList.contains('is-summit')).toBe(true)
+      expect(rowFor('Discovery').classList.contains('is-summit')).toBe(false)
+    })
+
+    it('says how much of the world the list covers', () => {
+      mountLedger()
+
+      expect(document.querySelector('.ledger__sections-head').textContent).toContain('2 ranges · 2 summits')
+    })
+
+    it('heads the columns once instead of labelling every figure', () => {
+      // Forty rows each spelling out "1,240 words" is forty repetitions
+      // of a noun that only has to be said once, and it left no room for
+      // the figures that actually vary.
+      const labels = () => [...document.querySelectorAll('.ledger__columns span')].map((s) => s.textContent)
+      mountLedger()
+
+      expect(labels()).toEqual(['Range', 'Words', 'Refs', 'Ground'])
+    })
+
+    it('gives a range the figures for everything inside it', () => {
+      mountLedger()
+      const figures = [...rowFor('Discovery').querySelectorAll('.ledger__row-figure')].map((el) => el.textContent)
+
+      // 900 chars of prose across the range, six references.
+      expect(figures).toEqual(['164', '6'])
+    })
+
+    it('paints the meter in the colour the renderer would paint the ground', () => {
+      mountLedger()
+
+      const fill = rowFor('Discovery').querySelector('.ledger__meter-fill')
+      expect(fill.getAttribute('style')).toContain('rgb(')
+      expect(fill.getAttribute('style')).toContain('width: 72%')
+    })
+
+    it('marks this article\'s own average on every meter', () => {
+      // Without the tick the bar is a quantity with no scale, and six
+      // band names cannot say whether a section is a little above its
+      // article's average or enormously above it.
+      mountLedger()
+
+      expect(rowFor('Discovery').querySelector('.ledger__meter-tick')).not.toBeNull()
+    })
+
+    it('names the band beside the meter', () => {
+      mountLedger()
+
+      expect(rowFor('Discovery').querySelector('.ledger__band').textContent.trim()).toBe('Wooded')
+      expect(rowFor('Early').querySelector('.ledger__band').textContent.trim()).toBe('Lush')
+      expect(rowFor('Late').querySelector('.ledger__band').textContent.trim()).toBe('Sparse')
+      expect(rowFor('Structure').querySelector('.ledger__band').textContent.trim()).toBe('Barren')
+    })
+  })
+
+  describe('opening a range', () => {
+    const bigArticle = () => ({
+      ...ARTICLE,
+      sections: {
+        ...ARTICLE.sections,
+        sections: Array.from({ length: 14 }, (_, i) => ({
+          title: `Section ${i}`,
+          anchor: `S${i}`,
+          ownSize: 100,
+          subtreeSize: 300,
+          children: [
+            { title: `Sub ${i}a`, anchor: `S${i}a`, ownSize: 100, subtreeSize: 100, children: [] },
+            { title: `Sub ${i}b`, anchor: `S${i}b`, ownSize: 100, subtreeSize: 100, children: [] },
+          ],
+        })),
+      },
+    })
+
+    const bigWorld = () => ({
+      portals: [],
+      terrain: {
+        peaks: Array.from({ length: 14 }, (_, i) => i).flatMap((i) => [
+          { title: `Section ${i}`, anchor: `S${i}`, depth: 1, sectionIndex: i * 3, lushness: 0.5, ownSize: 100, subtreeSize: 300 },
+          { title: `Sub ${i}a`, anchor: `S${i}a`, depth: 2, sectionIndex: i * 3, lushness: 0.5, ownSize: 100, subtreeSize: 100 },
+          { title: `Sub ${i}b`, anchor: `S${i}b`, depth: 2, sectionIndex: i * 3, lushness: 0.5, ownSize: 100, subtreeSize: 100 },
+        ]),
+      },
+    })
+
+    it('shows a short article whole', () => {
+      // Four rows collapsed is a list hiding most of itself for no reason.
+      mountLedger()
+
+      expect(titles()).toContain('Early')
+    })
+
+    it('starts a long one closed', () => {
+      // Forty-two rows in a panel that is 42dvh at `open` is a scroll for
+      // its own sake.
+      mountLedger({ article: bigArticle(), world: bigWorld() })
+
+      expect(titles()).toHaveLength(14)
+      expect(titles()).not.toContain('Sub 0a')
+    })
+
+    it('opens one on request', async () => {
+      const wrapper = mountLedger({ article: bigArticle(), world: bigWorld() })
+
+      rowFor('Section 0').querySelector('.ledger__twist').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await wrapper.vm.$nextTick()
+
+      expect(titles()).toContain('Sub 0a')
+      expect(titles()).not.toContain('Sub 1a')
+    })
+
+    it('offers no control on a range with nothing in it', () => {
+      mountLedger()
+
+      expect(rowFor('Structure').querySelector('button.ledger__twist')).toBeNull()
+    })
+  })
+
+  describe('selection', () => {
+    it('asks its owner to select the peak a row stands on', async () => {
       const wrapper = mountLedger()
 
-      await wrapper.setProps({ focusedSection: 'Structure' })
+      clickRow('Early')
+      await wrapper.vm.$nextTick()
+
+      // Early is peaks[2] — the identity the map speaks, not its anchor.
+      expect(wrapper.emitted('select')?.at(-1)).toEqual([2])
+    })
+
+    it('clears the selection when the same row is clicked again', async () => {
+      const wrapper = mountLedger({ selectedPeak: 2 })
+
+      clickRow('Early')
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.emitted('select')?.at(-1)).toEqual([null])
+    })
+
+    it('spells out what the selected row means, and only that row', () => {
+      // The list gives bare figures under column headings, which is what
+      // makes forty rows scannable. The old panel printed this sentence
+      // for every row — the same six comparison strings repeated down the
+      // page, a full line each.
+      mountLedger({ selectedPeak: 1 })
+
+      const details = [...document.querySelectorAll('.ledger__detail')]
+      expect(details).toHaveLength(1)
+      expect(details[0].textContent).toContain('above this article’s average')
+      expect(details[0].textContent).toContain('164 words')
+      expect(details[0].textContent).toContain('6 refs in 20 sentences')
+    })
+
+    it('separates a range\'s own prose from its children\'s', () => {
+      mountLedger({ selectedPeak: 1 })
+
+      expect(document.querySelector('.ledger__detail').textContent).toContain('73 words of its own')
+    })
+
+    it('says nothing about a split a leaf does not have', () => {
+      mountLedger({ selectedPeak: 0 })
+
+      expect(document.querySelector('.ledger__detail').textContent).not.toContain('of its own')
+    })
+
+    it('says how many portals leave the selected range', () => {
+      // The header gives the world's total and nothing said where any of
+      // them were, so a range had no reason to be visited.
+      mountLedger({ selectedPeak: 1 })
+
+      expect(document.querySelector('.ledger__detail').textContent).toContain('1 portal leaves here')
+    })
+
+    it('links only the selected row to Wikipedia', () => {
+      mountLedger({ selectedPeak: 1 })
+
+      const link = document.querySelector('.ledger__detail a')
+      expect(link.getAttribute('href')).toBe('https://en.wikipedia.org/wiki/Cassini_Division#Discovery')
+    })
+
+    it('marks the selected row for the eye as well as the reader', () => {
+      mountLedger({ selectedPeak: 1 })
+
+      expect(rowFor('Discovery').classList.contains('is-selected')).toBe(true)
+      expect(rowFor('Structure').classList.contains('is-selected')).toBe(false)
+    })
+  })
+
+  describe('a section clicked on the map', () => {
+    it('scrolls the matching row into view', async () => {
+      const wrapper = mountLedger()
+
+      await wrapper.setProps({ selectedPeak: 0 })
       await flushPromises()
 
-      expect(cards()[1].classList.contains('ledger__section--flash')).toBe(true)
-      expect(cards()[0].classList.contains('ledger__section--flash')).toBe(false)
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+      expect(rowFor('Structure').classList.contains('is-selected')).toBe(true)
+    })
+
+    it('lands on the summit that was clicked, not on its parent', async () => {
+      // The renderer used to resolve a subsection click to its owning
+      // top-level's anchor, because that was the only granularity the
+      // panel listed. Clicking a lush summit inside a dry range selected
+      // the dry range.
+      const wrapper = mountLedger()
+
+      await wrapper.setProps({ selectedPeak: 2 })
+      await flushPromises()
+
+      expect(rowFor('Early').classList.contains('is-selected')).toBe(true)
+      expect(rowFor('Discovery').classList.contains('is-selected')).toBe(false)
+    })
+
+    it('opens the range a hidden summit is inside', async () => {
+      const wrapper = mountLedger({
+        article: {
+          ...ARTICLE,
+          sections: {
+            ...ARTICLE.sections,
+            sections: Array.from({ length: 14 }, (_, i) => ({
+              title: `Section ${i}`,
+              anchor: `S${i}`,
+              ownSize: 100,
+              subtreeSize: 200,
+              children: [{ title: `Sub ${i}`, anchor: `S${i}a`, ownSize: 100, subtreeSize: 100, children: [] }],
+            })),
+          },
+        },
+        world: {
+          portals: [],
+          terrain: {
+            peaks: Array.from({ length: 14 }, (_, i) => i).flatMap((i) => [
+              { title: `Section ${i}`, anchor: `S${i}`, depth: 1, sectionIndex: i * 2, lushness: 0.5, ownSize: 100, subtreeSize: 200 },
+              { title: `Sub ${i}`, anchor: `S${i}a`, depth: 2, sectionIndex: i * 2, lushness: 0.5, ownSize: 100, subtreeSize: 100 },
+            ]),
+          },
+        },
+      })
+      expect(titles()).not.toContain('Sub 3')
+
+      await wrapper.setProps({ selectedPeak: 7 })
+      await flushPromises()
+
+      expect(titles()).toContain('Sub 3')
+      expect(rowFor('Sub 3').classList.contains('is-selected')).toBe(true)
     })
 
     it('opens far enough to show it first', async () => {
@@ -315,18 +562,100 @@ describe('Ledger', () => {
       // panel too small to show it would answer the wrong question.
       const wrapper = mountLedger({ state: 'peek' })
 
-      await wrapper.setProps({ focusedSection: 'Structure' })
+      await wrapper.setProps({ selectedPeak: 0 })
 
       expect(wrapper.emitted('update:state')?.at(-1)).toEqual(['open'])
     })
 
-    it('ignores an anchor it has no card for', async () => {
+    it('does not scroll itself for a viewer who asked for less motion', async () => {
+      globalThis.matchMedia = vi.fn(() => ({ matches: true }))
       const wrapper = mountLedger()
 
-      await wrapper.setProps({ focusedSection: 'Nonexistent' })
+      await wrapper.setProps({ selectedPeak: 0 })
       await flushPromises()
 
-      expect(document.querySelectorAll('.ledger__section--flash')).toHaveLength(0)
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+        expect.objectContaining({ behavior: 'auto' }),
+      )
+      delete globalThis.matchMedia
+    })
+
+    it('drops the selection when the realm changes', async () => {
+      const wrapper = mountLedger({ selectedPeak: 1 })
+
+      await wrapper.setProps({ article: { ...ARTICLE, title: 'Titan' } })
+
+      expect(wrapper.emitted('select')?.at(-1)).toEqual([null])
+    })
+  })
+
+  describe('a range with no ground of its own', () => {
+    const FOLDED_WORLD = {
+      portals: [],
+      terrain: {
+        peaks: [
+          ...WORLD.terrain.peaks,
+          {
+            title: 'Miscellaneous',
+            anchor: null,
+            depth: 1,
+            sectionIndex: 4,
+            lushness: 0.3,
+            ownSize: 120,
+            subtreeSize: 120,
+            citationCount: 2,
+            ownCitationCount: 2,
+            sentenceCount: 6,
+            subtreeSentenceCount: 6,
+          },
+        ],
+      },
+    }
+
+    const FOLDED_ARTICLE = {
+      ...ARTICLE,
+      sections: {
+        ...ARTICLE.sections,
+        sections: [
+          ...ARTICLE.sections.sections,
+          { title: 'Trivia', anchor: 'Trivia', ownSize: 60, subtreeSize: 60, children: [] },
+          { title: 'Naming', anchor: 'Naming', ownSize: 60, subtreeSize: 60, children: [] },
+        ],
+      },
+    }
+
+    it('lists the range the map actually carries', () => {
+      // It used to be missing entirely: the reader could see and click a
+      // mountain called "Miscellaneous" that appeared nowhere in the list
+      // of what they were looking at.
+      mountLedger({ article: FOLDED_ARTICLE, world: FOLDED_WORLD })
+
+      expect(titles()).toContain('Miscellaneous')
+      expect(titles().at(-3)).toBe('Miscellaneous')
+    })
+
+    it('says what was folded into it', () => {
+      mountLedger({ article: FOLDED_ARTICLE, world: FOLDED_WORLD })
+
+      expect(titles().slice(-2)).toEqual(['Trivia', 'Naming'])
+    })
+
+    it('offers no ground for a section that has none', () => {
+      // Their prose raised the aggregate's height and their citations
+      // coloured it, but no patch of the map is theirs — so the row is
+      // stated rather than offered.
+      mountLedger({ article: FOLDED_ARTICLE, world: FOLDED_WORLD })
+
+      const trivia = rowFor('Trivia')
+      expect(trivia.classList.contains('is-groundless')).toBe(true)
+      expect(trivia.querySelector('button.ledger__cells')).toBeNull()
+      expect(trivia.querySelector('.ledger__meter')).toBeNull()
+    })
+
+    it('can be selected, since it is a real place', () => {
+      mountLedger({ article: FOLDED_ARTICLE, world: FOLDED_WORLD, selectedPeak: 4 })
+
+      expect(document.querySelector('.ledger__detail').textContent).toContain('too small for a range of its own')
     })
   })
 

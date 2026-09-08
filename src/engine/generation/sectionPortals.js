@@ -207,6 +207,13 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
       origin: 'article-link',
       sectionTitle: pair.topLevelTitle,
       sectionIndex,
+      // The anchor of the section the LINK was written in, which may be
+      // nested well below the top-level range this portal was placed in.
+      // sectionIndex answers "which range am I standing in", which is
+      // what the markers need; this answers "which section put me here",
+      // which is what a per-section portal count needs. Null for the
+      // lead, whose links belong to the article rather than to a section.
+      sectionAnchor: pair.sectionAnchor,
     }
   })
 }

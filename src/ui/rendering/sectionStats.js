@@ -80,3 +80,24 @@ export function formatSubsections(count) {
   if (n === 0) return ''
   return `${n} subsection${n === 1 ? '' : 's'}`
 }
+
+/**
+ * "4 portals leave here", or an empty string for a section none leave.
+ *
+ * Spelled as a direction rather than a quantity because the count is only
+ * interesting as a reason to go and look: the header's Portals readout
+ * already gives the world's total, and what a row adds is that this
+ * particular range is where some of them are.
+ *
+ * @param {number} count
+ */
+export function formatPortals(count) {
+  const n = Math.max(0, Math.round(Number(count) || 0))
+  if (n === 0) return ''
+  return n === 1 ? '1 portal leaves here' : `${n} portals leave here`
+}
+
+/** A bare integer with thousands separators, for a column that carries its own heading. */
+export function formatCount(n) {
+  return Math.max(0, Math.round(Number(n) || 0)).toLocaleString('en-US')
+}
