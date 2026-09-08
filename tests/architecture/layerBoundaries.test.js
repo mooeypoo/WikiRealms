@@ -115,8 +115,13 @@ describe('layer boundaries', () => {
    * That convention was a comment in two file headers, which is not a
    * convention so much as a hope. An import added to foliageScatter.js
    * would quietly undo the extraction that put it there.
+   *
+   * The allowlist is the pairing: for every module here there should be a
+   * pure one holding the decisions it draws. canopyGeometry.js builds
+   * tree shapes for foliageScatter.js's buffers; portalForms.js draws
+   * portals for portalPlacement.js's placements.
    */
-  const MAY_IMPORT_THREE = ['canopyGeometry.js']
+  const MAY_IMPORT_THREE = ['canopyGeometry.js', 'portalForms.js']
 
   it('keeps three.js out of ui/rendering bar the geometry builders', () => {
     const violations = []

@@ -273,9 +273,16 @@ describe('no emoji anywhere in the interface', () => {
     // The last one: an emoji painted to a canvas texture, in the place a
     // viewer looks most, unable to take the accent colour every other
     // control uses.
-    const source = readFileSync(resolve(process.cwd(), 'src/ui/components/WorldView3D.vue'), 'utf8')
+    //
+    // The glyph moved to ui/rendering/portalForms.js when portals became
+    // a layer whose shape can be swapped. Both files are checked, since
+    // the claim is that nothing in the marker path types a character —
+    // not that any one file happens to hold the drawing.
+    const form = readFileSync(resolve(process.cwd(), 'src/ui/rendering/portalForms.js'), 'utf8')
+    const view = readFileSync(resolve(process.cwd(), 'src/ui/components/WorldView3D.vue'), 'utf8')
 
-    expect(source).not.toMatch(PICTOGRAPHIC)
-    expect(source).toContain('ringRatio')
+    expect(form).not.toMatch(PICTOGRAPHIC)
+    expect(view).not.toMatch(PICTOGRAPHIC)
+    expect(form).toContain('ringRatio')
   })
 })

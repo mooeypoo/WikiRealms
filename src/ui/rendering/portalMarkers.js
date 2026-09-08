@@ -39,6 +39,10 @@ export const PORTAL_MARKERS = Object.freeze({
   // Slow idle breathing so a map full of portals shimmers rather than
   // strobes. Frequency is rad/sec.
   pulse: Object.freeze({ frequency: 1.7, amplitude: 0.1 }),
+  // Phase offset per portal, in radians, so a cluster shimmers instead
+  // of beating in unison. Not a divisor of 2π, or portals would fall
+  // back into step with each other at regular intervals along the list.
+  pulsePhaseStep: 0.7,
   // Growth under the cursor — big enough to be unmistakable, small
   // enough not to swallow neighboring portals.
   hover: Object.freeze({ scale: 1.45 }),

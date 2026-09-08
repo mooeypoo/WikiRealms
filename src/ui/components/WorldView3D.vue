@@ -3,11 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
-import {
-  computePeakFlagPosition,
-  computePortalLocalPosition,
-  computeVertexColors,
-} from '../rendering/terrainMesh.js'
+import { computePeakFlagPosition, computeVertexColors } from '../rendering/terrainMesh.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
 import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import {
@@ -40,6 +36,8 @@ import {
   pickPortalHoverScale,
   pickPortalOpacity,
 } from '../rendering/portalMarkers.js'
+import { placePortals } from '../rendering/portalPlacement.js'
+import { DEFAULT_PORTAL_FORM, createPortalForm } from '../rendering/portalForms.js'
 import { CANOPY_ARCHETYPES, shouldShowCanopy } from '../rendering/foliage.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { useHoverState } from '../composables/useHoverState.js'
@@ -144,6 +142,17 @@ let accentColor = new THREE.Color(0xffd58c)
 // that sprite. Plain variable, not a ref — it's per-frame render state.
 let hoveredPortalId = null
 
+// Which shape portals take. A constant rather than a prop for now: there
+// is one form, and inventing a setting for a choice of one is how a
+// setting nobody wants gets shipped. createPortalForm falls back to the
+// default for an unknown id, so this can become a prop or a preference
+// the day a second form exists.
+const PORTAL_FORM = DEFAULT_PORTAL_FORM
+
+// The live form for the current portal layer, holding the resources it
+// shares between objects. Rebuilt with the layer, disposed with it.
+let portalForm = null
+
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
 function resolveAccentColor() {
   try {
@@ -156,70 +165,31 @@ function resolveAccentColor() {
 }
 
 /**
- * Portal sprite: the whirlpool glyph sitting inside a soft accent-tinted
- * aura. The aura is what makes a portal read as a light source on the
- * map at exploration zoom — a bare emoji at this scale disappears into
- * the terrain colors, especially over bright biomes.
+ * Builds the portal layer: one object per portal, in whatever shape the
+ * active form draws.
+ *
+ * The component knows where portals go (portalPlacement.js) and that
+ * they pulse, grow under the cursor and recede when another section is
+ * hovered (portalMarkers.js). It does not know what one looks like —
+ * that is portalForms.js's business, and it is why the shape can become
+ * a stone arch later without this file changing.
+ *
+ * The form is held for the layer's lifetime so it can own shared
+ * resources: the aperture's texture is one canvas for the whole world
+ * now rather than one per portal.
+ *
+ * @param {object} world
+ * @param {object} terrain
+ * @param {number} heightScale
+ * @returns {THREE.Group}
  */
-function makePortalSprite() {
-  const { size, coreRatio, auraRatio, ringRatio, innerRingRatio, tickRatio, strokeRatio } =
-    PORTAL_MARKERS.texture
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const center = size / 2
-  const { r, g, b } = accentColor
-  const rgb = `${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}`
+function buildPortalLayer(world, terrain, heightScale) {
+  const placements = placePortals(world.portals, terrain, heightScale, projection)
+  portalForm = createPortalForm(PORTAL_FORM, { accentColor })
 
-  const aura = ctx.createRadialGradient(center, center, size * coreRatio, center, center, center)
-  aura.addColorStop(0, 'rgba(255, 255, 255, 0.85)')
-  aura.addColorStop(auraRatio, `rgba(${rgb}, 0.4)`)
-  aura.addColorStop(1, `rgba(${rgb}, 0)`)
-  ctx.fillStyle = aura
-  ctx.beginPath()
-  ctx.arc(center, center, center, 0, Math.PI * 2)
-  ctx.fill()
-
-  // An aperture: two rings, four cardinal ticks and a bright core. Drawn
-  // in the accent colour, so it belongs to the same instrument as every
-  // control on screen — which an emoji never could, taking neither the
-  // colour nor a consistent shape from one platform to the next.
-  ctx.lineWidth = size * strokeRatio
-  ctx.lineCap = 'round'
-
-  ctx.strokeStyle = `rgba(${rgb}, 0.9)`
-  ctx.beginPath()
-  ctx.arc(center, center, size * ringRatio, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.strokeStyle = `rgba(${rgb}, 0.55)`
-  ctx.beginPath()
-  ctx.arc(center, center, size * innerRingRatio, 0, Math.PI * 2)
-  ctx.stroke()
-
-  for (let quarter = 0; quarter < 4; quarter += 1) {
-    const angle = (quarter * Math.PI) / 2
-    const from = size * ringRatio
-    const to = from + size * tickRatio
-    ctx.beginPath()
-    ctx.moveTo(center + Math.cos(angle) * from, center + Math.sin(angle) * from)
-    ctx.lineTo(center + Math.cos(angle) * to, center + Math.sin(angle) * to)
-    ctx.stroke()
-  }
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-  ctx.beginPath()
-  ctx.arc(center, center, size * coreRatio, 0, Math.PI * 2)
-  ctx.fill()
-
-  const material = new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(canvas),
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  })
-  return new THREE.Sprite(material)
+  const group = new THREE.Group()
+  for (const placement of placements) group.add(portalForm.build(placement))
+  return group
 }
 
 function makeFoliageTexture(kind) {
@@ -304,25 +274,10 @@ function buildTerrainMesh(world) {
     water.position.z = projection.waterSurface(terrain, heightScale)
   }
 
-  const portals = new THREE.Group()
-  if (props.showPortals) {
-    world.portals.forEach((portal, index) => {
-      const local = computePortalLocalPosition(portal, terrain, heightScale, PORTAL_MARKERS.hoverOffset, projection)
-      const sprite = makePortalSprite()
-      const baseScale = PORTAL_MARKERS.baseScale
-      sprite.scale.set(baseScale, baseScale, 1)
-      sprite.position.set(local.x, local.y, local.z)
-      sprite.userData.portal = portal
-      sprite.userData.markerType = 'portal'
-      sprite.userData.destinationTitle = portal.targetTitle ?? portal.targetArticleId
-      sprite.userData.baseScale = baseScale
-      // Per-portal phase so a cluster shimmers instead of beating in unison.
-      sprite.userData.pulsePhase = index * 0.7
-      // Current (lerped) hover growth — 1 at rest, see animate().
-      sprite.userData.hoverScale = 1
-      portals.add(sprite)
-    })
-  }
+  // Built whether or not the layer is showing, so the toggle is a
+  // visibility flip like Sections and Foliage rather than a rebuild of
+  // the whole world. See the layer watch at the bottom of this file.
+  const portals = buildPortalLayer(world, terrain, heightScale)
 
   const halos = buildSectionHalos(world, heightScale)
 
@@ -724,6 +679,11 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
+  // The portal form owns resources its objects share — one texture for
+  // the whole layer — so it is disposed as a unit rather than per child.
+  portalForm?.dispose()
+  portalForm = null
+
   for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup]) {
     if (!group) continue
     worldGroup.remove(group)
@@ -757,6 +717,7 @@ function rebuildScene() {
   canopyGroup = canopy
   // Apply the current layer toggles so a rebuild respects the user's
   // last on/off state without waiting for the layer-watch to fire.
+  portalGroup.visible = props.showPortals
   haloGroup.visible = props.showSections
   understoryGroup.visible = props.showFoliage
   canopyGroup.visible = props.showFoliage
@@ -806,6 +767,46 @@ function frameCamera(terrain, heightScale) {
   controls?.update()
 }
 
+/**
+ * The portal objects a raycast may hit, or none while the layer is off.
+ *
+ * The gate is explicit because three.js's raycaster tests layers rather
+ * than Object3D.visible — the same reason the invisible halo fills work
+ * as hit areas. Portals used not to exist at all when the layer was off,
+ * so hiding them without this would leave them clickable.
+ */
+function portalTargets() {
+  if (!portalGroup?.visible) return []
+  return portalGroup.children
+}
+
+/**
+ * Resolves a raycast hit to the portal object it belongs to, walking up
+ * to the nearest ancestor that claims to be one.
+ *
+ * The walk is what lets a form return a group rather than a single mesh
+ * — an arch with a lintel and two posts would hit on a child. Both the
+ * click and the hover come through here, so a form whose objects cannot
+ * be identified this way (a single InstancedMesh, where a hit reports an
+ * instanceId instead) has this and findPortalObject to change, and
+ * nothing else.
+ */
+function resolvePortalObject(hit) {
+  let node = hit?.object ?? null
+  while (node && node.userData.markerType === undefined) node = node.parent
+  return node?.userData.markerType === 'portal' ? node : null
+}
+
+/**
+ * The object standing for a given portal, whether or not the layer is
+ * showing — this answers "where is it", not "can it be clicked", and the
+ * dive is camera choreography that should still land somewhere sensible
+ * with the markers turned off.
+ */
+function findPortalObject(portalId) {
+  return portalGroup?.children.find((child) => child.userData.portal?.portalId === portalId) ?? null
+}
+
 function pointerToNdc(event) {
   const rect = containerRef.value.getBoundingClientRect()
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
@@ -829,17 +830,16 @@ function onPointerClick(event) {
   pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
 
-  // Portal hit takes priority — a portal sprite in front of a halo
-  // still reads as "I meant to travel", not "I meant to focus".
-  if (portalGroup) {
-    const [portalHit] = raycaster.intersectObjects(portalGroup.children)
-    if (portalHit?.object?.userData?.portal) {
-      emit('portal-click', {
-        portal: portalHit.object.userData.portal,
-        anchor: screenPositionOf(portalHit.object.position),
-      })
-      return
-    }
+  // Portal hit takes priority — a portal in front of a halo still reads
+  // as "I meant to travel", not "I meant to focus".
+  const [portalHit] = raycaster.intersectObjects(portalTargets())
+  const clickedPortal = resolvePortalObject(portalHit)
+  if (clickedPortal) {
+    emit('portal-click', {
+      portal: clickedPortal.userData.portal,
+      anchor: screenPositionOf(clickedPortal.position),
+    })
+    return
   }
 
   // Otherwise: same halo-priority raycast the hover logic uses — a click
@@ -892,11 +892,9 @@ function onPointerMove(event) {
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const [hit] = raycaster.intersectObjects(portalGroup?.children ?? [], true)
-
-  let node = hit?.object ?? null
-  while (node && node.userData.markerType === undefined) node = node.parent
-  const portal = node?.userData.markerType === 'portal' ? node.userData.portal : null
+  const [hit] = raycaster.intersectObjects(portalTargets(), true)
+  const node = resolvePortalObject(hit)
+  const portal = node?.userData.portal ?? null
 
   hoveredMarker.value = portal ? { title: node.userData.destinationTitle, type: 'portal' } : null
   hoveredPortalId = portal?.portalId ?? null
@@ -1043,28 +1041,30 @@ function animate() {
     canopyGroup.visible = shouldShowCanopy(camera.position.length(), radius)
   }
 
-  if (portalGroup) {
+  // Only the numbers are computed here; how a portal wears them is the
+  // form's business (see portalForms.js). Skipped while the layer is
+  // hidden — a portal nobody can see does not need animating.
+  if (portalGroup?.visible && portalForm) {
     const alpha = PORTAL_MARKERS.lerpAlpha
-    for (const sprite of portalGroup.children) {
-      const portal = sprite.userData.portal
+    for (const object of portalGroup.children) {
+      const state = object.userData
+      const portal = state.portal
       const isHovered = hoveredPortalId !== null && portal?.portalId === hoveredPortalId
 
       // Hover growth eases in via the same lerp as the opacity fade, so
-      // the sprite swells under the cursor instead of snapping.
+      // the portal swells under the cursor instead of snapping.
       const targetHoverScale = pickPortalHoverScale(isHovered)
-      const hoverScale = sprite.userData.hoverScale + (targetHoverScale - sprite.userData.hoverScale) * alpha
-      sprite.userData.hoverScale = hoverScale
-
-      const pulse = computePortalPulse(nowSec, sprite.userData.pulsePhase)
-      const scale = computePortalScale(sprite.userData.baseScale, pulse, hoverScale)
-      sprite.scale.set(scale, scale, 1)
+      state.hoverScale += (targetHoverScale - state.hoverScale) * alpha
 
       // Section-link: dim portals whose section isn't the hovered one.
       // Nothing hovered → all at full presence.
       const isRelated = isPortalRelated(portal?.sectionIndex ?? -1, hoveredTopLevel)
-      const target = pickPortalOpacity(isRelated, isHovered)
-      sprite.material.opacity += (target - sprite.material.opacity) * alpha
-      sprite.material.transparent = true
+      state.opacity += (pickPortalOpacity(isRelated, isHovered) - state.opacity) * alpha
+
+      portalForm.apply(object, {
+        scale: computePortalScale(state.baseScale, computePortalPulse(nowSec, state.pulsePhase), state.hoverScale),
+        opacity: state.opacity,
+      })
     }
   }
 
@@ -1139,11 +1139,15 @@ onBeforeUnmount(() => {
   renderer?.dispose()
 })
 
-// Rebuild when the world, the portal-inclusion, or the projection
-// changes. Portals are generated at build-time from world data, and every
-// vertex position depends on the projection — but a view-mode switch only
-// re-renders the SAME world, it never regenerates terrain. Other layer
-// toggles just flip .visible on their existing groups — no rebuild needed.
+// Rebuild when the world or the projection changes: every vertex
+// position depends on the projection, though a view-mode switch only
+// re-renders the SAME world and never regenerates terrain.
+//
+// Every layer toggle is a .visible flip on an existing group. Portals
+// used to be in the watch above, because the layer was only built when
+// it was showing — so turning the markers off discarded and rebuilt the
+// terrain mesh, all 131k of its vertex colours, every halo and all of
+// the vegetation, to stop drawing 24 sprites.
 /**
  * Puts the camera back where a rebuild would have left it. Exposed rather
  * than driven by a prop because it is an EVENT — "do this now" — and a
@@ -1165,10 +1169,10 @@ function recenter() {
 let dive = null
 
 function diveTo(portal) {
-  const sprite = portalGroup?.children.find((child) => child.userData.portal?.portalId === portal?.portalId)
-  if (!sprite || !camera) return
+  const marker = findPortalObject(portal?.portalId)
+  if (!marker || !camera) return
 
-  const destination = sprite.getWorldPosition(new THREE.Vector3())
+  const destination = marker.getWorldPosition(new THREE.Vector3())
   dive = {
     from: camera.position.clone(),
     // Not all the way in: stopping short of the marker leaves the wash to
@@ -1225,7 +1229,7 @@ function legendAnchors() {
     if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
   }
 
-  const portal = portalGroup?.children.find((sprite) => sprite.visible && !isOccluded(sprite.position))
+  const portal = portalTargets().find((marker) => marker.visible && !isOccluded(marker.position))
   if (portal) {
     const point = screenPositionOf(portal.position)
     const title = portal.userData.portal?.targetTitle
@@ -1237,11 +1241,12 @@ function legendAnchors() {
 
 defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
 
-watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
+watch(() => [props.world, props.worldShape], rebuildScene)
 
 watch(
-  () => [props.showSections, props.showFoliage],
+  () => [props.showPortals, props.showSections, props.showFoliage],
   () => {
+    if (portalGroup) portalGroup.visible = props.showPortals
     if (haloGroup) haloGroup.visible = props.showSections
     if (understoryGroup) understoryGroup.visible = props.showFoliage
     if (canopyGroup) canopyGroup.visible = props.showFoliage
