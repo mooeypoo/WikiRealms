@@ -102,6 +102,36 @@ describe('layer boundaries', () => {
     expect(violations, `${layer}: ${because}`).toEqual([])
   })
 
+  /**
+   * Which renderer modules are allowed to reach for three.js.
+   *
+   * The rest of ui/rendering avoids it so that the DECISIONS — where
+   * things grow, how big, what colour, which shape — stay testable: three's
+   * geometry classes need no WebGL context, but a material, a texture or a
+   * draw call does, and WorldView3D.vue bails to its fallback the moment
+   * detectWebGLSupport fails, so nothing inside its render path is
+   * exercised by the suite at all.
+   *
+   * That convention was a comment in two file headers, which is not a
+   * convention so much as a hope. An import added to foliageScatter.js
+   * would quietly undo the extraction that put it there.
+   */
+  const MAY_IMPORT_THREE = ['canopyGeometry.js']
+
+  it('keeps three.js out of ui/rendering bar the geometry builders', () => {
+    const violations = []
+
+    for (const file of walk(join(SRC, 'ui/rendering'))) {
+      const name = relative(join(SRC, 'ui/rendering'), file).split('\\').join('/')
+      if (MAY_IMPORT_THREE.includes(name)) continue
+      if (importsOf(file).some((specifier) => specifier === 'three' || specifier.startsWith('three/'))) {
+        violations.push(name)
+      }
+    }
+
+    expect(violations, 'a renderer that needs a GL context cannot be unit tested').toEqual([])
+  })
+
   it('covers every layer that exists under src/', () => {
     // A new top-level directory should arrive with a rule, not slip in
     // unconstrained. src/ui is covered by its subdirectory rules.

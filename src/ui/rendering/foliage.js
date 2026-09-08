@@ -440,9 +440,9 @@ function fmix32(hash) {
  * @param {number} gridX
  * @param {number} gridY
  * @param {number} seed world seed
- * @param {number} [salt] which decision this roll is for — see the call
- *   sites in WorldView3D.vue; each layer and each per-instance property
- *   takes its own, or they correlate
+ * @param {number} [salt] which decision this roll is for — see SALT in
+ *   foliageScatter.js; each layer and each per-instance property takes
+ *   its own, or they correlate
  */
 export function cellFoliageRolls(gridX, gridY, seed, salt = 0) {
   const combined =
