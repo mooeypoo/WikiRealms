@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { CANOPY_ARCHETYPES } from '../../../src/ui/rendering/foliage.js'
 import { WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
 
 const TAU = Math.PI * 2
@@ -106,6 +107,76 @@ describe('reduced motion', () => {
 
   it('keeps the bearing, so nothing downstream has to handle a missing one', () => {
     expect(Math.hypot(still.windDirection.x, still.windDirection.y)).toBeCloseTo(1, 12)
+  })
+})
+
+describe('the sway is big enough to see', () => {
+  // The regression this exists for. The wind shipped correct and
+  // invisible: the field was right, the height weighting was right, the
+  // frame diff proved trees moved — and on screen a crown travelled
+  // about one pixel, because three factors nobody had multiplied
+  // together took a 9% constant down to 2%.
+  //
+  // Every other test here asks whether the mechanism works. This one
+  // asks how far anything actually moves, which is the only question
+  // that could have failed back then.
+  //
+  // It computes what the shader computes at a crown's centre:
+  //   lean / height = wave * sway(t) * lift²,  lift = centre / height
+  // with wave at 1, its typical rather than peak magnitude.
+  const leanAtCrown = (spec, sway) => {
+    const height = spec.trunkHeight + spec.crownHeight
+    const lift = Math.min(1, (spec.trunkHeight + spec.crownHeight / 2) / height)
+    return sway * lift * lift
+  }
+
+  const meanSway = () => {
+    const environment = createEnvironment({ seed: 11 })
+    let total = 0
+    let n = 0
+    for (let time = 0; time < WIND.gustPeriod; time += 0.05) {
+      total += sampleEnvironment(environment, time).sway
+      n += 1
+    }
+    return total / n
+  }
+
+  it('moves a broadleaf crown by several percent of its own height', () => {
+    // 7.8% at the time of writing. Below about 4% the motion stops
+    // reading as wind at any sensible zoom — that is roughly two pixels
+    // on a tree fifty pixels tall, which is where this started.
+    expect(leanAtCrown(CANOPY_ARCHETYPES.broadleaf, meanSway())).toBeGreaterThan(0.04)
+  })
+
+  it('moves every archetype enough to be worth drawing', () => {
+    // Conifers and shrubs are penalised hardest by the squared
+    // weighting, since their crowns start low. They are meant to move
+    // least — a spruce is stiff — but not imperceptibly.
+    for (const [name, spec] of Object.entries(CANOPY_ARCHETYPES)) {
+      expect(leanAtCrown(spec, meanSway()), name).toBeGreaterThan(0.025)
+    }
+  })
+
+  it('does not lean so far that a trunk looks like rubber', () => {
+    // The other failure mode, and the reason the constant is not simply
+    // large: this is a smooth bend with no branch structure to break it
+    // up, so past roughly a quarter of the tree's height it stops
+    // looking like timber.
+    const peak = WIND.sway * 1.5 // the two-crest wave at full alignment
+    for (const [name, spec] of Object.entries(CANOPY_ARCHETYPES)) {
+      expect(leanAtCrown(spec, peak), name).toBeLessThan(0.25)
+    }
+  })
+
+  it('oscillates fast enough to read as air rather than drift', () => {
+    // 5.7 seconds read as the camera moving. A couple of seconds reads
+    // as a breeze, with the gust envelope swelling underneath it.
+    const period = (Math.PI * 2) / WIND.speed
+    expect(period).toBeLessThan(4)
+    expect(period).toBeGreaterThan(1.5)
+    // And the swell has to be clearly slower than the wave, or the two
+    // beat against each other instead of layering.
+    expect(WIND.gustPeriod).toBeGreaterThan(period * 3)
   })
 })
 

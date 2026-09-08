@@ -43,13 +43,32 @@ const TAU = Math.PI * 2
 
 export const WIND = Object.freeze({
   /**
-   * How far the top of a plant leans at full gust, as a fraction of its
-   * own height. Deliberately small: this is a breeze moving a canopy,
-   * and the failure mode of a generous number is not "windy" but
-   * "rubbery", because the sway is a smooth bend with no branch to
-   * break it up.
+   * How far the very TOP of a plant leans at full gust, as a fraction
+   * of its own height.
+   *
+   * Read that definition carefully, because a cautious-looking number
+   * here arrives on screen far smaller than it reads. Three factors
+   * multiply it down before anything moves:
+   *
+   *   - the gust envelope averages 0.75 of full (see gustDepth),
+   *   - the bend is weighted by the SQUARE of height above the base, and
+   *     a crown's centre sits at 0.6-0.8 of the tree, so that weight is
+   *     0.35 for a conifer and 0.54 for a broadleaf, not 1,
+   *   - what the eye tracks is the crown's middle, not its topmost vertex.
+   *
+   * At 0.09 that came to a 2-5% lean at the crown centre, which is about
+   * ONE PIXEL on a tree fifty pixels tall. It was measured working, on a
+   * frame diff, and was invisible to look at — the same trap as snow on
+   * trees, one layer further out: the mechanism was verified and the
+   * amount never was.
+   *
+   * 0.20 puts a broadleaf's crown at about 8% of its height typically
+   * and 16% at the peak of a gust, which is a bough moving rather than a
+   * hint. The failure mode in the other direction is "rubbery", since
+   * this is a smooth bend with no branch structure to break it up, so
+   * this is deliberately short of what the number could take.
    */
-  sway: 0.09,
+  sway: 0.2,
   /**
    * Distance between wave crests, in grid cells — and since one cell is
    * one world unit of arc in both projections, in world units too.
@@ -60,8 +79,15 @@ export const WIND = Object.freeze({
    * hillside leans, pauses and leans again together.
    */
   waveLength: 34,
-  /** Crests travelling past a fixed point, in radians per second. */
-  speed: 1.1,
+  /**
+   * Crests travelling past a fixed point, in radians per second.
+   *
+   * 1.1 gave a 5.7-second oscillation, which is slow enough to read as
+   * the camera drifting rather than as air moving. Just under 2 puts it
+   * near three seconds — a breeze, with the slow swell of the gust
+   * envelope still underneath it.
+   */
+  speed: 1.95,
   /** Seconds for one full swell of the gust envelope. */
   gustPeriod: 13,
   /**
