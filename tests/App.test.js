@@ -87,8 +87,14 @@ function ledgerTitle() {
   return document.querySelector('.ledger__title')?.textContent ?? null
 }
 
-function sectionCard(anchor) {
-  return document.querySelector(`[data-anchor="${anchor}"]`)
+function sectionRow(title) {
+  return [...document.querySelectorAll('.ledger__row')].find(
+    (row) => row.querySelector('.ledger__row-title')?.textContent.trim() === title,
+  )
+}
+
+function sectionRowTitles() {
+  return [...document.querySelectorAll('.ledger__row-title')].map((el) => el.textContent.trim())
 }
 
 async function collapseLedger(wrapper) {
@@ -459,46 +465,29 @@ describe('App section focus', () => {
     await flushPromises()
   }
 
-  it('renders a card per top-level section, in the words the tooltip uses', async () => {
-    const wrapper = await mountWithArticle()
+  // The real engine builds the world, and applyPeakLimits sorts each
+  // level by subtree size: "Early life" (500 with its child) outranks
+  // "Career" (400), and flattenPeaks emits each parent followed by its
+  // subtree. So the peaks are [Early life, Childhood, Career].
+  const PEAK = { earlyLife: 0, childhood: 1, career: 2 }
 
-    const cards = [...document.querySelectorAll('.ledger__section')]
+  it('lists summits as well as ranges, in the order the article puts them', async () => {
+    await mountWithArticle()
 
-    expect(cards).toHaveLength(2)
-    expect(cards[0].dataset.anchor).toBe('Early_life')
-    expect(cards[0].querySelector('h4').textContent).toBe('Early life')
-    // Spelled out rather than abbreviated. These read "1 SUB" and "4 C"
-    // before, which are not words and do not say what they count.
-    expect(cards[0].textContent).toContain('1 subsection')
-    expect(cards[0].textContent).toContain('4 refs')
-    expect(cards[1].dataset.anchor).toBe('Career')
-    // Subsections aren't listed as cards of their own.
-    expect(sectionCard('Childhood')).toBeNull()
+    expect(sectionRowTitles()).toEqual(['Early life', 'Childhood', 'Career'])
   })
 
-  it('links each card to its section on Wikipedia', async () => {
+  it('selects the summit that was clicked, not the range around it', async () => {
+    // The renderer used to resolve a subsection click to its owning
+    // top-level's anchor, because that was the only granularity the panel
+    // listed — so clicking a summit answered a question nobody asked.
     const wrapper = await mountWithArticle()
 
-    expect(sectionCard('Career').querySelector('a').getAttribute('href')).toBe(
-      'https://en.wikipedia.org/wiki/Albert_Einstein#Career',
-    )
-  })
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.childhood, anchor: 'Childhood', depth: 2 })
 
-  it('flashes the clicked section card and scrolls it into view', async () => {
-    const wrapper = await mountWithArticle()
-
-    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
-
-    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
+    expect(sectionRow('Childhood').classList.contains('is-selected')).toBe(true)
+    expect(sectionRow('Early life').classList.contains('is-selected')).toBe(false)
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
-  })
-
-  it('focuses the owning top-level card when a subsection marker is clicked', async () => {
-    const wrapper = await mountWithArticle()
-
-    await clickSectionMarker(wrapper, { anchor: 'Childhood', sectionAnchor: 'Early_life', depth: 2 })
-
-    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
   })
 
   it('expands a collapsed panel before focusing', async () => {
@@ -506,44 +495,53 @@ describe('App section focus', () => {
     await collapseLedger(wrapper)
     expect(document.querySelector('.ledger__restore')).not.toBeNull()
 
-    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
 
     expect(document.querySelector('.ledger__restore')).toBeNull()
-    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
+    expect(sectionRow('Career').classList.contains('is-selected')).toBe(true)
   })
 
-  it('re-flashes the same card when it is clicked again', async () => {
+  it('takes the reader back when the same summit is clicked again', async () => {
     const wrapper = await mountWithArticle()
 
-    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
-    // Halfway through the first flash the card is clicked again — the
-    // highlight restarts rather than expiring on the original timer.
-    await vi.advanceTimersByTimeAsync(800)
-    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
-    await vi.advanceTimersByTimeAsync(800)
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
+    Element.prototype.scrollIntoView.mockClear()
+    // Someone who has scrolled away and clicked the same mountain again
+    // wants to be taken back to it, not told they are already there.
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
 
-    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(true)
-
-    await vi.advanceTimersByTimeAsync(800)
-    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(sectionRow('Career').classList.contains('is-selected')).toBe(true)
   })
 
-  it('moves the highlight when a different section is clicked mid-flash', async () => {
+  it('moves the selection when a different section is clicked', async () => {
     const wrapper = await mountWithArticle()
 
-    await clickSectionMarker(wrapper, { anchor: 'Career', sectionAnchor: 'Career', depth: 1 })
-    await clickSectionMarker(wrapper, { anchor: 'Early_life', sectionAnchor: 'Early_life', depth: 1 })
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
+    await clickSectionMarker(wrapper, { peakIndex: PEAK.earlyLife, anchor: 'Early_life', depth: 1 })
 
-    expect(sectionCard('Career').classList.contains('ledger__section--flash')).toBe(false)
-    expect(sectionCard('Early_life').classList.contains('ledger__section--flash')).toBe(true)
+    expect(sectionRow('Career').classList.contains('is-selected')).toBe(false)
+    expect(sectionRow('Early life').classList.contains('is-selected')).toBe(true)
   })
 
-  it('ignores a click on a peak with no section anchor (the folded range)', async () => {
+  it('lights the summit on the map when a row is chosen in the Ledger', async () => {
+    // The other half of the link, and the whole of it on a touch device:
+    // hover is what raises a wall, reveals siblings and labels a summit,
+    // and a finger has none.
     const wrapper = await mountWithArticle()
 
-    await clickSectionMarker(wrapper, { anchor: null, sectionAnchor: null, depth: 1 })
+    sectionRow('Career').querySelector('.ledger__cells').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
 
-    expect(document.querySelectorAll('.ledger__section--flash')).toHaveLength(0)
+    expect(wrapper.findComponent({ name: 'WorldView3D' }).props('selectedPeak')).toBe(PEAK.career)
+  })
+
+  it('ignores a click that resolves to no peak at all', async () => {
+    const wrapper = await mountWithArticle()
+
+    await clickSectionMarker(wrapper, { peakIndex: null, anchor: null, depth: 1 })
+
+    expect(document.querySelectorAll('.ledger__row.is-selected')).toHaveLength(0)
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 })

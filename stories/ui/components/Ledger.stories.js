@@ -40,7 +40,14 @@ function bench(initialState, blurb, extra = {}) {
   return () => ({
     setup() {
       const state = ref(initialState)
-      const focused = ref(null)
+      const selected = ref(null)
+
+      // Whatever the fixture's last summit turns out to be — a peaks-array
+      // index rather than a heading anchor, since that is what the map and
+      // the Ledger now share, and it names the ranges with no heading too.
+      const peaks = cassiniDivisionWorld.terrain.peaks
+      const summit = peaks.findLastIndex((peak) => (peak.depth ?? 1) > 1)
+      const target = summit >= 0 ? summit : peaks.length - 1
 
       return () =>
         h('div', {}, [
@@ -66,20 +73,21 @@ function bench(initialState, blurb, extra = {}) {
                   fontSize: 'var(--text-sm)',
                 },
                 onClick: () => {
-                  // Stand in for a click on a section peak in the world.
-                  focused.value = null
-                  setTimeout(() => (focused.value = 'Structure'), 0)
+                  // Stand in for a click on a subsection summit in the world.
+                  selected.value = null
+                  setTimeout(() => (selected.value = target), 0)
                 },
               },
-              'Click the "Structure" peak',
+              `Click the "${peaks[target]?.title}" summit`,
             ),
           ]),
           h(Ledger, {
             article: cassiniDivisionArticle,
             world: cassiniDivisionWorld,
             state: state.value,
-            focusedSection: focused.value,
+            selectedPeak: selected.value,
             'onUpdate:state': (value) => (state.value = value),
+            onSelect: (value) => (selected.value = value),
             onShare: () => {},
             ...extra,
           }),
@@ -117,7 +125,7 @@ export const Collapsed = {
 export const SectionFocus = {
   render: bench(
     'peek',
-    'Press the button to stand in for clicking a section peak in the world: the panel should open far enough to show that section, scroll to it, and flash it once.',
+    'Press the button to stand in for clicking a SUBSECTION summit in the world: the panel should open far enough to show it, open the range it sits inside, scroll to its row and select it — not settle for its parent, which is all the panel could do before it listed summits.',
   ),
 }
 

@@ -28,7 +28,6 @@ import {
   pickWallHeightScale,
   relationshipToHover,
   resolveHoveredTopLevel,
-  resolveSectionAnchor,
 } from '../rendering/sectionHalos.js'
 import { buildTooltipModel, projectClipToScreen } from '../rendering/sectionTooltip.js'
 import { facesCamera, shouldShowCard } from '../rendering/anchorPlacement.js'
@@ -66,6 +65,17 @@ const props = defineProps({
   // terrain. Defaults to match useUIState's stored preference, so a
   // mount without the prop shows what the app shows.
   worldShape: { type: String, default: 'flat' },
+  /**
+   * Peaks-array index selected in the Ledger, or null — the other half of
+   * the link `section-click` starts.
+   *
+   * It stands in for a hover, which is what makes the whole marker layer
+   * reachable without a pointer: hover is how a summit lights up, raises
+   * its wall, reveals its siblings and labels itself, and a touch device
+   * has none. Live hover still wins while it lasts, so pointing at the
+   * map is never overridden by something selected minutes ago.
+   */
+  selectedPeak: { type: Number, default: null },
 })
 
 const emit = defineEmits(['portal-click', 'section-click'])
@@ -80,6 +90,18 @@ const tooltipY = ref(0)
 // upcoming marker layers (halos, labels, tooltip) in later phases.
 const hoverState = useHoverState()
 const localHitPoint = new THREE.Vector3()
+
+/**
+ * Which peak the marker layer is currently answering to: whatever the
+ * pointer is on, or failing that whatever the Ledger has selected.
+ *
+ * One function rather than four call sites reading hoverState directly,
+ * so the halos, the summit label and the portal context cannot disagree
+ * about which section is being attended to.
+ */
+function attentionIndex() {
+  return hoverState.sectionIndex.value ?? props.selectedPeak ?? null
+}
 
 // Section tooltip: DOM overlay anchored to the projected summit position
 // of the currently hovered top-level section. Updated every frame in
@@ -651,7 +673,7 @@ function buildSectionHalos(world, heightScale) {
  */
 function updateHalos(nowSeconds) {
   if (!haloGroup) return
-  const hoveredIdx = hoverState.sectionIndex.value
+  const hoveredIdx = attentionIndex()
   const peaks = props.world?.terrain?.peaks
 
   for (const peakGroup of haloGroup.children) {
@@ -735,7 +757,7 @@ function screenPositionOf(localPoint) {
 }
 
 function updateSectionTooltip() {
-  const hoveredIdx = hoverState.sectionIndex.value
+  const hoveredIdx = attentionIndex()
   if (hoveredIdx === null || hoveredIdx < 0 || !haloGroup || !camera || !renderer) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
@@ -911,10 +933,16 @@ function onPointerClick(event) {
 
 /**
  * Same subsection-first raycast prioritization as tryHoverHalo, but
- * returns the peak metadata a click consumer needs (index, title,
- * anchor) instead of pushing into hoverState. The anchor is the source
- * Wikipedia section heading id, used both as a scroll target in the
- * article panel and as the URL fragment on the "View on Wikipedia" link.
+ * returns the peak metadata a click consumer needs instead of pushing
+ * into hoverState.
+ *
+ * It reports the peak that was clicked, full stop. It used to also
+ * resolve that peak to its owning top-level range's anchor, because the
+ * article panel only listed top-level sections — so pointing at a
+ * subsection summit and clicking it selected its parent. That was the
+ * renderer compensating for a limitation of a panel it should know
+ * nothing about; the Ledger lists summits now and decides for itself
+ * what it can show.
  */
 function pickHaloClickTarget() {
   // three.js's raycaster ignores Object3D.visible, so the Sections layer
@@ -939,9 +967,6 @@ function pickHaloClickTarget() {
     anchor: peak?.anchor ?? null,
     depth: peak?.depth ?? null,
     sectionIndex: peak?.sectionIndex ?? -1,
-    // Owning top-level's anchor — the granularity the article panel
-    // lists, so a subsection click resolves to its parent's card.
-    sectionAnchor: resolveSectionAnchor(node.userData.peakIndex, props.world?.terrain?.peaks),
   }
 }
 
@@ -1090,7 +1115,7 @@ function animate() {
 
   const nowSec = performance.now() * 0.001
   const peaks = props.world?.terrain?.peaks
-  const hoveredTopLevel = resolveHoveredTopLevel(hoverState.sectionIndex.value, peaks)
+  const hoveredTopLevel = resolveHoveredTopLevel(attentionIndex(), peaks)
 
   // Individual trees are meaningless from orbit and expensive to draw
   // there, so the canopy fades in on descent. The understory stays on:

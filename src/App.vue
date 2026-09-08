@@ -74,9 +74,18 @@ const showTools = ref(false)
 const showLaunch = ref(false)
 const showLegend = ref(false)
 const legendAnchors = ref({})
-// Section anchor id currently focused via a map click (or null). Used to
-// scroll the article panel's section list into view + flash the card.
-const focusedSectionAnchor = ref(null)
+/**
+ * The selected section, as a peaks-array index, shared both ways between
+ * the world and the Ledger: a click on a summit selects its row, and a
+ * click on a row lights its summit.
+ *
+ * An index rather than a heading anchor because it names every section
+ * the map can show. The folded "Miscellaneous" range has no heading on
+ * Wikipedia, so under the anchor scheme clicking that mountain resolved
+ * to null and did nothing — and a subsection click resolved to its
+ * PARENT's anchor, quietly answering a question nobody asked.
+ */
+const selectedPeak = ref(null)
 /**
  * The one thing said aloud. Kept to arrivals and failures: a live region
  * that narrates every state change is noise, and the interesting event is
@@ -139,17 +148,14 @@ function onPortalClick({ portal, anchor }) {
 }
 
 function onSectionClick(target) {
-  // sectionAnchor is already resolved to the owning top-level section —
-  // the granularity the Ledger's list renders. It's null for a peak with no
-  // heading of its own (the folded "Miscellaneous" range), so there is
-  // nothing to scroll to.
-  const anchor = target?.sectionAnchor ?? target?.anchor
-  if (!anchor) return
-  focusedSectionAnchor.value = null
-  // Force a change even when the same anchor is clicked twice: the Ledger
-  // reacts to the value changing.
+  const peakIndex = target?.peakIndex
+  if (peakIndex === null || peakIndex === undefined) return
+  // Cleared first so clicking the same summit twice still counts as a
+  // change: the Ledger scrolls on the value moving, and a reader who has
+  // scrolled away and clicked again wants to be taken back.
+  selectedPeak.value = null
   nextTick(() => {
-    focusedSectionAnchor.value = anchor
+    selectedPeak.value = peakIndex
   })
 }
 
@@ -444,6 +450,7 @@ watch([graph, articleCache], () => {
         :show-sections="preferences.showSections"
         :show-foliage="preferences.showFoliage"
         :world-shape="preferences.worldShape"
+        :selected-peak="selectedPeak"
         class="cosmos__world"
         @portal-click="onPortalClick"
         @section-click="onSectionClick"
@@ -491,8 +498,9 @@ watch([graph, articleCache], () => {
       :world="world"
       :state="ledgerState"
       :stale="isStale"
-      :focused-section="focusedSectionAnchor"
+      :selected-peak="selectedPeak"
       @update:state="setLedgerState"
+      @select="selectedPeak = $event"
       @share="onShareClick"
     />
 
