@@ -42,7 +42,7 @@ import { DEFAULT_PORTAL_FORM, createPortalForm } from '../rendering/portalForms.
 import { CANOPY_ARCHETYPES, shouldShowCanopy } from '../rendering/foliage.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { useHoverState } from '../composables/useHoverState.js'
-import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
@@ -372,7 +372,15 @@ function buildFoliage(world, heightScale) {
     // Lit, so a tree has a shaded side and reads as an object. The point
     // sprites this replaces took no light at all, which is why two bands
     // of trees were distinguishable only by hue and count.
-    const material = createStylizedMaterial({ flatShading: true, spherical: projection.isSpherical })
+    //
+    // The frost band, not the ground's snowline: a crown takes snow far
+    // lower than open ground holds it, and on the ground's band no tree
+    // in the world was high enough to carry a cap.
+    const material = createStylizedMaterial({
+      flatShading: true,
+      spherical: projection.isSpherical,
+      snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
+    })
     const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
 

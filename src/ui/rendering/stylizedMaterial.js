@@ -69,6 +69,11 @@
  * biomeSnowCover and computeGroundAttributes — because that part is
  * policy, and policy in a shader cannot be tested.
  *
+ * The band is per material, and the two meshes do not share one: the
+ * canopy frosts from ALTITUDE.frostStart, well below the ground's
+ * snowStart. That is a deliberate split, not drift — see the config for
+ * the measurement that forced it.
+ *
  * WORLD UP IS NOT ONE DIRECTION
  *
  * On the flat map every surface shares an up: the world group is rotated
@@ -216,10 +221,25 @@ void main() {
  * USE_INSTANCING_COLOR itself once the InstancedMesh has an
  * instanceColor. Both end up in vColor, so the shader is the same.
  *
- * @param {{ vertexColors?: boolean, flatShading?: boolean, spherical?: boolean }} options
+ * `snowline` defaults to the ground's band and is overridden by the
+ * canopy, which frosts lower — see ALTITUDE.frostStart for why. The
+ * material takes it as a parameter rather than deciding per caller,
+ * because which band a mesh uses is a fact about the mesh.
+ *
+ * @param {{
+ *   vertexColors?: boolean,
+ *   flatShading?: boolean,
+ *   spherical?: boolean,
+ *   snowline?: { start: number, full: number },
+ * }} options
  * @returns {THREE.ShaderMaterial}
  */
-export function createStylizedMaterial({ vertexColors = false, flatShading = false, spherical = false } = {}) {
+export function createStylizedMaterial({
+  vertexColors = false,
+  flatShading = false,
+  spherical = false,
+  snowline = { start: ALTITUDE.snowStart, full: ALTITUDE.snowFull },
+} = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,
@@ -232,8 +252,8 @@ export function createStylizedMaterial({ vertexColors = false, flatShading = fal
       THREE.UniformsLib.lights,
       {
         uSnowColor: { value: SNOW_COLOR.clone() },
-        uSnowStart: { value: ALTITUDE.snowStart },
-        uSnowFull: { value: ALTITUDE.snowFull },
+        uSnowStart: { value: snowline.start },
+        uSnowFull: { value: snowline.full },
         uSnowFacingStart: { value: SNOW_FACING_START },
         uSpherical: { value: spherical ? 1 : 0 },
       },

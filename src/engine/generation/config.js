@@ -85,13 +85,44 @@ export const ALTITUDE = Object.freeze({
   rockStart: 0.62,
   rockFull: 0.86,
   // Snow lying on top of whatever the rock band left.
+  //
+  // 0.82 is around the 95th percentile of land height — measured on the
+  // story fixture, only 5.1% of land ever reaches it. Snow is meant to be
+  // the summits and nothing else, which is why it cannot also be the band
+  // that decides whether vegetation looks cold. See frostStart.
   snowStart: 0.82,
   snowFull: 0.97,
+  // Vegetation carries snow LOWER than the ground holds it.
+  //
+  // Not a fudge: a crown is a thin exposed thing that takes rime and
+  // wet snow well below where a covering lies on open ground, and this
+  // is the altitude where a slope is already more scree than soil
+  // (rockStart is 0.62, and 23% of land sits above it). So frosted
+  // krummholz among bare stone, rather than frosted trees on green
+  // lawn — which was the objection to a separate band, and does not
+  // apply at these heights.
+  //
+  // Sharing the terrain's band instead put caps on 4 trees out of 534
+  // even with the treeline raised; this puts them on 38. Only the
+  // canopy reads these — the terrain keeps snowStart/snowFull.
+  frostStart: 0.62,
+  frostFull: 0.88,
   // The treeline: foliage density falls off across this band rather than
-  // vanishing at a line. Deliberately BELOW rockStart — trees thin out
+  // vanishing at a line. It STARTS below rockStart — trees thin out
   // before the stone starts showing, which is the order it happens in.
+  //
+  // It used to end at 0.86, which put the last tree in the world below
+  // the snowline in practice. Measured on the story fixture: the highest
+  // tree stood at 0.844, where snow cover is 6.9%, and of 517 trees
+  // exactly none carried a visible cap. Snow and vegetation were two
+  // features that could not be seen in the same place.
+  //
+  // 0.93 is inside the snow band, so a well-cited range keeps stunted
+  // growth up into the white. It ends above rockFull deliberately: what
+  // survives that high is krummholz on scree, which is what really grows
+  // at a treeline.
   treelineStart: 0.58,
-  treelineEnd: 0.86,
+  treelineEnd: 0.93,
   // Where one kind of tree gives way to another (see foliage.js
   // resolveArchetypeForAltitude). Broadleaf turns to conifer well before
   // the treeline starts, and conifer to stunted krummholz inside it, so a

@@ -376,7 +376,13 @@ describe('computeFoliageDensityScale', () => {
     // quarter of every world's land was bare by construction.
     const low = computeFoliageDensityScale(0.5, 0.4)
     const middle = computeFoliageDensityScale(0.5, (ALTITUDE.treelineStart + ALTITUDE.treelineEnd) / 2)
-    const high = computeFoliageDensityScale(0.5, 0.95)
+    // The top of the band as this lushness lifts it, rather than a
+    // height picked as "obviously high". 0.95 was that number, and it
+    // stopped being above the treeline the moment the treeline moved.
+    const high = computeFoliageDensityScale(
+      0.5,
+      ALTITUDE.treelineEnd + ALTITUDE.treelineLushnessLift * 0.5,
+    )
 
     expect(middle).toBeLessThan(low)
     expect(middle).toBeGreaterThan(0)

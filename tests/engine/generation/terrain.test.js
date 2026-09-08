@@ -6,6 +6,7 @@ import {
   classifyBiome,
   lushnessBand,
   rockCover,
+  frostCover,
   snowCover,
   treelineFactor,
 } from '../../../src/engine/generation/terrain.js'
@@ -135,6 +136,36 @@ describe('snowCover', () => {
     let previous = snowCover(0)
     for (let height = 0.01; height <= 1.0001; height += 0.01) {
       const current = snowCover(height)
+      expect(current).toBeGreaterThanOrEqual(previous)
+      expect(current - previous).toBeLessThan(0.12)
+      previous = current
+    }
+  })
+})
+
+describe('frostCover', () => {
+  it('puts snow on crowns well below where it lies on the ground', () => {
+    // The two bands are separate on purpose. A crown is a thin exposed
+    // thing that takes rime long before open ground holds a covering,
+    // and at these heights the slope is already more scree than soil.
+    expect(ALTITUDE.frostStart).toBeLessThan(ALTITUDE.snowStart)
+    expect(frostCover(ALTITUDE.snowStart)).toBeGreaterThan(snowCover(ALTITUDE.snowStart))
+  })
+
+  it('reaches full cover while trees can still be standing', () => {
+    // The invariant that was violated in the version this replaces: the
+    // band where snow appears has to overlap the band where trees
+    // survive, or the effect exists only in the shader. Both ends of the
+    // frost band sit under the treeline, so there is real depth of
+    // overlap rather than a shared edge.
+    expect(ALTITUDE.frostFull).toBeLessThan(ALTITUDE.treelineEnd)
+    expect(treelineFactor(ALTITUDE.frostFull, 0)).toBeGreaterThan(0)
+  })
+
+  it('rises with no step anywhere', () => {
+    let previous = frostCover(0)
+    for (let height = 0.01; height <= 1.0001; height += 0.01) {
+      const current = frostCover(height)
       expect(current).toBeGreaterThanOrEqual(previous)
       expect(current - previous).toBeLessThan(0.12)
       previous = current

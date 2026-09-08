@@ -138,6 +138,22 @@ export function snowCover(height) {
 }
 
 /**
+ * How much snow a CROWN carries at this height, in [0, 1]. Lower than
+ * snowCover, and deliberately so — see ALTITUDE.frostStart.
+ *
+ * The canopy shader computes this same curve from its own uniforms; this
+ * is the JS statement of the rule, so the reachability of the whole
+ * effect can be measured on a real world rather than assumed. That
+ * assumption is exactly what failed once: snow on trees shipped working
+ * and unreachable, because no tree in any world stood high enough.
+ *
+ * @param {number} height [0, 1]
+ */
+export function frostCover(height) {
+  return smoothstep(ALTITUDE.frostStart, ALTITUDE.frostFull, Number(height) || 0)
+}
+
+/**
  * What fraction of this cell's usual foliage survives its altitude, in
  * [0, 1]. 1 below the treeline, tapering to 0 above it.
  *
