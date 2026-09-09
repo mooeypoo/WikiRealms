@@ -7,8 +7,8 @@ import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/t
 import { hazeRange } from '../rendering/aerialPerspective.js'
 import { computeSkyVisibility } from '../rendering/occlusion.js'
 import { computeSunlight } from '../rendering/sunlight.js'
-import { computeWaterAttributes, dropDryTriangles } from '../rendering/waterSurface.js'
-import { NO_SNOWLINE, createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
+import { SHELF_WIDTH, SURF, WATER, computeWaterAttributes, dropDryTriangles, surfStrength } from '../rendering/waterSurface.js'
+import { NO_SNOWLINE, createStylizedMaterial, setSurf, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
@@ -445,14 +445,24 @@ function buildWaterMesh(terrain, heightScale) {
   }
   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
 
-  return new THREE.Mesh(geometry, createStylizedMaterial({
+  const material = createStylizedMaterial({
     vertexColors: true,
     spherical: projection.isSpherical,
     transparent: true,
     // The sea does not hold snow. Said with a band rather than with
     // 131,072 copies of the same per-vertex opt-out.
     snowline: NO_SNOWLINE,
-  }))
+    // Waves that arrive at the shore. The ceiling is the opacity the
+    // shelf saturates at, which is what turns the alpha channel into a
+    // distance from the waterline.
+    surf: { ceiling: WATER.maxOpacity, ...SURF },
+  })
+  // The sea joins the things with a clock. setWind carries uTime, and
+  // the sample it reads returns a time of 0 for a frozen world, so the
+  // surf stops where it stands under prefers-reduced-motion with no
+  // second code path here saying so.
+  windMaterials.push(material)
+  return new THREE.Mesh(geometry, material)
 }
 
 /** A unit vector from a point, for the globe's radial normals. */
@@ -1359,6 +1369,33 @@ function updateFoliageDetail() {
 }
 
 /**
+ * Decides how strongly to draw the surf, from how wide one crest lands
+ * on screen.
+ *
+ * The same shape as updateFoliageDetail above and for the same reason:
+ * an effect whose smallest feature falls below a couple of pixels cannot
+ * be drawn honestly, and drawing it anyway costs more than it shows. A
+ * crest that goes sub-pixel does not become subtle, it becomes a crawl.
+ *
+ * apparentPixels answers for a VERTICAL extent, and the shelf is a
+ * horizontal one lying on the ground, so this reads a little generous at
+ * a grazing camera where the shelf is foreshortened. The consequence is
+ * that the surf fades slightly late at the shallowest angles, which is
+ * the harmless direction: those are the views where the shelf is
+ * stretched widest across the screen anyway.
+ */
+function updateSurf() {
+  if (!camera || !renderer || !waterMesh) return
+
+  const radius = projection.isSpherical && props.world ? planetRadius(props.world.terrain) : 0
+  const distance = Math.max(camera.position.length() - radius, 1e-3)
+  const viewportHeight = renderer.getDrawingBufferSize(drawingBufferSize).y
+
+  const shelfPixels = apparentPixels(SHELF_WIDTH, distance, viewportHeight, camera.fov)
+  setSurf(waterMesh.material, surfStrength(shelfPixels / SURF.bands))
+}
+
+/**
  * Slides the haze range to follow the camera.
  *
  * One object on the scene rather than a uniform per material: the
@@ -1407,6 +1444,7 @@ function animate() {
 
   updateFoliageDetail()
   updateAerialPerspective()
+  updateSurf()
 
   // Only the numbers are computed here; how a portal wears them is the
   // form's business (see portalForms.js). Skipped while the layer is

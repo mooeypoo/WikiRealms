@@ -14,7 +14,13 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
-import { NO_SNOWLINE, createStylizedMaterial, setSnowline, setWind } from '../../../src/ui/rendering/stylizedMaterial.js'
+import {
+  NO_SNOWLINE,
+  createStylizedMaterial,
+  setSnowline,
+  setSurf,
+  setWind,
+} from '../../../src/ui/rendering/stylizedMaterial.js'
 
 const WIND_UNIFORMS = ['uTime', 'uWindDirection', 'uWindFrequency', 'uWindSpeed', 'uSway', 'uSwayHeight']
 
@@ -318,5 +324,88 @@ describe('setSnowline', () => {
 
     expect(material.uniforms.uSnowStart.value).toBe(0.4)
     expect(material.uniforms.uSnowFull.value).toBe(0.6)
+  })
+})
+
+describe('surf', () => {
+  const SHAPE = { ceiling: 0.8, bands: 3, speed: 0.16, sharpness: 3.5, foam: 0.78, color: 0xdff1f5 }
+
+  it('costs a mesh nothing that does not ask for it', () => {
+    const material = createStylizedMaterial({})
+    expect(material.defines.USE_SURF).toBeUndefined()
+    // The branch has to be compiled out, not merely skipped: this runs
+    // on every fragment of the sea, and the terrain has far more.
+    expect(material.fragmentShader).toContain('#ifdef USE_SURF')
+  })
+
+  it('compiles the wave in for a mesh that does', () => {
+    const material = createStylizedMaterial({ surf: SHAPE })
+    expect(material.defines.USE_SURF).toBe('')
+  })
+
+  it('hands the shader the shape it was given', () => {
+    const material = createStylizedMaterial({ surf: SHAPE })
+    expect(material.uniforms.uSurfCeiling.value).toBe(SHAPE.ceiling)
+    expect(material.uniforms.uSurfBands.value).toBe(SHAPE.bands)
+    expect(material.uniforms.uSurfSpeed.value).toBe(SHAPE.speed)
+    expect(material.uniforms.uSurfSharpness.value).toBe(SHAPE.sharpness)
+    expect(material.uniforms.uSurfFoam.value).toBe(SHAPE.foam)
+    expect(material.uniforms.uSurfColor.value.getHex()).toBe(SHAPE.color)
+  })
+
+  it('starts with the wave off, because only the camera knows', () => {
+    // Strength answers a question about the screen, so there is no
+    // sensible value before a frame has been sized. Off is the safe one.
+    expect(createStylizedMaterial({ surf: SHAPE }).uniforms.uSurf.value).toBe(0)
+  })
+
+  it('reads every uniform it declares', () => {
+    const material = createStylizedMaterial({ surf: SHAPE })
+    const body = material.fragmentShader
+    for (const name of ['uSurf', 'uSurfCeiling', 'uSurfBands', 'uSurfSpeed', 'uSurfSharpness', 'uSurfFoam', 'uSurfColor']) {
+      expect(Object.keys(material.uniforms)).toContain(name)
+      // Declared, and then used somewhere other than its declaration.
+      expect(body.split(name).length - 1).toBeGreaterThan(1)
+    }
+  })
+
+  it('takes the clock in both stages, so the phase can move', () => {
+    const material = createStylizedMaterial({ surf: SHAPE })
+    expect(material.fragmentShader).toContain('uniform float uTime')
+    expect(material.vertexShader).toContain('uniform float uTime')
+    // One uniform, shared: two entries would drift apart.
+    expect(Object.keys(material.uniforms).filter((k) => k === 'uTime')).toHaveLength(1)
+  })
+
+  it('draws the foam under the light, not over the finished pixel', () => {
+    // Foam is cover over the albedo like snow, so a dim shore gets dim
+    // foam. If this moved below the lighting it would glow at night.
+    const body = createStylizedMaterial({ surf: SHAPE }).fragmentShader
+    expect(body.indexOf('uSurfColor')).toBeLessThan(body.indexOf('irradiance'))
+  })
+})
+
+describe('setSurf', () => {
+  it('sets the strength the camera asked for', () => {
+    const material = createStylizedMaterial({ surf: { ceiling: 0.8, bands: 3, speed: 0.16, sharpness: 3.5, foam: 0.78, color: 0xffffff } })
+    setSurf(material, 0.42)
+    expect(material.uniforms.uSurf.value).toBeCloseTo(0.42)
+  })
+
+  it('clamps, so a strength cannot brighten past foam', () => {
+    const material = createStylizedMaterial({ surf: { ceiling: 0.8, bands: 3, speed: 0.16, sharpness: 3.5, foam: 0.78, color: 0xffffff } })
+    setSurf(material, 4)
+    expect(material.uniforms.uSurf.value).toBe(1)
+    setSurf(material, -2)
+    expect(material.uniforms.uSurf.value).toBe(0)
+    setSurf(material, Number.NaN)
+    expect(material.uniforms.uSurf.value).toBe(0)
+  })
+
+  it('rebuilds nothing, so the camera can call it every frame', () => {
+    const material = createStylizedMaterial({ surf: { ceiling: 0.8, bands: 3, speed: 0.16, sharpness: 3.5, foam: 0.78, color: 0xffffff } })
+    const program = material.version
+    setSurf(material, 0.7)
+    expect(material.version).toBe(program)
   })
 })

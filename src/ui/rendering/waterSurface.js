@@ -89,6 +89,122 @@ export const WATER = Object.freeze({
   maxOpacity: 0.8,
 })
 
+/**
+ * How much of the height map one cell of coastline covers, measured
+ * over the shoreline cells of a generated world (median 0.0075).
+ *
+ * The same figure SHORE's bands were sized against, and it is what lets
+ * a depth be turned into a distance: the shelf is WATER.opaqueDepth
+ * deep, so it is that many cells wide, and one cell is one world unit
+ * in both projections.
+ */
+const COAST_GRADIENT = 0.0075
+
+/** The shelf's width in world units — about eleven cells of coast. */
+export const SHELF_WIDTH = WATER.opaqueDepth / COAST_GRADIENT
+
+/**
+ * Surf: waves that arrive at the shore, and the rule for when to draw
+ * them.
+ *
+ * WHY THE WAVES NEED NOTHING NEW TO RIDE ON
+ *
+ * The sea's opacity is a smoothstep of depth that saturates at the
+ * outer edge of the shelf, so dividing it by that ceiling gives a
+ * coordinate that runs 0 at the waterline to 1 where the shelf ends —
+ * and whose contours follow the coast EXACTLY, because depth's do. A
+ * wave in that one number is therefore a wave in the shape of the
+ * shore, however the shore happens to be shaped. No attribute, no
+ * second pass, nothing to sample, and no coastline to trace: the whole
+ * effect is a function of a channel the water already carries.
+ *
+ * Measured on integrated graphics at 1080p, interleaved so the timer's
+ * drift cancels: 0.09ms a frame, against the sea's own 7.47ms. It is
+ * below the noise floor because the sea's cost is FILL rather than
+ * vertices, and these are a few instructions added to fragments that
+ * were already being shaded and blended.
+ *
+ * MOTION COMES FROM THE ENVIRONMENT, SO STILLNESS DOES TOO
+ *
+ * The phase is driven by the shared clock in environment.js, which
+ * returns a time of 0 for a frozen world. So under prefers-reduced-
+ * motion the surf stops where it stands rather than disappearing —
+ * still foam at a still shore — and there is no second code path here
+ * saying so.
+ *
+ * WHAT THE SHIPPED NUMBERS ACTUALLY DO
+ *
+ * Measured over one full wave period at a shoreline camera, sampling
+ * every second pixel across ten phases: 12.85% of the frame animates,
+ * and the pixels that move swing by a median of 19 brightness levels
+ * out of 255, p90 of 30 and a peak of 72. Well clear of the two or
+ * three levels where a change stops being visible, and the pattern
+ * returns bit-identical after one period, so nothing drifts.
+ */
+export const SURF = Object.freeze({
+  /**
+   * Crests between the waterline and the shelf's outer edge.
+   *
+   * Few, and this was the first thing tuned rather than guessed: seven
+   * read as contour lines on a map, because at that spacing the eye
+   * stops seeing water arriving and starts seeing a diagram of the
+   * depth. Wave sets come in ones and twos.
+   */
+  bands: 3,
+  /** Crests reaching the shore per second. A long ocean period. */
+  speed: 0.16,
+  /**
+   * How much of a crest is crest. The sine is raised to this power, so 1
+   * is a smooth swell and a large number is a thin line — the same knob
+   * that turns surf back into contours if pushed.
+   *
+   * Tuned against the screen at three bands: 2.2 leaves crests so broad
+   * they read as soft banding in the bay rather than as water arriving,
+   * and much above 4 they thin into lines again.
+   */
+  sharpness: 3.5,
+  /**
+   * The opacity foam brings with it.
+   *
+   * It has to bring its own: at the waterline the sea is drawn as
+   * nothing, and a white nothing is still nothing. This is what lets
+   * the wash run up over the sand instead of stopping at the water.
+   *
+   * Foam is mixed into the albedo BEFORE the light, like snow, so it is
+   * lit by the same sun as the sea it sits on. That is why this number
+   * is high and the result is still not white: a dim shore gets dim
+   * foam, which is the point.
+   */
+  foam: 0.78,
+  /**
+   * The band widths, in device pixels, between which the surf fades in.
+   *
+   * This is not a taste control, it is anti-aliasing. A band narrower
+   * than a couple of pixels cannot be drawn without shimmering, and a
+   * moving shimmer is far worse than no wave: from orbit the bands go
+   * sub-pixel and average into a crawling white fringe around every
+   * island. Below `minBandPixels` there is nothing to draw honestly, so
+   * nothing is drawn; by `fullBandPixels` there is room for a crest and
+   * a trough either side of it.
+   *
+   * It also happens to be what a reader would ask for anyway — bold up
+   * close, general from far away — which is the useful kind of
+   * coincidence: the cheap thing and the correct thing agree.
+   */
+  minBandPixels: 4,
+  fullBandPixels: 13,
+})
+
+/**
+ * How strongly to draw the surf, given how wide one band lands on
+ * screen. See SURF.minBandPixels.
+ *
+ * @param {number} bandPixels device pixels across one crest
+ */
+export function surfStrength(bandPixels) {
+  return smoothstep(SURF.minBandPixels, SURF.fullBandPixels, Math.max(0, Number(bandPixels) || 0))
+}
+
 /** Smooth 0→1 ramp with zero slope at both ends, as in terrain.js. */
 function smoothstep(edge0, edge1, value) {
   if (edge1 <= edge0) return value >= edge1 ? 1 : 0

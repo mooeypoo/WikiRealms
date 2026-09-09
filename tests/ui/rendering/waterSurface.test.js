@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SHELF_WIDTH,
+  SURF,
   WATER,
   computeWaterAttributes,
   dropDryTriangles,
+  surfStrength,
   waterDepth,
   waterOpacity,
   waterRgbAt,
@@ -241,5 +244,73 @@ describe('dropDryTriangles', () => {
     const terrain = makeTerrain()
     const kept = dropDryTriangles(gridTriangles(terrain), terrain)
     expect(kept).toBeInstanceOf(Uint32Array)
+  })
+})
+
+describe('surfStrength', () => {
+  it('draws nothing when a band is too narrow to draw honestly', () => {
+    expect(surfStrength(SURF.minBandPixels)).toBe(0)
+    expect(surfStrength(SURF.minBandPixels - 1)).toBe(0)
+    expect(surfStrength(0)).toBe(0)
+  })
+
+  it('draws the wave in full once there is room for a crest and a trough', () => {
+    expect(surfStrength(SURF.fullBandPixels)).toBe(1)
+    expect(surfStrength(SURF.fullBandPixels * 10)).toBe(1)
+  })
+
+  it('rises without a step between the two, so zooming never pops', () => {
+    let previous = 0
+    for (let pixels = 0; pixels <= SURF.fullBandPixels + 4; pixels += 0.25) {
+      const strength = surfStrength(pixels)
+      expect(strength).toBeGreaterThanOrEqual(previous)
+      expect(strength).toBeGreaterThanOrEqual(0)
+      expect(strength).toBeLessThanOrEqual(1)
+      // A quarter pixel of camera movement must not visibly change it.
+      expect(strength - previous).toBeLessThan(0.1)
+      previous = strength
+    }
+  })
+
+  it('survives a camera that reports nonsense', () => {
+    expect(surfStrength(Number.NaN)).toBe(0)
+    expect(surfStrength(-100)).toBe(0)
+    expect(surfStrength(undefined)).toBe(0)
+  })
+
+  it('turns the surf off from orbit and on at the shore', () => {
+    // The shelf is SHELF_WIDTH world units wide and carries SURF.bands
+    // crests, so one band is that fraction of it. These are the two ends
+    // measured in the browser: bold at a shoreline camera, gone from far
+    // out, with the opening view somewhere in between.
+    const bandWorldUnits = SHELF_WIDTH / SURF.bands
+    const pixelsPerUnit = (screenHeight, distance) => screenHeight / (2 * distance * Math.tan((50 * Math.PI) / 180 / 2))
+    const bandPixels = (distance) => bandWorldUnits * pixelsPerUnit(1080, distance)
+
+    expect(surfStrength(bandPixels(120))).toBe(1)
+    // Not asserted as an exact zero: that depends on the buffer height,
+    // and at a real 1080-tall buffer this distance lands just off it.
+    // What matters is that there is no visible wave left to shimmer.
+    expect(surfStrength(bandPixels(900))).toBeLessThan(0.05)
+    const opening = surfStrength(bandPixels(461))
+    expect(opening).toBeGreaterThan(0)
+    expect(opening).toBeLessThan(1)
+  })
+})
+
+describe('SURF', () => {
+  it('keeps the wave count low enough to read as water, not contours', () => {
+    // Seven read as a depth diagram. This is the constant that decides
+    // whether the effect looks like surf at all.
+    expect(SURF.bands).toBeLessThanOrEqual(4)
+    expect(SURF.bands).toBeGreaterThanOrEqual(1)
+  })
+
+  it('leaves the fade band wide enough to be a fade', () => {
+    expect(SURF.fullBandPixels).toBeGreaterThan(SURF.minBandPixels * 2)
+  })
+
+  it('sharpens the sine rather than flattening it', () => {
+    expect(SURF.sharpness).toBeGreaterThan(1)
   })
 })

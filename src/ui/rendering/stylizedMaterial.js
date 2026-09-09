@@ -316,6 +316,19 @@ uniform float uSnowStart;
 uniform float uSnowFull;
 uniform float uSnowFacingStart;
 
+#ifdef USE_SURF
+  // The clock is declared in the vertex stage too; three writes one
+  // uniform and both stages read it.
+  uniform float uTime;
+  uniform float uSurf;
+  uniform float uSurfCeiling;
+  uniform float uSurfBands;
+  uniform float uSurfSpeed;
+  uniform float uSurfSharpness;
+  uniform float uSurfFoam;
+  uniform vec3 uSurfColor;
+#endif
+
 varying vec3 vViewPosition;
 varying float vSnowHeight;
 varying float vFacingUp;
@@ -335,6 +348,37 @@ void main() {
   #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_INSTANCING_COLOR )
     albedo = vColor.rgb;
     alpha = vColor.a;
+  #endif
+
+  // Surf, on whichever mesh carries a shelf to put it on.
+  //
+  // vColor.a here is the sea's opacity, a smoothstep of depth that
+  // saturates at the outer edge of the shelf. Divided by that ceiling it
+  // becomes a coordinate running 0 at the waterline to 1 where the shelf
+  // ends — and whose contours follow the coast EXACTLY, because depth's
+  // do. So a wave in this one number is a wave in the shape of the
+  // shore, with no attribute, no second pass and no coastline to trace.
+  //
+  // Every number below is a uniform rather than a literal, and not for
+  // flexibility: they are the difference between surf and contour lines
+  // on a map, so they belong somewhere a test can reach them. See SURF
+  // in waterSurface.js.
+  #ifdef USE_SURF
+    if (uSurf > 0.0) {
+      float shelf = clamp(alpha / uSurfCeiling, 0.0, 1.0);
+      float crest = sin((shelf * uSurfBands - uTime * uSurfSpeed) * PI2);
+      // Sharpened from a swell into a crest, and gone by the time the
+      // shelf ends, so this reads as surf and not as stripes at sea.
+      float foam = pow(max(crest, 0.0), uSurfSharpness) * (1.0 - shelf) * uSurf;
+      // Cover over the albedo, before the lighting, exactly as snow is:
+      // foam that is lit like the water it sits on rather than pasted
+      // over the finished pixel.
+      albedo = mix(albedo, uSurfColor, foam);
+      // And it has to bring its own opacity. At the waterline the sea is
+      // drawn as nothing, and a white nothing is still nothing — this is
+      // what lets the wash run up over the sand.
+      alpha = min(1.0, alpha + foam * uSurfFoam);
+    }
   #endif
 
   // Snow is cover over the albedo, not a wash over the finished pixel,
@@ -441,6 +485,7 @@ void main() {
  *   occlusion?: boolean,
  *   sunlight?: boolean,
  *   transparent?: boolean,
+ *   surf?: { ceiling: number, bands: number, speed: number, sharpness: number, foam: number, color: number } | null,
  * }} options
  * @returns {THREE.ShaderMaterial}
  */
@@ -454,6 +499,7 @@ export function createStylizedMaterial({
   occlusion = false,
   sunlight = false,
   transparent = false,
+  surf = null,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -500,6 +546,7 @@ export function createStylizedMaterial({
       // And the same for the cast shadow, where an unbound attribute
       // would read as midnight.
       ...(sunlight ? { USE_SUNLIGHT: '' } : {}),
+      ...(surf ? { USE_SURF: '' } : {}),
     },
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
@@ -508,6 +555,15 @@ export function createStylizedMaterial({
         uSnowColor: { value: SNOW_COLOR.clone() },
         uSnowStart: { value: snowline.start },
         uSnowFull: { value: snowline.full },
+        // Strength is the only one the camera moves; the rest are the
+        // shape of the wave and are fixed when the material is made.
+        uSurf: { value: 0 },
+        uSurfCeiling: { value: surf?.ceiling ?? 1 },
+        uSurfBands: { value: surf?.bands ?? 0 },
+        uSurfSpeed: { value: surf?.speed ?? 0 },
+        uSurfSharpness: { value: surf?.sharpness ?? 1 },
+        uSurfFoam: { value: surf?.foam ?? 0 },
+        uSurfColor: { value: new THREE.Color(surf?.color ?? 0xffffff) },
         uSnowFacingStart: { value: SNOW_FACING_START },
         uOcclusionStrength: { value: OCCLUSION_STRENGTH },
         uSpherical: { value: spherical ? 1 : 0 },
@@ -540,6 +596,21 @@ export function setWind(material, { time, sway }, windDirection) {
   material.uniforms.uTime.value = time
   material.uniforms.uSway.value = sway
   material.uniforms.uWindDirection.value.copy(windDirection)
+}
+
+/**
+ * Sets how strongly the surf is drawn, which the camera decides.
+ *
+ * The one part of the wave that is not fixed when the material is made,
+ * because it answers a question about the SCREEN and not about water:
+ * how wide one crest lands in pixels, and so whether it can be drawn
+ * without shimmering. See surfStrength in waterSurface.js.
+ *
+ * @param {THREE.ShaderMaterial} material
+ * @param {number} strength in [0, 1]
+ */
+export function setSurf(material, strength) {
+  material.uniforms.uSurf.value = Math.min(1, Math.max(0, Number(strength) || 0))
 }
 
 /**
