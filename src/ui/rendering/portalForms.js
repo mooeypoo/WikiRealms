@@ -238,8 +238,9 @@ const vortexForm = {
 
       apply(object, { scale, opacity, time = 0 }) {
         object.scale.setScalar(scale)
+        const glow = opacity * PORTAL_MARKERS.vortex.intensity
         for (const child of object.children[0]?.children ?? []) {
-          if (child.material) child.material.opacity = opacity
+          if (child.material) child.material.opacity = glow
         }
         // Spin around the surface normal (local Z after orientation).
         const swirl = object.userData.swirl

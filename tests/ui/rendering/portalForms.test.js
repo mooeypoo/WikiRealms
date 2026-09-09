@@ -81,7 +81,9 @@ describe('vortex form', () => {
 
     form.apply(object, { scale: 2.5, opacity: 0.4, time: 1.2 })
     expect(object.scale.x).toBeCloseTo(2.5)
-    expect(object.userData.swirl.children[0].material.opacity).toBeCloseTo(0.4)
+    expect(object.userData.swirl.children[0].material.opacity).toBeCloseTo(
+      0.4 * PORTAL_MARKERS.vortex.intensity,
+    )
     expect(object.userData.swirl.rotation.z).not.toBe(0)
     form.dispose()
   })
