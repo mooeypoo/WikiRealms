@@ -123,12 +123,14 @@ describe('layer boundaries', () => {
    * portalPlacement.js's placements; stylizedMaterial.js shades what
    * biomeColor.js and terrainMesh.js decided the colour of; colorLut.js
    * packs the winter grade that stylizedMaterial samples — the grade
-   * function itself is pure, the DataTexture is just how it ships.
+   * function itself is pure, the DataTexture is just how it ships;
+   * limbGlow.js draws the atmosphere shell around the globe.
    */
   const MAY_IMPORT_THREE = [
     'bladeGeometry.js',
     'canopyGeometry.js',
     'colorLut.js',
+    'limbGlow.js',
     'portalForms.js',
     'stylizedMaterial.js',
   ]

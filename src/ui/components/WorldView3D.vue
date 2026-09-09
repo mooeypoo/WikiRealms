@@ -22,6 +22,7 @@ import {
 import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSeason, setSurf, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
+import { buildLimbGlow } from '../rendering/limbGlow.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
 import { archetypeHeight, buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import { buildUnderstoryGeometry, understoryHeight } from '../rendering/bladeGeometry.js'
@@ -133,6 +134,8 @@ let controls = null
 let worldGroup = null
 let terrainMesh = null
 let waterMesh = null
+/** Atmosphere shell around the globe; null on the flat map. */
+let limbGlowMesh = null
 let portalGroup = null
 let haloGroup = null
 let understoryGroup = null
@@ -988,6 +991,12 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
+  if (limbGlowMesh) {
+    worldGroup.remove(limbGlowMesh)
+    limbGlowMesh.geometry.dispose()
+    limbGlowMesh.material.dispose()
+    limbGlowMesh = null
+  }
   // The portal form owns resources its objects share — one texture for
   // the whole layer — so it is disposed as a unit rather than per child.
   portalForm?.dispose()
@@ -1050,6 +1059,25 @@ function rebuildScene() {
   understoryGroup.visible = props.showFoliage
   canopyGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup)
+
+  // The air around the planet. Only the globe has a limb to glow; the
+  // flat map's edge is a coastline, not a silhouette against the void.
+  // Built after the terrain so the shell clears this world's peaks, and
+  // coloured from the same token the haze already uses.
+  if (projection.isSpherical) {
+    const radius = planetRadius(props.world.terrain)
+    limbGlowMesh = buildLimbGlow({
+      radius,
+      heightScale,
+      color: resolveHazeColor(),
+      // The sun lives in WORLD space (scene.add), and the shell's
+      // normals are transformed to world in its shader, so this is the
+      // direction as the light itself states it.
+      sunDirection: sun.position.clone().normalize(),
+    })
+    worldGroup.add(limbGlowMesh)
+  }
+
   markRestless()
 
   currentHeightScale = heightScale
