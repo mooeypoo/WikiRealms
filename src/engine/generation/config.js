@@ -135,11 +135,12 @@ export const SHORE = Object.freeze({
  * thinned the foliage on every second cell of open lowland.
  */
 export const ALTITUDE = Object.freeze({
-  // Bare stone showing through the vegetation. Starts around the 78th
-  // percentile of land height, so it reads as high ground rather than as
-  // a wash over the whole map.
-  rockStart: 0.62,
-  rockFull: 0.86,
+  // Bare stone showing through the vegetation. Starts around the 90th
+  // percentile of land height (story fixture p90 ≈ 0.72), so mid-slopes
+  // stay vegetated and only true high ground goes stony — 0.62 used to
+  // wash roughly a quarter of the land grey.
+  rockStart: 0.70,
+  rockFull: 0.88,
   // Snow lying on top of whatever the rock band left.
   //
   // 0.82 is around the 95th percentile of land height — measured on the
@@ -151,12 +152,10 @@ export const ALTITUDE = Object.freeze({
   // Vegetation carries snow LOWER than the ground holds it.
   //
   // Not a fudge: a crown is a thin exposed thing that takes rime and
-  // wet snow well below where a covering lies on open ground, and this
-  // is the altitude where a slope is already more scree than soil
-  // (rockStart is 0.62, and 23% of land sits above it). So frosted
-  // krummholz among bare stone, rather than frosted trees on green
-  // lawn — which was the objection to a separate band, and does not
-  // apply at these heights.
+  // wet snow well below where a covering lies on open ground. Frost
+  // begins below rockStart so krummholz can rim before the ground has
+  // gone fully to scree — rock on the terrain and frost on the canopy
+  // are related but not the same band.
   //
   // Sharing the terrain's band instead put caps on 4 trees out of 534
   // even with the treeline raised; this puts them on 38. Only the
