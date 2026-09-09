@@ -9,6 +9,19 @@ export const APP_NAME = 'WikiRealms'
 export const APP_VERSION = '0.1.0'
 export const APP_REPOSITORY_URL = 'https://github.com/mooeypoo/WikiRealms'
 
+/** One-line pitch — keep in sync with Launch.vue and index.html meta. */
+export const APP_DESCRIPTION =
+  'Every Wikipedia article is a world. Its sections become mountain ranges, its references grow the forests, and its links are portals out.'
+
+/**
+ * Canonical public origin for SEO / Open Graph absolute URLs.
+ * Injected at build time from Netlify `URL` / `VITE_SITE_ORIGIN`; in the
+ * browser this falls back to `location.origin`.
+ */
+export const APP_ORIGIN =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SITE_ORIGIN) ||
+  (typeof window !== 'undefined' ? window.location.origin : '')
+
 /**
  * User-Agent identifying this app to Wikimedia APIs. Browsers block
  * scripts from setting the real `User-Agent` header, so this must be

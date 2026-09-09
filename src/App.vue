@@ -28,6 +28,7 @@ import { useViewport } from './ui/design/useViewport.js'
 import { useTravel } from './ui/design/useTravel.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
+import { APP_NAME } from './appInfo.js'
 
 // three.js is heavy; only load it once a 3D view is actually rendered.
 const WorldView3D = defineAsyncComponent(() => import('./ui/components/WorldView3D.vue'))
@@ -388,9 +389,14 @@ watch(currentNodeId, (nodeId) => {
   pushRealm(current.value, nodeId)
 })
 
-watch(current, (title) => {
-  if (title) loadArticle(title)
-})
+watch(
+  current,
+  (title) => {
+    document.title = title ? `${title} · ${APP_NAME}` : APP_NAME
+    if (title) loadArticle(title)
+  },
+  { immediate: true },
+)
 
 watch(article, (newArticle) => {
   if (newArticle) {
