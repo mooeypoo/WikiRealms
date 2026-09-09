@@ -156,6 +156,12 @@ const apertureForm = {
           transparent: true,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
+          // Exempt from the scene's aerial haze. The terrain recedes
+          // with distance because that is what makes distance read; a
+          // portal is somewhere the reader can GO, and a destination
+          // that dissolves into the backdrop is a destination that
+          // cannot be found. Scenery fades, affordances do not.
+          fog: false,
         })
         materials.push(material)
 

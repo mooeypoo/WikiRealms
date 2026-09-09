@@ -152,6 +152,7 @@ const vertexShader = /* glsl */ `
 #include <common>
 #include <color_pars_vertex>
 #include <normal_pars_vertex>
+#include <fog_pars_vertex>
 
 uniform float uSpherical;
 
@@ -245,6 +246,9 @@ void main() {
   #endif
 
   #include <project_vertex>
+  // Reads mvPosition, so it has to follow project_vertex. Carries the
+  // view depth that the aerial haze is a function of.
+  #include <fog_vertex>
 
   vViewPosition = -mvPosition.xyz;
 
@@ -278,6 +282,7 @@ const fragmentShader = /* glsl */ `
 #include <color_pars_fragment>
 #include <normal_pars_fragment>
 #include <lights_pars_begin>
+#include <fog_pars_fragment>
 
 uniform vec3 uSnowColor;
 uniform float uSnowStart;
@@ -342,6 +347,21 @@ void main() {
   gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, 1.0);
 
   #include <colorspace_fragment>
+
+  // AFTER the colour space conversion, which is not an accident and not
+  // a place this could be moved from. three applies fog last in every
+  // one of its own materials and hands the shader a fogColor already
+  // converted to the OUTPUT space (see refreshFogUniforms), precisely
+  // because it is mixed into an sRGB-encoded value here. Mixing it
+  // before the conversion, or using a linear colour, is the same class
+  // of mistake as omitting colorspace_fragment: it looks like a palette
+  // choice rather than a bug.
+  //
+  // Which is also the argument for not hand-rolling the haze at all.
+  // Scene fog reaches the water's standard material with no work, so
+  // land and sea recede together instead of the sea staying vivid
+  // behind veiled hills.
+  #include <fog_fragment>
 }
 `
 
@@ -386,6 +406,11 @@ export function createStylizedMaterial({
     // Merges three's own light uniforms in, and tells the renderer to
     // keep them up to date as the scene's lights change.
     lights: true,
+    // The same arrangement for scene.fog: the renderer keeps fogColor,
+    // fogNear and fogFar current, so the aerial haze is set once on the
+    // scene and every material that opts in follows it. See
+    // AERIAL_PERSPECTIVE in the component for what drives the range.
+    fog: true,
     vertexColors,
     // Unlike flatShading below, `side` IS declared on Material, so
     // setting it here works. It matters for anything built from strips
@@ -416,6 +441,7 @@ export function createStylizedMaterial({
     },
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
+      THREE.UniformsLib.fog,
       {
         uSnowColor: { value: SNOW_COLOR.clone() },
         uSnowStart: { value: snowline.start },

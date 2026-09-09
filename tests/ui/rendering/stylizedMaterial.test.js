@@ -100,6 +100,44 @@ describe('createStylizedMaterial', () => {
     expect(material.fragmentShader).not.toContain('directionalLights[0].color * vOcclusion')
   })
 
+  it('opts into scene fog, so one range drives every material', () => {
+    // `fog: true` is what makes the renderer keep fogColor, fogNear and
+    // fogFar current from scene.fog. Without it the uniforms below exist,
+    // are read by the shader, and are never written — so the haze would
+    // be whatever three's defaults happen to be, applied uniformly, at
+    // every depth.
+    const material = createStylizedMaterial({ vertexColors: true })
+
+    expect(material.fog).toBe(true)
+    expect(material.uniforms).toHaveProperty('fogColor')
+    expect(material.uniforms).toHaveProperty('fogNear')
+    expect(material.uniforms).toHaveProperty('fogFar')
+  })
+
+  it('mixes the haze after converting to the output colour space', () => {
+    // A real ordering bug that reads as a palette problem. three hands
+    // the shader a fogColor already converted to the output space,
+    // because its own materials mix it into an sRGB-encoded value last.
+    // Doing it before colorspace_fragment double-converts the haze: the
+    // gradient is still there, so nothing looks broken, the distance
+    // just goes the wrong colour.
+    const { fragmentShader } = createStylizedMaterial()
+
+    expect(fragmentShader.indexOf('#include <fog_fragment>')).toBeGreaterThan(
+      fragmentShader.indexOf('#include <colorspace_fragment>'),
+    )
+  })
+
+  it('takes the view depth after the projection, not before', () => {
+    // fog_vertex reads mvPosition, which project_vertex is what creates.
+    // Reversed, vFogDepth is computed from an undefined value.
+    const { vertexShader } = createStylizedMaterial()
+
+    expect(vertexShader.indexOf('#include <fog_vertex>')).toBeGreaterThan(
+      vertexShader.indexOf('#include <project_vertex>'),
+    )
+  })
+
   it('carries the wavelength the environment states', () => {
     // Two modules agreeing by construction rather than by two constants
     // that happen to match today.

@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
+import { hazeRange } from '../rendering/aerialPerspective.js'
 import { computeSkyVisibility } from '../rendering/occlusion.js'
 import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
@@ -141,6 +142,10 @@ let environment = createEnvironment()
 let qualityTier = QUALITY_TIERS.high
 const drawingBufferSize = new THREE.Vector2()
 
+// The world's own size, for the aerial haze, whose range is measured in
+// world extents rather than absolute units — see aerialPerspective.js.
+let worldExtent = 0
+
 /**
  * How long to keep drawing after something changes, in seconds.
  *
@@ -202,6 +207,22 @@ const PORTAL_FORM = DEFAULT_PORTAL_FORM
 let portalForm = null
 
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
+/**
+ * The colour distance fades into, read from the stylesheet.
+ *
+ * Same shape as resolveAccentColor below, and the same reason: the look
+ * is owned by CSS, and three reads it rather than restating it.
+ */
+function resolveHazeColor() {
+  try {
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--surface-haze').trim()
+    if (value) return new THREE.Color(value)
+  } catch {
+    // ignore — fall through to the void behind the world
+  }
+  return new THREE.Color(0x0a0f1c)
+}
+
 function resolveAccentColor() {
   try {
     const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
@@ -248,6 +269,11 @@ function buildTerrainMesh(world) {
   // Vertices are laid out row-major in the SAME index space as heightMap
   // and biomeMap, so per-vertex colors need no remapping regardless of
   // which projection placed the positions.
+  // The haze is measured in world extents, so it needs to know how big
+  // this world is. A globe's extent is its diameter; the flat map's is
+  // its longer axis.
+  worldExtent = projection.isSpherical ? planetRadius(terrain) * 2 : Math.max(width, height)
+
   const { positions, indices } = projection.buildSurfaceArrays(terrain, heightScale)
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -546,7 +572,11 @@ function buildSectionHalos(world, heightScale) {
     ringGeo.setAttribute('position', new THREE.BufferAttribute(ringArrays.positions, 3))
     ringGeo.setIndex(new THREE.BufferAttribute(ringArrays.indices, 1))
 
+    // fog: false throughout the halo, for the reason given on the
+    // portal sprites — a section marker is an affordance, and the haze
+    // is for scenery.
     const ringMat = new THREE.MeshBasicMaterial({
+      fog: false,
       color: accentColor,
       transparent: true,
       opacity: initialOpacity,
@@ -572,6 +602,7 @@ function buildSectionHalos(world, heightScale) {
     wallGeo.setIndex(new THREE.BufferAttribute(wallArrays.indices, 1))
 
     const wallMat = new THREE.MeshBasicMaterial({
+      fog: false,
       color: accentColor,
       transparent: true,
       opacity: initialOpacity,
@@ -597,7 +628,10 @@ function buildSectionHalos(world, heightScale) {
     const fillGeo = new THREE.BufferGeometry()
     fillGeo.setAttribute('position', new THREE.BufferAttribute(fillArrays.positions, 3))
     fillGeo.setIndex(new THREE.BufferAttribute(fillArrays.indices, 1))
-    const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+    const fill = new THREE.Mesh(
+      fillGeo,
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false }),
+    )
     fill.visible = false
 
     // Vertices are already in the mesh's local frame, so the group is a
@@ -805,6 +839,13 @@ function rebuildScene() {
   // Pull the accent color from CSS so a theme change gets picked up on
   // the next world rebuild without any three.js code touching styling.
   accentColor = resolveAccentColor()
+
+  // The haze colour comes from the same stylesheet as the backdrop it
+  // has to dissolve into, for the reason given at --surface-haze: the
+  // sky behind the canvas is a CSS gradient, and a haze picked
+  // independently would draw a visible seam along every far ridge.
+  // Range is set per frame by updateAerialPerspective.
+  scene.fog = new THREE.Fog(resolveHazeColor(), 1, 2)
 
   // Resolve the projection BEFORE building anything — every position in
   // the scene goes through it.
@@ -1195,6 +1236,25 @@ function updateFoliageDetail() {
   }
 }
 
+/**
+ * Slides the haze range to follow the camera.
+ *
+ * One object on the scene rather than a uniform per material: the
+ * renderer pushes scene.fog into everything that opted in, which is how
+ * the terrain, both vegetation layers and the water's standard material
+ * stay in agreement without this function knowing they exist.
+ */
+function updateAerialPerspective() {
+  if (!scene?.fog || !camera || !worldExtent) return
+
+  const { near, far } = hazeRange({
+    cameraDistance: camera.position.length(),
+    worldExtent,
+  })
+  scene.fog.near = near
+  scene.fog.far = far
+}
+
 function animate() {
   animationFrameId = requestAnimationFrame(animate)
 
@@ -1224,6 +1284,7 @@ function animate() {
   }
 
   updateFoliageDetail()
+  updateAerialPerspective()
 
   // Only the numbers are computed here; how a portal wears them is the
   // form's business (see portalForms.js). Skipped while the layer is

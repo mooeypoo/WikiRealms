@@ -17,6 +17,15 @@
   --surface-void: #05070d;                  /* behind the world */
   --surface-nebula: #0d1120;                /* the body gradient's lift */
   --surface-deep: #0a0d14;
+  /* What distance fades into. The renderer reads this and hazes far
+     terrain toward it, so the horizon dissolves into the backdrop
+     instead of ending on a hard silhouette. It lives here, with the
+     sky it has to agree with, rather than as a number in a shader:
+     the body gradient behind the canvas is CSS, and a haze that did
+     not match it would draw a seam along every distant ridge. Lifted
+     a little off --surface-void so distance reads as veiled rather
+     than merely unlit. */
+  --surface-haze: #0a0f1c;
   --surface-1-solid: #0a0d14;               /* panel fill with no alpha */
   --surface-1: rgba(10, 13, 20, 0.9);       /* panels */
   --surface-2: rgba(16, 20, 28, 0.94);      /* raised, inside a panel */
