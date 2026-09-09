@@ -23,7 +23,7 @@
  * and typed arrays, so it unit-tests without a WebGL context — same
  * convention as terrainMesh.js and sectionHalos.js.
  */
-import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS, GRID, POLAR_CAPS } from '../../engine/generation/config.js'
 
 const TAU = Math.PI * 2
 
@@ -85,6 +85,31 @@ export const SPHERE_VIEW = Object.freeze({
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * How many rows from each pole the sphere surface sinks to sea under the
+ * ice medallion. Authored against GRID.height; scales on fixture grids.
+ * Kept here (not in polarMedallion.js) so this file stays free of three.
+ */
+function polarSinkRows(gridHeight) {
+  if (gridHeight <= 1) return 0
+  return Math.max(
+    0,
+    Math.round((POLAR_CAPS.reachRows * (gridHeight - 1)) / (GRID.height - 1)),
+  )
+}
+
+/**
+ * Height the sphere mesh uses at a row: sea under the medallion's
+ * footprint, otherwise the cell's real heightMap value.
+ */
+function sphereSurfaceHeightAt(gridY, gridHeight, height01) {
+  const sink = polarSinkRows(gridHeight)
+  if (sink <= 0) return height01
+  const rowsFromPole = Math.min(gridY, gridHeight - 1 - gridY)
+  if (rowsFromPole > sink) return height01
+  return BIOME_THRESHOLDS.oceanMaxHeight
 }
 
 /**
@@ -330,7 +355,16 @@ export const sphereProjection = Object.freeze({
   },
 
   buildSurfaceArrays(terrain, heightScale) {
-    return buildGridArrays(terrain, (gx, gy, h01) => this.toLocal(gx, gy, h01, terrain, heightScale), true)
+    // Polar rows stay in the buffer (attribute index space is fixed) but
+    // sit at sea under the ice medallion — see polarMedallion.js — so the
+    // lat/long ring no longer paints a puckered land star through the
+    // plate. Flat view keeps the generated ice heights untouched.
+    return buildGridArrays(
+      terrain,
+      (gx, gy, h01) =>
+        this.toLocal(gx, gy, sphereSurfaceHeightAt(gy, terrain.height, h01), terrain, heightScale),
+      true,
+    )
   },
 })
 

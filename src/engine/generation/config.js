@@ -336,11 +336,13 @@ export const PEAK_LAYOUT = Object.freeze({
  *
  * The latitude band that keeps continents off the poles (see
  * PEAK_LAYOUT.latitudeCompression) leaves both caps as empty ocean, which
- * reads as an unfinished planet. These fill them with a modest icecap.
+ * reads as an unfinished planet. These fill them with a modest icecap on
+ * the flat map and in the height/biome data the legend reads.
  *
  * Being centred ON the pole is what makes them safe: they cover every
- * longitude at the top and bottom rows, so they converge to a smooth cap
- * rather than the pinched wedge that arbitrary land near a pole produces.
+ * longitude at the top and bottom rows. On the planet view the same
+ * footprint is drawn as a separate faceted ice medallion (see
+ * polarMedallion.js) rather than as the lat/long ring, which puckers.
  * `reachRows` is deliberately small — these are landmarks, not continents.
  */
 export const POLAR_CAPS = Object.freeze({

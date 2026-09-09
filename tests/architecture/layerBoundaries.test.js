@@ -124,13 +124,15 @@ describe('layer boundaries', () => {
    * biomeColor.js and terrainMesh.js decided the colour of; colorLut.js
    * packs the winter grade that stylizedMaterial samples — the grade
    * function itself is pure, the DataTexture is just how it ships;
-   * limbGlow.js draws the atmosphere shell around the globe.
+   * limbGlow.js draws the atmosphere shell around the globe;
+   * polarMedallion.js draws the faceted ice plates at the poles.
    */
   const MAY_IMPORT_THREE = [
     'bladeGeometry.js',
     'canopyGeometry.js',
     'colorLut.js',
     'limbGlow.js',
+    'polarMedallion.js',
     'portalForms.js',
     'stylizedMaterial.js',
   ]

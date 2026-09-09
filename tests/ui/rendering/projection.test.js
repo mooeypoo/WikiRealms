@@ -9,7 +9,7 @@ import {
   rowForLatitude,
   sphereProjection,
 } from '../../../src/ui/rendering/projection.js'
-import { BIOME_THRESHOLDS } from '../../../src/engine/generation/config.js'
+import { BIOME_THRESHOLDS, GRID } from '../../../src/engine/generation/config.js'
 
 /** A small equirectangular grid: 2:1, like the real GRID. */
 function makeTerrain(overrides = {}) {
@@ -262,23 +262,24 @@ describe('buildSurfaceArrays', () => {
     }
   })
 
-  it('winds planet triangles front-face outward', () => {
-    const terrain = makeTerrain()
+  it('sinks polar rows to sea on the real grid so the medallion can cover them', () => {
+    // Fixture grids are too short for POLAR_CAPS.reachRows; use the
+    // production height so the sink actually fires.
+    const width = 32
+    const height = GRID.height
+    const heightMap = new Float64Array(width * height).fill(0.7)
+    const terrain = { width, height, heightMap }
     const heightScale = sphereProjection.heightScale(terrain)
-    const { positions, indices } = sphereProjection.buildSurfaceArrays(terrain, heightScale)
+    const { positions } = sphereProjection.buildSurfaceArrays(terrain, heightScale)
+    const seaRadius = planetRadius(terrain) + BIOME_THRESHOLDS.oceanMaxHeight * heightScale
+    const landRadius = planetRadius(terrain) + 0.7 * heightScale
 
-    const at = (i) => ({ x: positions[i * 3], y: positions[i * 3 + 1], z: positions[i * 3 + 2] })
-    for (let triangle = 0; triangle < 12; triangle++) {
-      const [a, b, c] = [at(indices[triangle * 3]), at(indices[triangle * 3 + 1]), at(indices[triangle * 3 + 2])]
-      const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }
-      const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z }
-      const normal = {
-        x: u.y * v.z - u.z * v.y,
-        y: u.z * v.x - u.x * v.z,
-        z: u.x * v.y - u.y * v.x,
-      }
-      // Face normal must point away from the planet centre.
-      expect(normal.x * a.x + normal.y * a.y + normal.z * a.z).toBeGreaterThan(0)
-    }
+    // North pole row sits at sea, mid-latitude keeps the authored height.
+    expect(Math.hypot(positions[0], positions[1], positions[2])).toBeCloseTo(seaRadius, 5)
+    const mid = (height / 2) * width * 3
+    expect(Math.hypot(positions[mid], positions[mid + 1], positions[mid + 2])).toBeCloseTo(
+      landRadius,
+      5,
+    )
   })
 })

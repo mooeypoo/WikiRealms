@@ -23,6 +23,7 @@ import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSea
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { buildLimbGlow } from '../rendering/limbGlow.js'
+import { buildPolarMedallions } from '../rendering/polarMedallion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
 import { archetypeHeight, buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
 import { buildUnderstoryGeometry, understoryHeight } from '../rendering/bladeGeometry.js'
@@ -136,6 +137,8 @@ let terrainMesh = null
 let waterMesh = null
 /** Atmosphere shell around the globe; null on the flat map. */
 let limbGlowMesh = null
+/** Faceted ice plates at the poles; null on the flat map. */
+let polarMedallionGroup = null
 let portalGroup = null
 let haloGroup = null
 let understoryGroup = null
@@ -997,6 +1000,14 @@ function clearScene() {
     limbGlowMesh.material.dispose()
     limbGlowMesh = null
   }
+  if (polarMedallionGroup) {
+    worldGroup.remove(polarMedallionGroup)
+    polarMedallionGroup.traverse((child) => {
+      child.geometry?.dispose()
+      child.material?.dispose()
+    })
+    polarMedallionGroup = null
+  }
   // The portal form owns resources its objects share — one texture for
   // the whole layer — so it is disposed as a unit rather than per child.
   portalForm?.dispose()
@@ -1076,6 +1087,19 @@ function rebuildScene() {
       sunDirection: sun.position.clone().normalize(),
     })
     worldGroup.add(limbGlowMesh)
+
+    // Ice plates at the poles — replace the puckered lat/long ring the
+    // height map would otherwise paint there. Season grade wants the
+    // same windMaterials list the ground is on.
+    polarMedallionGroup = buildPolarMedallions({
+      radius,
+      heightScale,
+      gridHeight: props.world.terrain.height,
+    })
+    polarMedallionGroup.traverse((child) => {
+      if (child.isMesh && child.material) windMaterials.push(child.material)
+    })
+    worldGroup.add(polarMedallionGroup)
   }
 
   markRestless()
