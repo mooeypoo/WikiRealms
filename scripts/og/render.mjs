@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 /**
- * Rasterize the OG card HTML to public/og.png (1200×630) and a square
- * apple-touch-icon. Requires Google Chrome. Re-run after editing card.html.
+ * Rasterize brand assets into public/:
+ *   - og.png / og.svg (Open Graph card)
+ *   - favicon.svg, favicon.ico, icon-*.png, apple-touch-icon.png
  *
- *   node scripts/og/render.mjs
+ * Requires Google Chrome. Re-run after editing card.html / icon.html:
+ *   npm run og:render
  */
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -14,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const publicDir = join(root, 'public')
 const cardHtml = join(root, 'scripts/og/card.html')
+const iconHtml = join(root, 'scripts/og/icon.html')
 const chrome =
   process.env.CHROME_PATH ||
   ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].find((p) => {
@@ -60,30 +63,49 @@ function screenshotWithFonts(htmlPath, outPng, size) {
   }
 }
 
+/** PNG-in-ICO container — enough for modern browsers without ImageMagick. */
+function writePngIco(pngPath, icoPath) {
+  const png = readFileSync(pngPath)
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(1, 4)
+  const entry = Buffer.alloc(16)
+  entry[0] = 32
+  entry[1] = 32
+  entry.writeUInt16LE(1, 4)
+  entry.writeUInt16LE(32, 6)
+  entry.writeUInt32LE(png.length, 8)
+  entry.writeUInt32LE(6 + 16, 12)
+  writeFileSync(icoPath, Buffer.concat([header, entry, png]))
+}
+
 const ogOut = join(publicDir, 'og.png')
 screenshotWithFonts(cardHtml, ogOut, { width: 1200, height: 630 })
 console.log(`wrote ${ogOut}`)
 
-// Apple touch: crop-centered mark on void, 180×180
-const iconHtml = join(dirname(cardHtml), 'icon.html')
-const touchOut = join(publicDir, 'apple-touch-icon.png')
-screenshotWithFonts(iconHtml, touchOut, { width: 180, height: 180 })
-console.log(`wrote ${touchOut}`)
-
-// Keep a static SVG favicon (no rasterize needed)
-const favicon = join(publicDir, 'favicon.svg')
-writeFileSync(
-  favicon,
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="6" fill="#05070d"/>
-  <path d="M16 5.5L25 16l-9 10.5L7 16z" stroke="#74d6e8" stroke-width="1.6" stroke-linejoin="round"/>
-  <circle cx="16" cy="16" r="2.8" fill="#74d6e8"/>
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="7" fill="#05070d"/>
+  <path d="M16 4.5L27 16L16 27.5L5 16Z" stroke="#74d6e8" stroke-width="2.25" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="3.4" fill="#74d6e8"/>
 </svg>
-`,
-)
-console.log(`wrote ${favicon}`)
+`
 
-// Also export a portable SVG OG source (text may fall back without fonts)
+const faviconSvg = join(publicDir, 'favicon.svg')
+writeFileSync(faviconSvg, FAVICON_SVG)
+console.log(`wrote ${faviconSvg}`)
+
+for (const size of [32, 180, 192, 512]) {
+  const name = size === 180 ? 'apple-touch-icon.png' : `icon-${size}.png`
+  const out = join(publicDir, name)
+  screenshotWithFonts(iconHtml, out, { width: size, height: size })
+  console.log(`wrote ${out}`)
+}
+
+const faviconIco = join(publicDir, 'favicon.ico')
+writePngIco(join(publicDir, 'icon-32.png'), faviconIco)
+console.log(`wrote ${faviconIco}`)
+
 const ogSvg = join(publicDir, 'og.svg')
 writeFileSync(
   ogSvg,
@@ -121,8 +143,6 @@ writeFileSync(
   <rect x="28" y="28" width="1144" height="574" fill="none" stroke="rgba(163,184,205,0.22)" stroke-width="1"/>
   <path d="M28 46h18M28 28v18" stroke="#74d6e8" stroke-width="2" stroke-opacity="0.55"/>
   <path d="M1154 584h18M1172 566v18" stroke="#74d6e8" stroke-width="2" stroke-opacity="0.55" transform="translate(-18,0)"/>
-
-  <!-- Static planet -->
   <circle cx="960" cy="300" r="188" fill="url(#atmos)"/>
   <circle cx="960" cy="300" r="172" fill="none" stroke="rgba(116,214,232,0.28)" stroke-width="1.25"/>
   <g clip-path="url(#disc)">
@@ -144,7 +164,6 @@ writeFileSync(
   </g>
   <circle cx="960" cy="300" r="168" fill="none" stroke="rgba(163,184,205,0.35)" stroke-width="1.5"/>
   <path d="M840 215 C875 165, 940 145, 1005 165" stroke="rgba(233,237,243,0.35)" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.7"/>
-
   <g transform="translate(56,210)" fill="none" stroke="#74d6e8" stroke-width="4.5" stroke-linejoin="round">
     <path d="M0 36 L36 0 L72 36 L36 72 Z" transform="scale(1.15)"/>
     <circle cx="41.4" cy="41.4" r="9" fill="#74d6e8" stroke="none"/>
