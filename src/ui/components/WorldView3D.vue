@@ -687,10 +687,11 @@ function buildFoliage(world, heightScale, skyVisibility, sunlightMap) {
 }
 
 /**
- * Builds one THREE.Group per world containing a "ground ring" + "energy
- * wall" pair for every top-level and subsection peak. Positioned in the
- * mesh's local frame — the shared worldGroup rotation carries them into
- * world-Y-up along with the terrain.
+ * Builds one THREE.Group per world containing batched ground rings and
+ * energy walls (two draw calls for the whole layer) plus an invisible
+ * fill mesh per peak for picking. Positioned in the mesh's local frame —
+ * the shared worldGroup rotation carries them into world-Y-up along with
+ * the terrain.
  *
  * Halo opacities are animated per-frame from hoverState in updateHalos();
  * this function only allocates geometry and initial idle opacity.
@@ -712,35 +713,27 @@ function buildSectionHalos(world, heightScale) {
     childrenOf: (peak) => sized.filter((other) => (other.depth ?? 0) > 1 && other.sectionIndex === peak.peakIndex),
   }
 
+  // First pass: build every peak's arrays so we can concatenate them into
+  // two shared meshes. Per-peak materials used to cost 2 draws each;
+  // vertex colours carry opacity into one additive material apiece.
+  const ringPieces = []
+  const wallPieces = []
+  const peakRecords = []
+
   for (let i = 0; i < peaks.length; i++) {
     const peak = { ...sized[i], peakIndex: i }
     const isTopLevel = (peak.depth ?? 0) <= 1
 
     const local = computePeakFlagPosition(peak, terrain, heightScale, 0, projection)
-    // Sections hold their subsections at arm's length; a subsection's own
-    // boundary hugs it, or neighbouring markers merge on a dense ridge.
     const ringMargin = ringMarginFor(isTopLevel)
     const ringRadii = computeRingRadii(ringMargin)
     const wallRadiusGrid = computeWallRadius(ringMargin)
     const wallHeightGrid = computeWallHeight(peak.amplitude)
-
-    // The wall's world height is grid-height units, matched to the
-    // terrain's own heightScale so visual proportions stay consistent
-    // regardless of grid size — and, because the planet's height scale is
-    // a fraction of its radius, so the wall keeps the same ratio to the
-    // mountain it marks in both projections.
     const wallHeightWorld = wallHeightGrid * (heightScale / 40)
 
-    // Initial opacity/height match this peak's idle state (0 for
-    // subsections so they don't flash in on first render, low for
-    // top-level).
     const initialOpacity = pickHaloOpacity(null, !isTopLevel)
     const initialHeightScale = pickWallHeightScale(null, !isTopLevel)
 
-    // Both markers are built in grid space and draped over the terrain by
-    // the projection, so they follow the ground and the planet's
-    // curvature instead of being flat primitives parked at the summit.
-    // See haloGeometry.js for why that matters.
     const ringArrays = buildHaloRingArrays(
       peak,
       terrain,
@@ -750,24 +743,6 @@ function buildSectionHalos(world, heightScale) {
       SECTION_MARKERS.ring.hoverOffset,
       outlineContext,
     )
-    const ringGeo = new THREE.BufferGeometry()
-    ringGeo.setAttribute('position', new THREE.BufferAttribute(ringArrays.positions, 3))
-    ringGeo.setIndex(new THREE.BufferAttribute(ringArrays.indices, 1))
-
-    // fog: false throughout the halo, for the reason given on the
-    // portal sprites — a section marker is an affordance, and the haze
-    // is for scenery.
-    const ringMat = new THREE.MeshBasicMaterial({
-      fog: false,
-      color: accentColor,
-      transparent: true,
-      opacity: initialOpacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-    const ring = new THREE.Mesh(ringGeo, ringMat)
-
     const wallArrays = buildHaloWallArrays(
       peak,
       terrain,
@@ -779,31 +754,94 @@ function buildSectionHalos(world, heightScale) {
       initialHeightScale,
       outlineContext,
     )
-    const wallGeo = new THREE.BufferGeometry()
-    wallGeo.setAttribute('position', new THREE.BufferAttribute(wallArrays.positions, 3))
-    wallGeo.setIndex(new THREE.BufferAttribute(wallArrays.indices, 1))
 
-    const wallMat = new THREE.MeshBasicMaterial({
-      fog: false,
-      color: accentColor,
-      transparent: true,
-      opacity: initialOpacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
+    ringPieces.push(ringArrays)
+    wallPieces.push(wallArrays)
+    peakRecords.push({
+      peak,
+      isTopLevel,
+      local,
+      wallArrays,
+      wallHeightWorld,
+      initialOpacity,
+      initialHeightScale,
+      ringVertCount: ringArrays.positions.length / 3,
+      wallVertCount: wallArrays.positions.length / 3,
     })
-    const wall = new THREE.Mesh(wallGeo, wallMat)
+  }
 
-    // Invisible hit area over the whole footprint, so pointing anywhere
-    // inside a marker selects it rather than only its outline. Never
-    // rendered — three.js's raycaster tests layers, not visibility, which
-    // is what makes this work (and keeps it out of the draw call list).
+  const ringBatch = concatHaloPieces(ringPieces)
+  const wallBatch = concatHaloPieces(wallPieces)
+
+  // Wall height animation writes through wallArrays.positions — point
+  // those at views into the shared buffer so one attribute needsUpdate
+  // covers every curtain.
+  let wallVertCursor = 0
+  for (let i = 0; i < peakRecords.length; i++) {
+    const record = peakRecords[i]
+    const n = record.wallVertCount
+    const start = wallVertCursor * 3
+    wallBatch.positions.set(record.wallArrays.positions, start)
+    record.wallArrays.positions = wallBatch.positions.subarray(start, start + n * 3)
+    record.wallVertStart = wallVertCursor
+    record.ringVertStart = ringBatch.ranges[i].vertStart
+    wallVertCursor += n
+  }
+
+  const ringGeo = new THREE.BufferGeometry()
+  ringGeo.setAttribute('position', new THREE.BufferAttribute(ringBatch.positions, 3))
+  ringGeo.setAttribute('color', new THREE.BufferAttribute(ringBatch.colors, 3))
+  ringGeo.setIndex(new THREE.BufferAttribute(ringBatch.indices, 1))
+
+  const wallGeo = new THREE.BufferGeometry()
+  wallGeo.setAttribute('position', new THREE.BufferAttribute(wallBatch.positions, 3))
+  wallGeo.setAttribute('color', new THREE.BufferAttribute(wallBatch.colors, 3))
+  wallGeo.setIndex(new THREE.BufferAttribute(wallBatch.indices, 1))
+
+  // fog: false — a section marker is an affordance; the haze is for scenery.
+  const ringMat = new THREE.MeshBasicMaterial({
+    fog: false,
+    color: 0xffffff,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const wallMat = new THREE.MeshBasicMaterial({
+    fog: false,
+    color: 0xffffff,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat)
+  ringMesh.name = 'haloRingBatch'
+  ringMesh.userData.haloBatch = true
+  const wallMesh = new THREE.Mesh(wallGeo, wallMat)
+  wallMesh.name = 'haloWallBatch'
+  wallMesh.userData.haloBatch = true
+  group.add(ringMesh, wallMesh)
+  group.userData.ringMesh = ringMesh
+  group.userData.wallMesh = wallMesh
+  group.userData.ringColors = ringBatch.colors
+  group.userData.wallColors = wallBatch.colors
+
+  for (let i = 0; i < peakRecords.length; i++) {
+    const record = peakRecords[i]
+    const { peak, isTopLevel } = record
+
     const fillArrays = buildHaloFillArrays(
       peak,
       terrain,
       heightScale,
       projection,
-      ringRadii.outer,
+      computeRingRadii(ringMarginFor(isTopLevel)).outer,
       SECTION_MARKERS.ring.hoverOffset,
       outlineContext,
     )
@@ -816,40 +854,85 @@ function buildSectionHalos(world, heightScale) {
     )
     fill.visible = false
 
-    // Vertices are already in the mesh's local frame, so the group is a
-    // plain container at the origin; the summit is carried in userData
-    // for the tooltip to project.
     const peakGroup = new THREE.Group()
-    peakGroup.add(ring, wall, fill)
+    peakGroup.add(fill)
     peakGroup.userData.peakIndex = i
     peakGroup.userData.peak = peak
     peakGroup.userData.isTopLevel = isTopLevel
-    // Per-peak phase so adjacent halos don't beat in unison.
     peakGroup.userData.pulsePhase = (peak.x * 0.7 + peak.y * 1.3) % (Math.PI * 2)
-    peakGroup.userData.ringMaterial = ringMat
-    peakGroup.userData.wallMaterial = wallMat
-    // Wall mesh + the geometry it was built from, so the per-frame height
-    // animation can rescale it about its base instead of its center.
-    peakGroup.userData.wallMesh = wall
-    // The curtain's base ring and up vectors, so the height animation can
-    // move only its top edge (see updateHaloWallHeights).
-    peakGroup.userData.wallArrays = wallArrays
-    peakGroup.userData.wallHeight = wallHeightWorld
-    peakGroup.userData.wallScale = initialHeightScale
-    // Summit in mesh-local space. The group itself is at the origin now
-    // that its children carry absolute positions, so the tooltip can't
-    // just read the group's world position.
-    peakGroup.userData.summitLocal = new THREE.Vector3(local.x, local.y, local.z)
-    // Every halo is scene-graph visible; opacity does the LOD work.
-    // Subsections idle at 0 opacity so they hide until their parent is
-    // hovered (see pickHaloOpacity/relationshipToHover). 'none' hides
-    // the whole group; 'all' just clamps subsection idle floor (unused
-    // for now — Phase 6 filter toggles will formalize this).
+    peakGroup.userData.opacity = record.initialOpacity
+    peakGroup.userData.ringVertStart = record.ringVertStart
+    peakGroup.userData.ringVertCount = record.ringVertCount
+    peakGroup.userData.wallVertStart = record.wallVertStart
+    peakGroup.userData.wallVertCount = record.wallVertCount
+    peakGroup.userData.wallArrays = record.wallArrays
+    peakGroup.userData.wallHeight = record.wallHeightWorld
+    peakGroup.userData.wallScale = record.initialHeightScale
+    peakGroup.userData.summitLocal = new THREE.Vector3(record.local.x, record.local.y, record.local.z)
     peakGroup.visible = !hidden
     group.add(peakGroup)
+
+    writeHaloVertexColors(
+      ringBatch.colors,
+      record.ringVertStart,
+      record.ringVertCount,
+      accentColor,
+      record.initialOpacity,
+    )
+    writeHaloVertexColors(
+      wallBatch.colors,
+      record.wallVertStart,
+      record.wallVertCount,
+      accentColor,
+      record.initialOpacity,
+    )
   }
 
   return group
+}
+
+/**
+ * Concatenate per-peak halo arrays into one indexed mesh buffer.
+ * Indices are remapped so every peak's triangles address its own verts.
+ */
+function concatHaloPieces(pieces) {
+  let vertCount = 0
+  let indexCount = 0
+  for (const piece of pieces) {
+    vertCount += piece.positions.length / 3
+    indexCount += piece.indices.length
+  }
+  const positions = new Float32Array(vertCount * 3)
+  const colors = new Float32Array(vertCount * 3)
+  const indices = new Uint32Array(indexCount)
+  const ranges = []
+  let vCursor = 0
+  let iCursor = 0
+  for (const piece of pieces) {
+    const v0 = vCursor
+    const nVert = piece.positions.length / 3
+    positions.set(piece.positions, vCursor * 3)
+    for (let i = 0; i < piece.indices.length; i += 1) {
+      indices[iCursor++] = piece.indices[i] + v0
+    }
+    ranges.push({ vertStart: v0, vertCount: nVert })
+    vCursor += nVert
+  }
+  return { positions, colors, indices, ranges }
+}
+
+/** Accent × opacity into a vertex-colour range (additive MeshBasic). */
+function writeHaloVertexColors(colors, vertStart, vertCount, accent, opacity) {
+  const r = accent.r * opacity
+  const g = accent.g * opacity
+  const b = accent.b * opacity
+  const end = vertStart + vertCount
+  for (let v = vertStart; v < end; v += 1) {
+    const at = v * 3
+    colors[at] = r
+    colors[at + 1] = g
+    colors[at + 2] = b
+  }
 }
 
 /**
@@ -862,9 +945,15 @@ function updateHalos(nowSeconds) {
   if (!haloGroup) return
   const hoveredIdx = attentionIndex()
   const peaks = props.world?.terrain?.peaks
+  const ringColors = haloGroup.userData.ringColors
+  const wallColors = haloGroup.userData.wallColors
+  const ringMesh = haloGroup.userData.ringMesh
+  const wallMesh = haloGroup.userData.wallMesh
+  if (!ringColors || !wallColors || !ringMesh || !wallMesh) return
 
+  let wallMoved = false
   for (const peakGroup of haloGroup.children) {
-    if (!peakGroup.visible) continue
+    if (peakGroup.userData.peakIndex == null || !peakGroup.visible) continue
     const isSubsection = !peakGroup.userData.isTopLevel
     const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex, peaks)
     let targetOpacity = pickHaloOpacity(rel, isSubsection)
@@ -874,12 +963,23 @@ function updateHalos(nowSeconds) {
       targetOpacity += computeBreathingPulse(nowSeconds, peakGroup.userData.pulsePhase)
     }
 
-    const ringMat = peakGroup.userData.ringMaterial
-    const wallMat = peakGroup.userData.wallMaterial
-    // Simple exponential lerp toward target for smooth in/out.
     const alpha = 0.15
-    ringMat.opacity += (targetOpacity - ringMat.opacity) * alpha
-    wallMat.opacity += (targetOpacity - wallMat.opacity) * alpha
+    const opacity = peakGroup.userData.opacity + (targetOpacity - peakGroup.userData.opacity) * alpha
+    peakGroup.userData.opacity = opacity
+    writeHaloVertexColors(
+      ringColors,
+      peakGroup.userData.ringVertStart,
+      peakGroup.userData.ringVertCount,
+      accentColor,
+      opacity,
+    )
+    writeHaloVertexColors(
+      wallColors,
+      peakGroup.userData.wallVertStart,
+      peakGroup.userData.wallVertCount,
+      accentColor,
+      opacity,
+    )
 
     // Height animation: the hovered section's wall rises to full height
     // while its parent/siblings/unrelated neighbors sit lower, so the
@@ -895,9 +995,13 @@ function updateHalos(nowSeconds) {
     if (Math.abs(scale - previousScale) > 1e-4) {
       peakGroup.userData.wallScale = scale
       updateHaloWallHeights(peakGroup.userData.wallArrays, peakGroup.userData.wallHeight, scale)
-      peakGroup.userData.wallMesh.geometry.attributes.position.needsUpdate = true
+      wallMoved = true
     }
   }
+
+  ringMesh.geometry.attributes.color.needsUpdate = true
+  wallMesh.geometry.attributes.color.needsUpdate = true
+  if (wallMoved) wallMesh.geometry.attributes.position.needsUpdate = true
 }
 
 /**
@@ -951,7 +1055,9 @@ function updateSectionTooltip() {
   }
 
   // Find the halo peakGroup for the hovered peak — top-level OR subsection.
-  const peakGroup = haloGroup.children.find((c) => c.userData.peakIndex === hoveredIdx)
+  const peakGroup = haloGroup.children.find(
+    (c) => c.userData.peakIndex === hoveredIdx,
+  )
   if (!peakGroup) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
@@ -1313,7 +1419,7 @@ function collectHaloTargets() {
   const subMeshes = []
   const topMeshes = []
   for (const peakGroup of haloGroup.children) {
-    if (!peakGroup.visible) continue
+    if (peakGroup.userData.peakIndex == null || !peakGroup.visible) continue
     const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
     for (const child of peakGroup.children) bucket.push(child)
   }
