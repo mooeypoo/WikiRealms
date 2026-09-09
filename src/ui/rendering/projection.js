@@ -23,7 +23,7 @@
  * and typed arrays, so it unit-tests without a WebGL context — same
  * convention as terrainMesh.js and sectionHalos.js.
  */
-import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { BIOME_THRESHOLDS, GRID, POLAR_CAPS } from '../../engine/generation/config.js'
 
 const TAU = Math.PI * 2
 
@@ -37,6 +37,10 @@ export const FLAT_VIEW = Object.freeze({
   // flat map is the view they were authored against, so they pass
   // through unscaled.
   foliageScale: 1,
+  // Instance density is likewise authored for the flat map.
+  foliageDensityBoost: 1,
+  // Canopy sampling lattice — every other cell on the flat map.
+  canopyStride: 2,
   // Camera pull-back as a fraction of the larger grid axis.
   cameraDistanceRatio: 0.9,
   // Keeps the flat camera above the horizon — a plane viewed edge-on or
@@ -51,12 +55,29 @@ export const SPHERE_VIEW = Object.freeze({
   // views, but the HEIGHT range those cells rise through is 66.6 units
   // flat against 12.2 on the globe — a 5.4x compression. A tree authored
   // at 3 cells tall is 7% of a flat-view mountain and 36% of the same
-  // mountain on the planet, which is why the old sizes read as a fuzzy
-  // shell from orbit. Not the full 1/5.4: that would put the canopy
-  // below a pixel, and the canopy is distance-gated anyway, so this is
-  // the compromise that keeps a tree readable up close without letting
-  // it out-scale the range it stands on.
-  foliageScale: 0.42,
+  // mountain on the planet, which is why unscaled sizes read as a fuzzy
+  // shell from orbit.
+  //
+  // 0.42 / 0.58 still left wooded bands looking like tinted dirt from
+  // orbit — same plant count as flat, much smaller footprint. 0.65 is
+  // still under the relief ratio; canopy stays orbit-gated
+  // (shouldShowCanopy), understory stays on as ground texture.
+  foliageScale: 0.65,
+  // Extra chance a cell takes its variant on the globe. Equirectangular
+  // land is the same grid, but smaller plants leave gaps the eye reads
+  // as sparse; this closes woods without growing taller than the ranges.
+  foliageDensityBoost: 1.7,
+  // Flat keeps canopyStride 2 (see FOLIAGE_SAMPLING). On the globe that
+  // lattice, plus the smaller plants, reads as bare green on big
+  // wooded sections — sample every cell so stands can fill in.
+  canopyStride: 1,
+  // Portal markers are ~baseScale × 0.62 ≈ 3 world units in radius, and
+  // grow under the cursor. Authored cells can sit closer than that —
+  // especially two links from the same small section — and on the globe
+  // they become one unpickable blob. Flat keeps the sunflower cells;
+  // planet pushes pairs apart in grid space until this many cells apart.
+  portalMinSeparationCells: 11,
+  portalSpreadIterations: 12,
   // Vertical exaggeration as a fraction of the planet radius. Real
   // planets have imperceptible relief (Everest is 0.14% of Earth's
   // radius); this is the "readable globe" exaggeration, tuned so ranges
@@ -72,10 +93,15 @@ export const SPHERE_VIEW = Object.freeze({
   cameraDistanceRatio: 3.2,
   minDistanceRatio: 1.15,
   maxDistanceRatio: 9,
-  // A directional sun on a globe gives a real day/night terminator,
-  // which looks great — but at the flat view's 0.6 ambient the night
-  // side goes to pure black and half the planet is unreadable.
-  ambientLightIntensity: 0.85,
+  // A directional sun on a globe gives a real day/night terminator.
+  // The bake already puts half the cells at sunlight ≈ 0 (measured
+  // 64k night / 59k day on Everest), so the night side's brightness is
+  // almost entirely this ambient. At 0.85 the anti-sun view was only
+  // 1.25× darker than noon — readable, but not night. At 0.5 the same
+  // view lands near 1.5× with night land still around luminance 75,
+  // which is dim without going black; half-Lambert and the limb glow
+  // keep the dark side from falling into a void.
+  ambientLightIntensity: 0.5,
 })
 
 function clamp(value, min, max) {
@@ -83,10 +109,35 @@ function clamp(value, min, max) {
 }
 
 /**
+ * How many rows from each pole the sphere surface sinks to sea under the
+ * ice medallion. Authored against GRID.height; scales on fixture grids.
+ * Kept here (not in polarMedallion.js) so this file stays free of three.
+ */
+function polarSinkRows(gridHeight) {
+  if (gridHeight <= 1) return 0
+  return Math.max(
+    0,
+    Math.round((POLAR_CAPS.reachRows * (gridHeight - 1)) / (GRID.height - 1)),
+  )
+}
+
+/**
+ * Height the sphere mesh uses at a row: sea under the medallion's
+ * footprint, otherwise the cell's real heightMap value.
+ */
+function sphereSurfaceHeightAt(gridY, gridHeight, height01) {
+  const sink = polarSinkRows(gridHeight)
+  if (sink <= 0) return height01
+  const rowsFromPole = Math.min(gridY, gridHeight - 1 - gridY)
+  if (rowsFromPole > sink) return height01
+  return BIOME_THRESHOLDS.oceanMaxHeight
+}
+
+/**
  * Shared grid → indexed-triangle-mesh builder. Both projections lay out
  * exactly width × height vertices in row-major order, so a vertex index
  * is always `gridY * width + gridX` — the same index space as heightMap,
- * biomeMap and computeVertexColors' output. Only the vertex POSITIONS
+ * biomeMap and computeGroundAttributes' output. Only the vertex POSITIONS
  * and whether the last column stitches back to the first differ.
  *
  * Winding matches three.js PlaneGeometry's (a, b, d) / (b, c, d) order so
@@ -154,6 +205,8 @@ export const flatProjection = Object.freeze({
   isSpherical: false,
   ambientLightIntensity: FLAT_VIEW.ambientLightIntensity,
   foliageScale: FLAT_VIEW.foliageScale,
+  foliageDensityBoost: FLAT_VIEW.foliageDensityBoost,
+  canopyStride: FLAT_VIEW.canopyStride,
 
   heightScale(terrain) {
     return Math.min(terrain.width, terrain.height) * HEIGHT_SCALE_RATIO
@@ -182,6 +235,31 @@ export const flatProjection = Object.freeze({
     return { gridX, gridY }
   },
 
+
+
+  /**
+   * The water as a GRID at sea level, rather than the single quad it
+   * used to be.
+   *
+   * A plane of two triangles can only carry one colour and one opacity
+   * across the whole sea. Depth is what makes water read as water (see
+   * waterSurface.js), and depth is per cell, so the surface needs a
+   * vertex per cell to carry it — the same vertex layout as the terrain,
+   * in the same index space, so heightMap and both light maps index
+   * straight into it with no remapping.
+   *
+   * It spans the whole footprint including the parts over dry land,
+   * where the terrain simply draws in front of it. Trimming it to the
+   * cells below sea level would give the sea a boundary at cell
+   * resolution, which is the staircase this is meant to remove.
+   */
+  buildWaterArrays(terrain, heightScale) {
+    return buildGridArrays(
+      terrain,
+      (gridX, gridY) => this.toLocal(gridX, gridY, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale),
+      false,
+    )
+  },
 
   waterSurface(terrain, heightScale) {
     return BIOME_THRESHOLDS.oceanMaxHeight * heightScale
@@ -227,6 +305,8 @@ export const sphereProjection = Object.freeze({
   isSpherical: true,
   ambientLightIntensity: SPHERE_VIEW.ambientLightIntensity,
   foliageScale: SPHERE_VIEW.foliageScale,
+  foliageDensityBoost: SPHERE_VIEW.foliageDensityBoost,
+  canopyStride: SPHERE_VIEW.canopyStride,
 
   heightScale(terrain) {
     return planetRadius(terrain) * SPHERE_VIEW.reliefRatio
@@ -270,13 +350,46 @@ export const sphereProjection = Object.freeze({
   },
 
 
+/**
+   * The water as a GRID at sea level, rather than the single quad it
+   * used to be.
+   *
+   * A plane of two triangles can only carry one colour and one opacity
+   * across the whole sea. Depth is what makes water read as water (see
+   * waterSurface.js), and depth is per cell, so the surface needs a
+   * vertex per cell to carry it — the same vertex layout as the terrain,
+   * in the same index space, so heightMap and both light maps index
+   * straight into it with no remapping.
+   *
+   * It spans the whole footprint including the parts over dry land,
+   * where the terrain simply draws in front of it. Trimming it to the
+   * cells below sea level would give the sea a boundary at cell
+   * resolution, which is the staircase this is meant to remove.
+   */
+  buildWaterArrays(terrain, heightScale) {
+    return buildGridArrays(
+      terrain,
+      (gridX, gridY) => this.toLocal(gridX, gridY, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale),
+      true,
+    )
+  },
+
   /** Sea level as a RADIUS from the planet centre, not a Z height. */
   waterSurface(terrain, heightScale) {
     return planetRadius(terrain) + BIOME_THRESHOLDS.oceanMaxHeight * heightScale
   },
 
   buildSurfaceArrays(terrain, heightScale) {
-    return buildGridArrays(terrain, (gx, gy, h01) => this.toLocal(gx, gy, h01, terrain, heightScale), true)
+    // Polar rows stay in the buffer (attribute index space is fixed) but
+    // sit at sea under the ice medallion — see polarMedallion.js — so the
+    // lat/long ring no longer paints a puckered land star through the
+    // plate. Flat view keeps the generated ice heights untouched.
+    return buildGridArrays(
+      terrain,
+      (gx, gy, h01) =>
+        this.toLocal(gx, gy, sphereSurfaceHeightAt(gy, terrain.height, h01), terrain, heightScale),
+      true,
+    )
   },
 })
 

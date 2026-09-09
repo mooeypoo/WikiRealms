@@ -29,6 +29,29 @@
      old user-facing opacity slider is being retired rather than retuned. */
   --panel-alpha-min: 0.9;
 
+  /* ── ATMOSPHERE ────────────────────────────────────────────────────
+     The colour of the AIR over a realm, which the renderer mixes into
+     distant terrain so that distance reads as distance.
+
+     Deliberately NOT a surface, and deliberately not near --surface-void,
+     which is what it was first set to on the reasoning that a haze
+     matching the backdrop would let the horizon dissolve into it. That
+     reasoning was wrong twice over. The world's edge is a hard silhouette
+     against the starfield whatever colour the air is, because the haze
+     never reaches full strength inside the world. And a haze darker than
+     what it veils inverts the cue it exists for: aerial perspective works
+     because distant things shift toward a SKY brighter than the land, so
+     hazing toward near-black made far hills read as unlit rather than as
+     far, which is why the effect measured fine and could not be seen.
+
+     So this is a sky, not a shadow. At luminance 88 it sits just above
+     the terrain it veils (grass 87, water 77), which is the point: far
+     ground pales and shifts blue instead of darkening. Measured on the
+     default flat view, far land shifts 15.9 levels toward blue against
+     mid-ground's 8.2, while its own luminance moves -1.9 — a hue cue,
+     not a brightness one. */
+  --atmosphere: #34597c;
+
   /* ── INK ───────────────────────────────────────────────────────────
      Measured against --surface-1 over snow, the worst case in the app. */
   --ink-1: #e9edf3;                         /* 13.2:1 — body and headings */

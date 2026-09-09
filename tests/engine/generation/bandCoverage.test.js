@@ -6,6 +6,7 @@ import { generateWorld } from '../../../src/engine/generation/world.js'
 import { BIOME, LUSHNESS_BANDS, lushnessBand } from '../../../src/engine/generation/terrain.js'
 import { computeArticleCitationRate } from '../../../src/engine/generation/lushness.js'
 import {
+  FOLIAGE_DENSITY,
   FOLIAGE_SAMPLING,
   cellFoliageRolls,
   computeFoliageDensityScale,
@@ -108,7 +109,7 @@ function vegetationProfile(world) {
       const { variantRoll, densityRoll } = cellFoliageRolls(x, y, world.seed, 0)
       const variant = pickUnderstoryVariant(t.biomeMap[i], variantRoll)
       if (!variant) continue
-      if (densityRoll >= variant.density * computeFoliageDensityScale(t.lushnessMap[i], t.heightMap[i])) continue
+      if (densityRoll >= variant.density * computeFoliageDensityScale(t.lushnessMap[i], t.heightMap[i], FOLIAGE_DENSITY.understory)) continue
       understory += 1
     }
   }
@@ -119,7 +120,7 @@ function vegetationProfile(world) {
       const { variantRoll, densityRoll } = cellFoliageRolls(x, y, world.seed, 1)
       const variant = pickCanopyVariant(t.biomeMap[i], variantRoll)
       if (!variant) continue
-      if (densityRoll >= variant.density * computeFoliageDensityScale(t.lushnessMap[i], t.heightMap[i])) continue
+      if (densityRoll >= variant.density * computeFoliageDensityScale(t.lushnessMap[i], t.heightMap[i], FOLIAGE_DENSITY.canopy)) continue
       canopy += 1
       archetypes.add(resolveArchetypeForAltitude(variant.archetype, t.heightMap[i]))
     }

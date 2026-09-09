@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { GRID } from '../../../src/engine/generation/config.js'
+import { frostCover } from '../../../src/engine/generation/terrain.js'
 import { generateWorld } from '../../../src/engine/generation/world.js'
+import { scatterFoliage } from '../../../src/ui/rendering/foliageScatter.js'
+import { flatProjection } from '../../../src/ui/rendering/projection.js'
 import {
   cassiniDivisionArticle,
   cassiniDivisionHtml,
@@ -47,6 +50,34 @@ describe('Cassini Division story fixture', () => {
     expect(cassiniDivisionWorld.terrain.height).toBe(GRID.height)
     expect(cassiniDivisionWorld.terrain.peaks.length).toBeGreaterThan(0)
     expect(cassiniDivisionWorld.portals.length).toBeGreaterThan(10)
+  })
+
+  it('grows trees high enough to actually carry snow', () => {
+    // The regression this exists for: snow on crowns shipped correct and
+    // invisible. The shader worked, the attribute was right, the unit
+    // tests passed — and on this world exactly 0 of 517 trees stood
+    // anywhere a cap would be drawn, because the treeline ended at 0.86
+    // and the ground's snow band did not begin in earnest until well
+    // above it. Every test asked whether the mechanism worked. None
+    // asked whether anything reached it.
+    //
+    // So this one counts pixels-worth of effect on a real world, which
+    // is the only kind of assertion that could have failed back then.
+    const terrain = cassiniDivisionWorld.terrain
+    const { canopy } = scatterFoliage(terrain, cassiniDivisionWorld.seed, {
+      projection: flatProjection,
+      heightScale: flatProjection.heightScale(terrain),
+      cellScale: 1,
+    })
+
+    const heights = canopy.flatMap((layer) => Array.from(layer.heights))
+    const capped = heights.filter((height) => frostCover(height) > 0.25)
+
+    expect(heights.length).toBeGreaterThan(100)
+    // 38 at the time of writing. The floor is low enough to survive the
+    // fixture's prose being edited and high enough that a band change
+    // which quietly re-strands the effect fails here.
+    expect(capped.length).toBeGreaterThan(15)
   })
 
   it('is byte-stable across regeneration apart from generatedAt', () => {

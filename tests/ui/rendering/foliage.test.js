@@ -6,16 +6,22 @@ import {
   FOLIAGE_DENSITY,
   FOLIAGE_SAMPLING,
   UNDERSTORY_BY_BAND,
+  UNDERSTORY_JITTER,
   canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
   foliageInstanceColor,
+  foliageTintColor,
+  understoryAccentColor,
   pickCanopyVariant,
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
   shouldShowCanopy,
+  apparentPixels,
+  foliageDetailFraction,
+  FOLIAGE_LOD,
 } from '../../../src/ui/rendering/foliage.js'
-import { SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
+import { FLAT_VIEW, SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
 
@@ -148,10 +154,13 @@ describe('CANOPY_ARCHETYPES', () => {
   })
 
   it('gives the conifer a spire and the broadleaf a mass', () => {
-    expect(CANOPY_ARCHETYPES.conifer.crown).toBe('cone')
+    expect(CANOPY_ARCHETYPES.conifer.crown).toBe('tiered')
     expect(CANOPY_ARCHETYPES.broadleaf.crown).toBe('round')
     // A conifer is taller and narrower than a broadleaf, or the two read
-    // as the same tree.
+    // as the same tree. The narrowness is the binding one: tiers hold
+    // more snow the wider the crown they are spread over, so this is the
+    // constraint the tier count has to work around rather than a
+    // preference — see the archetype's own note.
     expect(CANOPY_ARCHETYPES.conifer.crownHeight).toBeGreaterThan(CANOPY_ARCHETYPES.broadleaf.crownHeight)
     expect(CANOPY_ARCHETYPES.conifer.crownRadius).toBeLessThan(CANOPY_ARCHETYPES.broadleaf.crownRadius)
   })
@@ -269,6 +278,31 @@ describe('foliageInstanceColor', () => {
   })
 })
 
+describe('understoryAccentColor', () => {
+  it('matches brightness tint when the roll is below the accent band', () => {
+    const roll = 0.5
+    const plain = foliageTintColor(0x75ba55, roll, UNDERSTORY_JITTER)
+    const accented = understoryAccentColor(0x75ba55, 'grass', roll)
+
+    expect(accented).toEqual(plain)
+  })
+
+  it('shifts grass toward a warmer petal in the accent band', () => {
+    const roll = 0.99
+    const plain = foliageTintColor(0x75ba55, roll, UNDERSTORY_JITTER)
+    const accented = understoryAccentColor(0x75ba55, 'grass', roll)
+
+    // More red relative to green than the meadow leaf it started as.
+    expect(accented.r / accented.g).toBeGreaterThan(plain.r / plain.g)
+  })
+
+  it('leaves scrub dull even at a high roll', () => {
+    const roll = 0.99
+    const plain = foliageTintColor(0x9a7d42, roll, UNDERSTORY_JITTER)
+    expect(understoryAccentColor(0x9a7d42, 'scrub', roll)).toEqual(plain)
+  })
+})
+
 describe('canopyInstanceTransform', () => {
   it('varies scale across the configured range', () => {
     expect(canopyInstanceTransform(0, 0, 0).scale).toBeCloseTo(CANOPY_JITTER.minScale)
@@ -351,6 +385,139 @@ describe('shouldShowCanopy', () => {
   })
 })
 
+describe('apparentPixels', () => {
+  it('reproduces the measurements FOLIAGE_SAMPLING was tuned against', () => {
+    // Those figures were taken by hand at a 50-degree field of view on a
+    // 900px viewport, and canopyVisibleRadiusRatio rests on them. If
+    // this arithmetic disagrees with them, one of the two is wrong.
+    //
+    // They reproduce to a tenth of a pixel — but ONLY when the distance
+    // is measured to the planet's surface rather than its centre, which
+    // is how this function's contract came to say so. Measured to the
+    // centre, the same three come out 3.3, 24.6 and 1.2, and a caller
+    // making that mistake thins the vegetation hardest exactly where the
+    // camera gets closest to it.
+    const radius = 512 / (Math.PI * 2)
+    const treeHeight = 2.15 * SPHERE_VIEW.foliageScale
+    const at = (ratio) => apparentPixels(treeHeight, radius * (ratio - 1), 900, 50)
+
+    expect(at(SPHERE_VIEW.cameraDistanceRatio)).toBeCloseTo(7.5, 1)
+    expect(at(SPHERE_VIEW.minDistanceRatio)).toBeCloseTo(110.3, 0)
+    expect(at(SPHERE_VIEW.maxDistanceRatio)).toBeCloseTo(2.1, 1)
+  })
+
+  it('halves when the camera doubles its distance', () => {
+    expect(apparentPixels(2, 100, 900, 50)).toBeCloseTo(apparentPixels(2, 200, 900, 50) * 2, 6)
+  })
+
+  it('grows with the drawing buffer, not the CSS size', () => {
+    // Which is why the caller passes the drawing buffer height: raising
+    // the pixel ratio genuinely does make a plant bigger in pixels, and
+    // so worth drawing from further away.
+    expect(apparentPixels(2, 100, 1800, 50)).toBeCloseTo(apparentPixels(2, 100, 900, 50) * 2, 6)
+  })
+
+  it('does not divide by a camera sitting on the origin', () => {
+    expect(apparentPixels(2, 0, 900, 50)).toBe(Infinity)
+  })
+})
+
+describe('foliageDetailFraction', () => {
+  it('draws everything while a plant is still worth drawing', () => {
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels)).toBe(1)
+    expect(foliageDetailFraction(50)).toBe(1)
+    expect(foliageDetailFraction(Infinity)).toBe(1)
+  })
+
+  it('holds plants-per-pixel constant as the camera retreats', () => {
+    // The whole justification for the curve. Apparent size falls as 1/d
+    // and the count of plants on screen does not fall at all, so plants
+    // per pixel would grow as d^2 — a pixel covered by six blades of
+    // grass shows the average of six blades, which is a flat colour one
+    // blade could have drawn.
+    //
+    // Thinning by the SQUARE of apparent size is exactly the rate that
+    // cancels it, so the layer costs the same per pixel at any distance.
+    const half = FOLIAGE_LOD.fullDetailPixels / 2
+    const quarter = FOLIAGE_LOD.fullDetailPixels / 4
+
+    expect(foliageDetailFraction(half)).toBeCloseTo(0.25, 6)
+    expect(foliageDetailFraction(quarter)).toBeCloseTo(0.0625, 6)
+  })
+
+  it('keeps a floor, so a layer thins rather than popping', () => {
+    expect(foliageDetailFraction(0)).toBe(FOLIAGE_LOD.minFraction)
+    expect(foliageDetailFraction(-5)).toBe(FOLIAGE_LOD.minFraction)
+    expect(FOLIAGE_LOD.minFraction).toBeGreaterThan(0)
+  })
+
+  it("never exceeds the tier's own density", () => {
+    // The two multiply: a low tier thins everywhere, and distance thins
+    // it further. A tier ceiling that distance could climb back over
+    // would make the low tier the more expensive one up close.
+    expect(foliageDetailFraction(100, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(Infinity, 0.45)).toBe(0.45)
+    expect(foliageDetailFraction(FOLIAGE_LOD.fullDetailPixels / 2, 0.45)).toBeCloseTo(0.25, 6)
+  })
+
+  it('never increases as the camera pulls away', () => {
+    let previous = Infinity
+    for (let apparent = 40; apparent >= 0; apparent -= 0.25) {
+      const fraction = foliageDetailFraction(apparent)
+      expect(fraction).toBeLessThanOrEqual(previous)
+      previous = fraction
+    }
+  })
+
+  it('thins nothing at the camera a world opens in', () => {
+    // The bug this exists to prevent, which was written before it was
+    // caught: the threshold was set from a TREE's apparent size, about 5
+    // px at either default camera, and then applied per layer using each
+    // layer's own height. Grass is short — 2.1 px on the flat map, 2.3
+    // on the planet — so ground cover was culled to 12% in the view
+    // every reader arrives in, undoing the layer it was meant to
+    // protect.
+    //
+    // The smallest thing that grows is the measure, not the largest.
+    const radius = 512 / (Math.PI * 2)
+    const shortestGrass = 1.15 * 0.6 * 0.9665 // grass form, steppe size, tilt
+    const flat = apparentPixels(shortestGrass, 512 * FLAT_VIEW.cameraDistanceRatio, 1080, 50)
+    const planet = apparentPixels(
+      shortestGrass * SPHERE_VIEW.foliageScale,
+      radius * (SPHERE_VIEW.cameraDistanceRatio - 1),
+      1080,
+      50,
+    )
+
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeLessThan(Math.min(flat, planet))
+    expect(foliageDetailFraction(flat)).toBe(1)
+    expect(foliageDetailFraction(planet)).toBe(1)
+  })
+
+  it('still thins hard at the orbit the camera can reach', () => {
+    // Which is the whole point: at the furthest zoom a grass clump is
+    // under a pixel, and thousands of them is tens of thousands of
+    // triangles of shimmer.
+    const radius = 512 / (Math.PI * 2)
+    const grass = 1.15 * 0.75 * 0.9665 * SPHERE_VIEW.foliageScale
+    const furthest = apparentPixels(grass, radius * (SPHERE_VIEW.maxDistanceRatio - 1), 1080, 50)
+
+    expect(furthest).toBeLessThan(1)
+    expect(foliageDetailFraction(furthest)).toBeLessThan(0.45)
+  })
+
+  it('stays under a pixel of shimmer, which is what the threshold means', () => {
+    // Below about one pixel a triangle catches the raster grid
+    // intermittently, and with MSAA on that is shimmer rather than
+    // texture. The threshold is that point with a little margin, so it
+    // has to sit near one pixel and not wander up into the range where
+    // plants are plainly visible.
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeGreaterThan(1)
+    expect(FOLIAGE_LOD.fullDetailPixels).toBeLessThan(2)
+  })
+})
+
 describe('FOLIAGE_SAMPLING', () => {
   it('samples the understory at least as densely as the canopy', () => {
     // Grass wants to be continuous; a tree needs room for its crown.
@@ -368,7 +535,24 @@ describe('computeFoliageDensityScale', () => {
   it('leaves the biome default alone for a section at its article’s own rate', () => {
     // Lushness 0.5 means "cites like the rest of this article", and the
     // variant densities are already tuned for that, so the scale is 1.
-    expect(computeFoliageDensityScale(0.5)).toBeCloseTo(1)
+    //
+    // TRUE OF BOTH CURVES, which is the constraint that keeps them
+    // comparable: each is symmetric about 1.0, so widening one does not
+    // shift every band's tuned density under it.
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(0.5, 0, curve)).toBeCloseTo(1)
+    }
+  })
+
+  it('answers to lushness more steeply for trees than for grass', () => {
+    // The reason there are two curves at all. Grass grows on anything
+    // that is not desert; a wood is what a well-sourced section grows,
+    // so the canopy has to separate a thin section from a thorough one
+    // by more than the ground cover does.
+    const spread = (curve) =>
+      computeFoliageDensityScale(1, 0, curve) / computeFoliageDensityScale(0, 0, curve)
+
+    expect(spread(FOLIAGE_DENSITY.canopy)).toBeGreaterThan(spread(FOLIAGE_DENSITY.understory) * 2)
   })
 
   it('thins foliage across the treeline instead of deleting it', () => {
@@ -376,7 +560,13 @@ describe('computeFoliageDensityScale', () => {
     // quarter of every world's land was bare by construction.
     const low = computeFoliageDensityScale(0.5, 0.4)
     const middle = computeFoliageDensityScale(0.5, (ALTITUDE.treelineStart + ALTITUDE.treelineEnd) / 2)
-    const high = computeFoliageDensityScale(0.5, 0.95)
+    // The top of the band as this lushness lifts it, rather than a
+    // height picked as "obviously high". 0.95 was that number, and it
+    // stopped being above the treeline the moment the treeline moved.
+    const high = computeFoliageDensityScale(
+      0.5,
+      ALTITUDE.treelineEnd + ALTITUDE.treelineLushnessLift * 0.5,
+    )
 
     expect(middle).toBeLessThan(low)
     expect(middle).toBeGreaterThan(0)
@@ -396,8 +586,10 @@ describe('computeFoliageDensityScale', () => {
   })
 
   it('spans the configured floor and ceiling across the scalar at ground level', () => {
-    expect(computeFoliageDensityScale(0, 0)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(1, 0)).toBe(FOLIAGE_DENSITY.max)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(0, 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(1, 0, curve)).toBe(curve.max)
+    }
   })
 
   it('is monotone in lushness', () => {
@@ -410,13 +602,17 @@ describe('computeFoliageDensityScale', () => {
   })
 
   it('clamps a scalar outside [0, 1] rather than extrapolating', () => {
-    expect(computeFoliageDensityScale(-3, 0)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(9, 0)).toBe(FOLIAGE_DENSITY.max)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(-3, 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(9, 0, curve)).toBe(curve.max)
+    }
   })
 
   it('treats a non-numeric or missing scalar as 0', () => {
-    expect(computeFoliageDensityScale('not-a-number')).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(undefined)).toBe(FOLIAGE_DENSITY.min)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale('not-a-number', 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(undefined, 0, curve)).toBe(curve.min)
+    }
   })
 })
 

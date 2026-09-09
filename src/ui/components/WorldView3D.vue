@@ -3,13 +3,30 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { detectWebGLSupport } from '../rendering/webglSupport.js'
+import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
+import { hazeRange } from '../rendering/aerialPerspective.js'
+import { computeSkyVisibility } from '../rendering/occlusion.js'
+import { computeSunlight } from '../rendering/sunlight.js'
 import {
-  computePeakFlagPosition,
-  computePortalLocalPosition,
-  computeVertexColors,
-} from '../rendering/terrainMesh.js'
+  RIPPLE,
+  SHELF_WIDTH,
+  SURF,
+  WATER,
+  WATER_SKY_REFLECTION,
+  computeWaterAttributes,
+  dropDryTriangles,
+  rippleStrength,
+  shortestRippleWavelength,
+  surfStrength,
+} from '../rendering/waterSurface.js'
+import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSeason, setSurf, setWind } from '../rendering/stylizedMaterial.js'
+import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
+import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
+import { buildLimbGlow } from '../rendering/limbGlow.js'
+import { buildPolarMedallions } from '../rendering/polarMedallion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
-import { buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
+import { archetypeHeight, buildArchetypeGeometry } from '../rendering/canopyGeometry.js'
+import { buildUnderstoryGeometry, understoryHeight } from '../rendering/bladeGeometry.js'
 import {
   buildHaloFillArrays,
   buildHaloRingArrays,
@@ -40,20 +57,19 @@ import {
   pickPortalHoverScale,
   pickPortalOpacity,
 } from '../rendering/portalMarkers.js'
+import { placePortals } from '../rendering/portalPlacement.js'
+import { DEFAULT_PORTAL_FORM, createPortalForm } from '../rendering/portalForms.js'
 import {
   CANOPY_ARCHETYPES,
-  FOLIAGE_SAMPLING,
-  canopyInstanceTransform,
-  cellFoliageRolls,
-  computeFoliageDensityScale,
-  foliageInstanceColor,
-  pickCanopyVariant,
-  pickUnderstoryVariant,
-  resolveArchetypeForAltitude,
+  UNDERSTORY_FORMS,
+  apparentPixels,
+  foliageDetailFraction,
   shouldShowCanopy,
 } from '../rendering/foliage.js'
+import { QUALITY_TIERS, detectQualityTier, readDeviceProfile, resolvePixelRatio } from '../rendering/quality.js'
+import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { useHoverState } from '../composables/useHoverState.js'
-import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const props = defineProps({
   world: { type: Object, required: true },
@@ -119,6 +135,10 @@ let controls = null
 let worldGroup = null
 let terrainMesh = null
 let waterMesh = null
+/** Atmosphere shell around the globe; null on the flat map. */
+let limbGlowMesh = null
+/** Faceted ice plates at the poles; null on the flat map. */
+let polarMedallionGroup = null
 let portalGroup = null
 let haloGroup = null
 let understoryGroup = null
@@ -127,6 +147,81 @@ let animationFrameId = null
 let raycaster = null
 let pointer = null
 let ambientLight = null
+let sun = null
+
+/**
+ * Where the sun stands, in world space.
+ *
+ * A position rather than a direction because that is what three's
+ * DirectionalLight takes; it shines from here toward its target, which
+ * defaults to the origin, so the direction TOWARD the light is this
+ * vector normalised.
+ *
+ * It is a named constant now because two things read it — the light
+ * itself and the shadow bake — and a sun in one place casting shadows
+ * from another is a bug with no visible cause. Its elevation is 59°
+ * above the horizon, which is where the shadows' length comes from: a
+ * ridge shadows about 0.6 of its own height.
+ */
+const SUN_POSITION = Object.freeze({ x: 60, y: 120, z: 40 })
+
+/**
+ * The direction toward the sun, in the terrain mesh's own local frame —
+ * which is the frame the height map indexes into, and the one the
+ * shadow trace needs.
+ *
+ * worldGroup carries the whole world from grid space into a Y-up world
+ * with a single -90° rotation about X, which sends local (x, y, z) to
+ * world (x, z, -y). Inverting that is the whole of this function, and it
+ * is worth having in one named place: handing the trace a world-space
+ * sun instead tilts every shadow in the scene by ninety degrees, which
+ * reads as "the shadows are wrong" rather than as a frame mix-up.
+ */
+function sunDirectionLocal() {
+  const world = sun ? sun.position : SUN_POSITION
+  return { x: world.x, y: -world.z, z: world.y }
+}
+
+// The world's clock and weather (see rendering/environment.js). One
+// object, so the wind, the portal pulse and the halo breathing all read
+// the same time and all stop together when the reader has asked for
+// less motion. Built with defaults up front so the first frames have a
+// clock even if they land before the first rebuild.
+let environment = createEnvironment()
+
+// How hard to push this device (see rendering/quality.js). Decided once
+// when the renderer is created, since the drawing buffer's pixel ratio
+// is set there and the vegetation density hangs off the same call.
+let qualityTier = QUALITY_TIERS.high
+const drawingBufferSize = new THREE.Vector2()
+
+// The world's own size, for the aerial haze, whose range is measured in
+// world extents rather than absolute units — see aerialPerspective.js.
+let worldExtent = 0
+
+/**
+ * How long to keep drawing after something changes, in seconds.
+ *
+ * Only consulted when the world is otherwise still. The fades it covers
+ * are exponential lerps toward a target, so they approach and never
+ * arrive; a window is the honest way to decide they are done, and one
+ * second is comfortably past the point where the last step is worth a
+ * pixel.
+ */
+const SETTLE_SECONDS = 1
+let restlessUntil = 0
+
+/** Something changed: keep drawing until it has finished settling. */
+function markRestless() {
+  restlessUntil = performance.now() * 0.001 + SETTLE_SECONDS
+}
+// The materials the weather is written to each frame — terrain, sea,
+// canopy and understory. Wind is a no-op where swayHeight is 0; season
+// reaches all of them through the same list.
+let windMaterials = []
+// World-space wind, converted once per frame from the grid-space bearing
+// the environment states. Held here so the loop allocates nothing.
+const windWorldDirection = new THREE.Vector3()
 
 // Active grid → 3D mapping, re-resolved on every rebuildScene from the
 // worldShape prop. Every position in this component goes through it, so
@@ -137,12 +232,6 @@ let projection = getProjection('flat')
 // On the planet each marker rotates that axis onto its own surface
 // normal; on the flat map the normal IS +Z, so the rotation is identity
 // and behavior is unchanged.
-// A point sprite is centred on its position, so to stand ON the ground
-// it has to be lifted half its own height. The old flat 0.8 units was
-// tuned for sprites 1.5 to 4.8 units across; at the sizes they are now
-// authored in — under one grid cell — that same lift would float every
-// blade of grass a full sprite-width above the terrain.
-const UNDERSTORY_LIFT_RATIO = 0.5
 
 // Where the last press started, so a camera drag that happens to end over
 // a marker doesn't read as a click on it. OrbitControls captures the
@@ -160,7 +249,50 @@ let accentColor = new THREE.Color(0xffd58c)
 // that sprite. Plain variable, not a ref — it's per-frame render state.
 let hoveredPortalId = null
 
+// Which shape portals take. A constant rather than a prop for now: there
+// is one form, and inventing a setting for a choice of one is how a
+// setting nobody wants gets shipped. createPortalForm falls back to the
+// default for an unknown id, so this can become a prop or a preference
+// the day a second form exists.
+const PORTAL_FORM = DEFAULT_PORTAL_FORM
+
+// The live form for the current portal layer, holding the resources it
+// shares between objects. Rebuilt with the layer, disposed with it.
+let portalForm = null
+
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
+/**
+ * The colour of the air over the world, read from the stylesheet.
+ *
+ * Same shape as resolveAccentColor below, and the same reason: the look
+ * is owned by CSS, and three reads it rather than restating it. See
+ * --atmosphere for why it is a sky colour and not a backdrop one.
+ */
+function resolveHazeColor() {
+  try {
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--atmosphere').trim()
+    if (value) return new THREE.Color(value)
+  } catch {
+    // ignore — fall through to the token's own value
+  }
+  return new THREE.Color(0x34597c)
+}
+
+/**
+ * The sky's HUE, with its brightness thrown away.
+ *
+ * The sea's reflection takes how bright the sky is from the ambient
+ * light, which is the scene's own statement about skylight, and only
+ * needs the colour from the token. Scaling the brightest channel to 1
+ * is what separates the two, so a theme can repaint the air without
+ * also making the sea darker or lighter than the light falling on it.
+ */
+function skyTint() {
+  const color = resolveHazeColor()
+  const brightest = Math.max(color.r, color.g, color.b)
+  return brightest > 0 ? color.multiplyScalar(1 / brightest) : color
+}
+
 function resolveAccentColor() {
   try {
     const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
@@ -172,110 +304,31 @@ function resolveAccentColor() {
 }
 
 /**
- * Portal sprite: the whirlpool glyph sitting inside a soft accent-tinted
- * aura. The aura is what makes a portal read as a light source on the
- * map at exploration zoom — a bare emoji at this scale disappears into
- * the terrain colors, especially over bright biomes.
+ * Builds the portal layer: one object per portal, in whatever shape the
+ * active form draws.
+ *
+ * The component knows where portals go (portalPlacement.js) and that
+ * they pulse, grow under the cursor and recede when another section is
+ * hovered (portalMarkers.js). It does not know what one looks like —
+ * that is portalForms.js's business, and it is why the shape can become
+ * a stone arch later without this file changing.
+ *
+ * The form is held for the layer's lifetime so it can own shared
+ * resources: the aperture's texture is one canvas for the whole world
+ * now rather than one per portal.
+ *
+ * @param {object} world
+ * @param {object} terrain
+ * @param {number} heightScale
+ * @returns {THREE.Group}
  */
-function makePortalSprite() {
-  const { size, coreRatio, auraRatio, ringRatio, innerRingRatio, tickRatio, strokeRatio } =
-    PORTAL_MARKERS.texture
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const center = size / 2
-  const { r, g, b } = accentColor
-  const rgb = `${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}`
+function buildPortalLayer(world, terrain, heightScale) {
+  const placements = placePortals(world.portals, terrain, heightScale, projection)
+  portalForm = createPortalForm(PORTAL_FORM, { accentColor })
 
-  const aura = ctx.createRadialGradient(center, center, size * coreRatio, center, center, center)
-  aura.addColorStop(0, 'rgba(255, 255, 255, 0.85)')
-  aura.addColorStop(auraRatio, `rgba(${rgb}, 0.4)`)
-  aura.addColorStop(1, `rgba(${rgb}, 0)`)
-  ctx.fillStyle = aura
-  ctx.beginPath()
-  ctx.arc(center, center, center, 0, Math.PI * 2)
-  ctx.fill()
-
-  // An aperture: two rings, four cardinal ticks and a bright core. Drawn
-  // in the accent colour, so it belongs to the same instrument as every
-  // control on screen — which an emoji never could, taking neither the
-  // colour nor a consistent shape from one platform to the next.
-  ctx.lineWidth = size * strokeRatio
-  ctx.lineCap = 'round'
-
-  ctx.strokeStyle = `rgba(${rgb}, 0.9)`
-  ctx.beginPath()
-  ctx.arc(center, center, size * ringRatio, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.strokeStyle = `rgba(${rgb}, 0.55)`
-  ctx.beginPath()
-  ctx.arc(center, center, size * innerRingRatio, 0, Math.PI * 2)
-  ctx.stroke()
-
-  for (let quarter = 0; quarter < 4; quarter += 1) {
-    const angle = (quarter * Math.PI) / 2
-    const from = size * ringRatio
-    const to = from + size * tickRatio
-    ctx.beginPath()
-    ctx.moveTo(center + Math.cos(angle) * from, center + Math.sin(angle) * from)
-    ctx.lineTo(center + Math.cos(angle) * to, center + Math.sin(angle) * to)
-    ctx.stroke()
-  }
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
-  ctx.beginPath()
-  ctx.arc(center, center, size * coreRatio, 0, Math.PI * 2)
-  ctx.fill()
-
-  const material = new THREE.SpriteMaterial({
-    map: new THREE.CanvasTexture(canvas),
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  })
-  return new THREE.Sprite(material)
-}
-
-function makeFoliageTexture(kind) {
-  const canvas = document.createElement('canvas')
-  const size = 64
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')
-  const center = size / 2
-
-  ctx.fillStyle = '#ffffff'
-  ctx.beginPath()
-  if (kind === 'scrub') {
-    ctx.arc(center - 10, center + 8, 10, Math.PI, 0)
-    ctx.arc(center + 4, center + 4, 13, Math.PI, 0)
-    ctx.arc(center + 15, center + 10, 9, Math.PI, 0)
-  } else if (kind === 'grass') {
-    ctx.moveTo(center - 18, center + 20)
-    ctx.lineTo(center - 12, center - 10)
-    ctx.lineTo(center - 3, center + 17)
-    ctx.lineTo(center + 4, center - 18)
-    ctx.lineTo(center + 10, center + 16)
-    ctx.lineTo(center + 20, center - 8)
-    ctx.lineTo(center + 17, center + 20)
-    ctx.closePath()
-  } else {
-    // Fern: a fan of fronds. The understory's job is to break up bare
-    // ground under a canopy, so it needs a silhouette distinct from
-    // grass without pretending to be a plant you could identify.
-    for (let frond = -2; frond <= 2; frond += 1) {
-      const lean = frond * 9
-      ctx.moveTo(center, center + 22)
-      ctx.lineTo(center + lean - 4, center - 14)
-      ctx.lineTo(center + lean + 4, center - 12)
-      ctx.closePath()
-    }
-  }
-  ctx.fill()
-
-  return new THREE.CanvasTexture(canvas)
+  const group = new THREE.Group()
+  for (const placement of placements) group.add(portalForm.build(placement))
+  return group
 }
 
 function buildTerrainMesh(world) {
@@ -286,70 +339,257 @@ function buildTerrainMesh(world) {
   // Vertices are laid out row-major in the SAME index space as heightMap
   // and biomeMap, so per-vertex colors need no remapping regardless of
   // which projection placed the positions.
+  // The haze is measured in world extents, so it needs to know how big
+  // this world is. A globe's extent is its diameter; the flat map's is
+  // its longer axis.
+  worldExtent = projection.isSpherical ? planetRadius(terrain) * 2 : Math.max(width, height)
+
   const { positions, indices } = projection.buildSurfaceArrays(terrain, heightScale)
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   geometry.setIndex(new THREE.BufferAttribute(indices, 1))
-  geometry.setAttribute('color', new THREE.BufferAttribute(computeVertexColors(terrain), 3))
+
+  // Colour is the ground WITHOUT its snow, and the snow arrives as an
+  // eligible height per vertex for the shader to gate on. Baked together
+  // the snowline could not move, and it whitened overhangs and cliff
+  // faces as readily as the ground that faces the sky.
+  const ground = computeGroundAttributes(terrain)
+  geometry.setAttribute('color', new THREE.BufferAttribute(ground.colors, 3))
+  geometry.setAttribute('snowHeight', new THREE.BufferAttribute(ground.snowHeights, 1))
+
+  // How much sky each cell can see, traced once from the height map (see
+  // occlusion.js for why this is not a shadow map). It takes the
+  // PROJECTION'S height scale, not the height map alone: the flat view
+  // exaggerates relief to five times what the globe does, so the same
+  // world genuinely is more enclosed when laid out flat, and the two
+  // views want different answers.
+  const skyVisibility = computeSkyVisibility(terrain, {
+    heightScale,
+    wrapX: projection.isSpherical,
+    curvatureRadius: projection.isSpherical ? planetRadius(terrain) : 0,
+  })
+  geometry.setAttribute('occlusion', new THREE.BufferAttribute(skyVisibility, 1))
+
+  // And whether the sun reaches each cell, traced along the sun's own
+  // bearing from the same height map. The sky term above cannot answer
+  // this and deliberately does not try: a slope can see plenty of sky
+  // and still stand in the shadow of the ridge upsun of it.
+  const sunlightMap = computeSunlight(terrain, {
+    sunDirection: sunDirectionLocal(),
+    heightScale,
+    spherical: projection.isSpherical,
+    wrapX: projection.isSpherical,
+    curvatureRadius: projection.isSpherical ? planetRadius(terrain) : 0,
+  })
+  geometry.setAttribute('sunlight', new THREE.BufferAttribute(sunlightMap, 1))
   geometry.computeVertexNormals()
 
   // Smooth normals soften the grid's artificial triangular facets while the
   // section-derived height field preserves the world's distinct peak layout.
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 })
+  const material = createStylizedMaterial({
+    vertexColors: true,
+    spherical: projection.isSpherical,
+    occlusion: true,
+    sunlight: true,
+    // Glitter on the caps. The ground's only shiny part is the snow it
+    // already draws, so this needs nothing said about where peaks are.
+    specular: GROUND_SPECULAR,
+  })
+  // Joins the weather list so the season grade reaches the ground too —
+  // setWind is a no-op here (swayHeight is 0), and setSeason is the
+  // reason it is on the list.
+  windMaterials.push(material)
   const mesh = new THREE.Mesh(geometry, material)
 
-  const waterMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1e5fae,
-    transparent: true,
-    opacity: 0.55,
-    roughness: 0.15,
-    metalness: 0.1,
-  })
+  const water = buildWaterMesh(terrain, heightScale)
 
-  let water
-  if (projection.isSpherical) {
-    // Segment counts are independent of the grid — a sea-level sphere has
-    // no detail to resolve, it only has to read as round at the horizon.
-    // Backfaces are culled by default, so only the near hemisphere
-    // blends over the terrain beneath it.
-    water = new THREE.Mesh(new THREE.SphereGeometry(projection.waterSurface(terrain, heightScale), 96, 48), waterMaterial)
-  } else {
-    // width-1 / height-1: the surface spans integer cell spacing, so the
-    // water plane has to match its footprint exactly.
-    water = new THREE.Mesh(new THREE.PlaneGeometry(width - 1, height - 1), waterMaterial)
-    water.position.z = projection.waterSurface(terrain, heightScale)
-  }
-
-  const portals = new THREE.Group()
-  if (props.showPortals) {
-    world.portals.forEach((portal, index) => {
-      const local = computePortalLocalPosition(portal, terrain, heightScale, PORTAL_MARKERS.hoverOffset, projection)
-      const sprite = makePortalSprite()
-      const baseScale = PORTAL_MARKERS.baseScale
-      sprite.scale.set(baseScale, baseScale, 1)
-      sprite.position.set(local.x, local.y, local.z)
-      sprite.userData.portal = portal
-      sprite.userData.markerType = 'portal'
-      sprite.userData.destinationTitle = portal.targetTitle ?? portal.targetArticleId
-      sprite.userData.baseScale = baseScale
-      // Per-portal phase so a cluster shimmers instead of beating in unison.
-      sprite.userData.pulsePhase = index * 0.7
-      // Current (lerped) hover growth — 1 at rest, see animate().
-      sprite.userData.hoverScale = 1
-      portals.add(sprite)
-    })
-  }
+  // Built whether or not the layer is showing, so the toggle is a
+  // visibility flip like Sections and Foliage rather than a rebuild of
+  // the whole world. See the layer watch at the bottom of this file.
+  const portals = buildPortalLayer(world, terrain, heightScale)
 
   const halos = buildSectionHalos(world, heightScale)
 
-  const { understory, canopy } = buildFoliage(world, heightScale)
+  const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility, sunlightMap)
 
   return { mesh, water, portals, halos, understory, canopy, heightScale }
 }
 
 /**
- * Builds the two vegetation layers: ground-cover sprites, and instanced
- * tree meshes.
+ * The sea, as a lit surface rather than a blue sheet.
+ *
+ * It shares the terrain's material, which is the point of it: the same
+ * wrapped diffuse, the same sky occlusion, the same cast shadows and the
+ * same aerial haze. Before this the land was drawn by our own shader and
+ * the sea by three's PBR, so the two sides of every coastline were lit
+ * by different models — most visibly on the globe, where land has a soft
+ * terminator by design and a Lambert ocean does not.
+ *
+ * What it does NOT get is the two baked light maps, and that took three
+ * measurements to settle rather than one, so it is worth writing down
+ * before someone adds them back on principle.
+ *
+ * The terrain's own maps cannot be reused: sky visibility and cast
+ * shadow belong to a POINT, and the water's points are at sea level
+ * while the terrain's are on the floor beneath, which is lower and so
+ * sees more of whatever stands over it. Over the ocean of a generated
+ * world the floor's sky visibility understates the surface's for 76% of
+ * cells — means of 0.894 against 0.968, worst case 0.48 — and the shader
+ * squares that term, so the open sea would come out wrongly dark.
+ *
+ * Tracing the water its own maps over the height field raised to sea
+ * level is correct, and it was tried. It cost 178ms per rebuild, roughly
+ * doubling the light baking and taking the projection-switch hitch from
+ * about 345ms to 525ms. What it bought, measured over the sea across
+ * three cameras, was a mean of 0.34 to 0.53 levels out of 255, with
+ * fewer than 11% of sea pixels moving even 2 levels, and the cast shadow
+ * changing NOTHING at all.
+ *
+ * The reason is not that the maths was wrong but that the two effects
+ * land where the water cannot show them. Sky visibility only drops near
+ * a coast, which is exactly where the shelf has made the water nearly
+ * clear; and at this sun's elevation almost no sea is shadowed at all,
+ * the sea being the lowest ground there is. So the sea takes the shared
+ * lighting without the two attenuations. If the sun is ever lowered
+ * enough to throw a headland's shadow across a bay, this is the measure
+ * to take again — that, and nothing else, is what would justify the cost.
+ *
+ * The floor's own values are not lost either way: the floor is part of
+ * the terrain mesh, already shaded with them, and the water composites
+ * over it.
+ */
+function buildWaterMesh(terrain, heightScale) {
+  const { positions, indices } = projection.buildWaterArrays(terrain, heightScale)
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  // Only the triangles with water on them: a third fewer, for the same
+  // pixels. See dropDryTriangles for what that is and is not worth.
+  geometry.setIndex(new THREE.BufferAttribute(dropDryTriangles(indices, terrain), 1))
+
+  // FOUR components, which is what makes this a per-vertex alpha rather
+  // than a colour: three reads the itemSize to decide. See waterSurface.
+  geometry.setAttribute('color', new THREE.BufferAttribute(computeWaterAttributes(terrain), 4))
+
+  // Flat, so every normal is the same and computing them per vertex
+  // would be 131,072 identical answers. The surface normal of the sea is
+  // up, which on the globe is the radial — exactly what the projection
+  // already reports for a point.
+  const normals = new Float32Array(positions.length)
+  for (let i = 0; i < positions.length; i += 3) {
+    const { x, y, z } = projection.isSpherical
+      ? normalise(positions[i], positions[i + 1], positions[i + 2])
+      : { x: 0, y: 0, z: 1 }
+    normals[i] = x
+    normals[i + 1] = y
+    normals[i + 2] = z
+  }
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+
+  const material = createStylizedMaterial({
+    vertexColors: true,
+    spherical: projection.isSpherical,
+    transparent: true,
+    // The sea does not hold snow. Said with a band rather than with
+    // 131,072 copies of the same per-vertex opt-out.
+    snowline: NO_SNOWLINE,
+    // Waves that arrive at the shore. The ceiling is the opacity the
+    // shelf saturates at, which is what turns the alpha channel into a
+    // distance from the waterline.
+    surf: { ceiling: WATER.maxOpacity, ...SURF },
+    // Chop, which is what the reflection below breaks up on. A flat sea
+    // has one normal, and one normal reflects the same amount of sky
+    // everywhere, which is a tinted sheet rather than a surface.
+    ripple: RIPPLE,
+    // And the sky in it. Read from the same token the haze uses, so the
+    // sea reflects the air the rest of the scene is veiled by rather
+    // than a second sky of its own.
+    skyReflection: { color: skyTint(), ...WATER_SKY_REFLECTION },
+  })
+  // The sea joins the things with a clock. setWind carries uTime, and
+  // the sample it reads returns a time of 0 for a frozen world, so the
+  // surf stops where it stands under prefers-reduced-motion with no
+  // second code path here saying so.
+  windMaterials.push(material)
+  return new THREE.Mesh(geometry, material)
+}
+
+/** A unit vector from a point, for the globe's radial normals. */
+function normalise(x, y, z) {
+  const length = Math.hypot(x, y, z) || 1
+  return { x: x / length, y: y / length, z: z / length }
+}
+
+/**
+ * Places one layer's instances into an InstancedMesh.
+ *
+ * Both vegetation layers now come through here, which they could not
+ * before: ground cover was a Points cloud, and a point has no
+ * orientation to place — it faced the camera whatever the ground did.
+ * Now a clump of grass stands up along its surface normal exactly as a
+ * tree does, so the two layers differ in their geometry and their
+ * material and in nothing else.
+ *
+ * @param {THREE.BufferGeometry} geometry shared by every instance
+ * @param {THREE.Material} material
+ * @param {{ count: number, positions: Float32Array, normals: Float32Array,
+ *   yaws: Float32Array, scales: Float32Array, colors: Float32Array }} layer
+ * @returns {THREE.InstancedMesh}
+ */
+function buildInstancedLayer(geometry, material, layer, plantHeight) {
+  const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
+  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+
+  // What updateFoliageDetail needs to thin this layer: how many there
+  // are in total, since mesh.count is about to stop meaning that, and
+  // how tall one is, which is what decides whether it is still worth
+  // drawing from here.
+  mesh.userData.fullCount = layer.count
+  mesh.userData.plantHeight = plantHeight
+
+  for (let instance = 0; instance < layer.count; instance += 1) {
+    const base = instance * 3
+    instancePosition.set(layer.positions[base], layer.positions[base + 1], layer.positions[base + 2])
+
+    // Plants stand up out of the ground they are on. On the flat map
+    // that is +Z everywhere; on the planet it is the surface normal, so
+    // nothing on the far side of the globe is lying on its side.
+    instanceNormal.set(layer.normals[base], layer.normals[base + 1], layer.normals[base + 2]).normalize()
+    instanceQuaternion.setFromUnitVectors(GEOMETRY_UP, instanceNormal)
+    instanceYaw.setFromAxisAngle(instanceNormal, layer.yaws[instance])
+    instanceQuaternion.premultiply(instanceYaw)
+
+    instanceScale.setScalar(layer.scales[instance])
+    mesh.setMatrixAt(instance, instanceMatrix.compose(instancePosition, instanceQuaternion, instanceScale))
+
+    mesh.setColorAt(
+      instance,
+      instanceTint.setRGB(layer.colors[base], layer.colors[base + 1], layer.colors[base + 2]),
+    )
+  }
+
+  mesh.instanceMatrix.needsUpdate = true
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  return mesh
+}
+
+// Scratch objects for buildInstancedLayer, so placing twenty thousand
+// plants allocates nothing.
+const GEOMETRY_UP = new THREE.Vector3(0, 0, 1)
+const instanceNormal = new THREE.Vector3()
+const instancePosition = new THREE.Vector3()
+const instanceScale = new THREE.Vector3()
+const instanceQuaternion = new THREE.Quaternion()
+const instanceYaw = new THREE.Quaternion()
+const instanceMatrix = new THREE.Matrix4()
+const instanceTint = new THREE.Color()
+
+/**
+ * Turns the scatter's attribute buffers into the two vegetation layers,
+ * both as instanced meshes.
+ *
+ * WHERE things grow is foliageScatter.js's decision and is tested without
+ * a renderer; everything here is the part that needs a GL context —
+ * materials and the instance matrices three wants.
  *
  * They are separate groups so the canopy can be hidden on its own — from
  * orbit it says nothing and costs a lot (see shouldShowCanopy), while the
@@ -360,158 +600,98 @@ function buildTerrainMesh(world) {
  * @param {number} heightScale
  * @returns {{ understory: THREE.Group, canopy: THREE.Group }}
  */
-function buildFoliage(world, heightScale) {
-  const terrain = world.terrain
-  const { width, height, heightMap, biomeMap, lushnessMap } = terrain
+function buildFoliage(world, heightScale, skyVisibility, sunlightMap) {
   // Foliage proportions are in grid cells, and one cell is one world unit
   // of arc in both projections — but the RELIEF those cells rise through
   // is compressed on the planet, so a tree sized for the flat map
   // out-scales the range it stands on there. See SPHERE_VIEW.foliageScale.
   const cellScale = projection.foliageScale ?? 1
+  const scatter = scatterFoliage(world.terrain, world.seed, {
+    projection,
+    heightScale,
+    cellScale,
+    skyVisibility,
+    sunlightMap,
+  })
 
-  // === Understory: one Points cloud per variant ===
+  // === Understory: one InstancedMesh of blade clumps per variant ===
   const understory = new THREE.Group()
-  const understoryPositions = new Map()
-  const stride = FOLIAGE_SAMPLING.understoryStride
+  for (const layer of scatter.understory) {
+    const form = UNDERSTORY_FORMS[layer.variant.kind]
+    if (!form) continue
 
-  for (let gridY = 1; gridY < height - 1; gridY += stride) {
-    for (let gridX = 1; gridX < width - 1; gridX += stride) {
-      const index = gridY * width + gridX
-      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed, 0)
-      const variant = pickUnderstoryVariant(biomeMap[index], variantRoll)
-      if (!variant) continue
-      if (densityRoll >= variant.density * computeFoliageDensityScale(lushnessMap[index], heightMap[index])) {
-        continue
-      }
+    const geometry = buildUnderstoryGeometry(form, layer.variant.size, cellScale)
+    geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+    geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
+    geometry.setAttribute('sunlight', new THREE.InstancedBufferAttribute(layer.sunlights, 1))
 
-      const positions = understoryPositions.get(variant) ?? []
-      const lift = variant.size * cellScale * UNDERSTORY_LIFT_RATIO
-      const local = projection.toLocal(gridX, gridY, heightMap[index], terrain, heightScale, lift)
-      positions.push(local.x, local.y, local.z)
-      understoryPositions.set(variant, positions)
-    }
-  }
-
-  for (const [variant, positions] of understoryPositions) {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    const material = createStylizedMaterial({
+      // The blade's own root-dark gradient, which is what stops a clump
+      // reading as one flat green. It multiplies with the per-instance
+      // tint rather than replacing it.
+      vertexColors: true,
+      spherical: projection.isSpherical,
+      snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
+      swayHeight: understoryHeight(form, layer.variant.size, cellScale),
+      // Per instance: a clump is lit by the sky its own cell can see,
+      // and darkens with the ground when a ridge takes the sun off it.
+      occlusion: true,
+      sunlight: true,
+      // A blade is a strip with no thickness, so half of every clump is
+      // seen from behind. three flips the normal for the back face when
+      // this is set, so the lighting stays right rather than going black
+      // on whichever side faces away.
+      side: THREE.DoubleSide,
+    })
+    windMaterials.push(material)
     understory.add(
-      new THREE.Points(
-        geometry,
-        new THREE.PointsMaterial({
-          color: variant.color,
-          map: makeFoliageTexture(variant.kind),
-          size: variant.size * cellScale,
-          sizeAttenuation: true,
-          transparent: true,
-          alphaTest: 0.1,
-          opacity: 0.9,
-          depthWrite: false,
-        }),
-      ),
+      buildInstancedLayer(geometry, material, layer, understoryHeight(form, layer.variant.size, cellScale)),
     )
   }
 
   // === Canopy: one InstancedMesh per archetype ===
-  // Collected per archetype first, because an InstancedMesh needs its
-  // final count at construction.
-  const canopyCells = new Map()
-  const canopyStride = FOLIAGE_SAMPLING.canopyStride
-
-  for (let gridY = 1; gridY < height - 1; gridY += canopyStride) {
-    for (let gridX = 1; gridX < width - 1; gridX += canopyStride) {
-      const index = gridY * width + gridX
-      const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, world.seed, 1)
-      const variant = pickCanopyVariant(biomeMap[index], variantRoll)
-      if (!variant) continue
-      if (densityRoll >= variant.density * computeFoliageDensityScale(lushnessMap[index], heightMap[index])) {
-        continue
-      }
-
-      const archetype = resolveArchetypeForAltitude(variant.archetype, heightMap[index])
-      const cells = canopyCells.get(archetype) ?? []
-      cells.push({ gridX, gridY, index, color: variant.color })
-      canopyCells.set(archetype, cells)
-    }
-  }
-
   const canopy = new THREE.Group()
-  const up = new THREE.Vector3(0, 0, 1)
-  const normal = new THREE.Vector3()
-  const position = new THREE.Vector3()
-  const scaleVec = new THREE.Vector3()
-  const quaternion = new THREE.Quaternion()
-  const yawQuaternion = new THREE.Quaternion()
-  const matrix = new THREE.Matrix4()
-  const instanceColor = new THREE.Color()
-
-  for (const [archetype, cells] of canopyCells) {
-    const spec = CANOPY_ARCHETYPES[archetype]
-    if (!spec) continue
-
+  for (const layer of scatter.canopy) {
+    const spec = CANOPY_ARCHETYPES[layer.archetype]
     const geometry = buildArchetypeGeometry(spec, cellScale)
-    // Lit, so a tree has a shaded side and reads as an object. The point
-    // sprites this replaces took no light at all, which is why two bands
-    // of trees were distinguishable only by hue and count.
-    const material = new THREE.MeshStandardMaterial({ roughness: 0.85, metalness: 0, flatShading: true })
-    const mesh = new THREE.InstancedMesh(geometry, material, cells.length)
-    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+    // Per-instance, so each tree's crown is snowed according to its own
+    // altitude while the geometry stays shared. An InstancedBufferAttribute
+    // on a geometry that is only used by this one InstancedMesh.
+    geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
+    geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
+    geometry.setAttribute('sunlight', new THREE.InstancedBufferAttribute(layer.sunlights, 1))
 
-    cells.forEach((cell, instance) => {
-      const { variantRoll: scaleRoll, densityRoll: rotationRoll } = cellFoliageRolls(
-        cell.gridX,
-        cell.gridY,
-        world.seed,
-        2,
-      )
-      const { variantRoll: offsetAngleRoll, densityRoll: offsetRadiusRoll } = cellFoliageRolls(
-        cell.gridX,
-        cell.gridY,
-        world.seed,
-        3,
-      )
-      const { variantRoll: tintRoll } = cellFoliageRolls(cell.gridX, cell.gridY, world.seed, 4)
-      const transform = canopyInstanceTransform(scaleRoll, rotationRoll, offsetAngleRoll, offsetRadiusRoll)
-
-      const local = projection.toLocal(
-        cell.gridX + transform.offsetX,
-        cell.gridY + transform.offsetY,
-        heightMap[cell.index],
-        terrain,
-        heightScale,
-        0,
-      )
-      position.set(local.x, local.y, local.z)
-
-      // Trees stand up out of the ground they are on. On the flat map
-      // that is +Z everywhere; on the planet it is the surface normal, so
-      // a tree at the far side of the globe is not lying on its side.
-      const surface = projection.normalAt(cell.gridX, cell.gridY, terrain)
-      normal.set(surface.x, surface.y, surface.z).normalize()
-      quaternion.setFromUnitVectors(up, normal)
-      yawQuaternion.setFromAxisAngle(normal, transform.yaw)
-      quaternion.premultiply(yawQuaternion)
-
-      scaleVec.setScalar(transform.scale)
-      mesh.setMatrixAt(instance, matrix.compose(position, quaternion, scaleVec))
-
-      const { r, g, b } = foliageInstanceColor(cell.color, heightMap[cell.index], tintRoll)
-      mesh.setColorAt(instance, instanceColor.setRGB(r, g, b))
+    // The frost band, not the ground's snowline: a crown takes snow far
+    // lower than open ground holds it, and on the ground's band no tree
+    // in the world was high enough to carry a cap.
+    //
+    // swayHeight is this archetype's own full height, which is the whole
+    // reason a material per archetype earns its keep: the wind weights
+    // its bend by height above the base, and a single shared number
+    // would leave a shrub thrashing and an emergent barely moving.
+    const material = createStylizedMaterial({
+      flatShading: true,
+      spherical: projection.isSpherical,
+      snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
+      swayHeight: archetypeHeight(spec, cellScale),
+      // Per instance: a tree in a ravine is as dark as the ravine, and a
+      // stand on a shadowed hillside is as dark as the hillside.
+      occlusion: true,
+      sunlight: true,
     })
-
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    canopy.add(mesh)
+    windMaterials.push(material)
+    canopy.add(buildInstancedLayer(geometry, material, layer, archetypeHeight(spec, cellScale)))
   }
 
   return { understory, canopy }
 }
 
 /**
- * Builds one THREE.Group per world containing a "ground ring" + "energy
- * wall" pair for every top-level and subsection peak. Positioned in the
- * mesh's local frame — the shared worldGroup rotation carries them into
- * world-Y-up along with the terrain.
+ * Builds one THREE.Group per world containing batched ground rings and
+ * energy walls (two draw calls for the whole layer) plus an invisible
+ * fill mesh per peak for picking. Positioned in the mesh's local frame —
+ * the shared worldGroup rotation carries them into world-Y-up along with
+ * the terrain.
  *
  * Halo opacities are animated per-frame from hoverState in updateHalos();
  * this function only allocates geometry and initial idle opacity.
@@ -533,35 +713,27 @@ function buildSectionHalos(world, heightScale) {
     childrenOf: (peak) => sized.filter((other) => (other.depth ?? 0) > 1 && other.sectionIndex === peak.peakIndex),
   }
 
+  // First pass: build every peak's arrays so we can concatenate them into
+  // two shared meshes. Per-peak materials used to cost 2 draws each;
+  // vertex colours carry opacity into one additive material apiece.
+  const ringPieces = []
+  const wallPieces = []
+  const peakRecords = []
+
   for (let i = 0; i < peaks.length; i++) {
     const peak = { ...sized[i], peakIndex: i }
     const isTopLevel = (peak.depth ?? 0) <= 1
 
     const local = computePeakFlagPosition(peak, terrain, heightScale, 0, projection)
-    // Sections hold their subsections at arm's length; a subsection's own
-    // boundary hugs it, or neighbouring markers merge on a dense ridge.
     const ringMargin = ringMarginFor(isTopLevel)
     const ringRadii = computeRingRadii(ringMargin)
     const wallRadiusGrid = computeWallRadius(ringMargin)
     const wallHeightGrid = computeWallHeight(peak.amplitude)
-
-    // The wall's world height is grid-height units, matched to the
-    // terrain's own heightScale so visual proportions stay consistent
-    // regardless of grid size — and, because the planet's height scale is
-    // a fraction of its radius, so the wall keeps the same ratio to the
-    // mountain it marks in both projections.
     const wallHeightWorld = wallHeightGrid * (heightScale / 40)
 
-    // Initial opacity/height match this peak's idle state (0 for
-    // subsections so they don't flash in on first render, low for
-    // top-level).
     const initialOpacity = pickHaloOpacity(null, !isTopLevel)
     const initialHeightScale = pickWallHeightScale(null, !isTopLevel)
 
-    // Both markers are built in grid space and draped over the terrain by
-    // the projection, so they follow the ground and the planet's
-    // curvature instead of being flat primitives parked at the summit.
-    // See haloGeometry.js for why that matters.
     const ringArrays = buildHaloRingArrays(
       peak,
       terrain,
@@ -571,20 +743,6 @@ function buildSectionHalos(world, heightScale) {
       SECTION_MARKERS.ring.hoverOffset,
       outlineContext,
     )
-    const ringGeo = new THREE.BufferGeometry()
-    ringGeo.setAttribute('position', new THREE.BufferAttribute(ringArrays.positions, 3))
-    ringGeo.setIndex(new THREE.BufferAttribute(ringArrays.indices, 1))
-
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: accentColor,
-      transparent: true,
-      opacity: initialOpacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    })
-    const ring = new THREE.Mesh(ringGeo, ringMat)
-
     const wallArrays = buildHaloWallArrays(
       peak,
       terrain,
@@ -596,73 +754,185 @@ function buildSectionHalos(world, heightScale) {
       initialHeightScale,
       outlineContext,
     )
-    const wallGeo = new THREE.BufferGeometry()
-    wallGeo.setAttribute('position', new THREE.BufferAttribute(wallArrays.positions, 3))
-    wallGeo.setIndex(new THREE.BufferAttribute(wallArrays.indices, 1))
 
-    const wallMat = new THREE.MeshBasicMaterial({
-      color: accentColor,
-      transparent: true,
-      opacity: initialOpacity,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
+    ringPieces.push(ringArrays)
+    wallPieces.push(wallArrays)
+    peakRecords.push({
+      peak,
+      isTopLevel,
+      local,
+      wallArrays,
+      wallHeightWorld,
+      initialOpacity,
+      initialHeightScale,
+      ringVertCount: ringArrays.positions.length / 3,
+      wallVertCount: wallArrays.positions.length / 3,
     })
-    const wall = new THREE.Mesh(wallGeo, wallMat)
+  }
 
-    // Invisible hit area over the whole footprint, so pointing anywhere
-    // inside a marker selects it rather than only its outline. Never
-    // rendered — three.js's raycaster tests layers, not visibility, which
-    // is what makes this work (and keeps it out of the draw call list).
+  const ringBatch = concatHaloPieces(ringPieces)
+  const wallBatch = concatHaloPieces(wallPieces)
+
+  // Wall height animation writes through wallArrays.positions — point
+  // those at views into the shared buffer so one attribute needsUpdate
+  // covers every curtain.
+  let wallVertCursor = 0
+  for (let i = 0; i < peakRecords.length; i++) {
+    const record = peakRecords[i]
+    const n = record.wallVertCount
+    const start = wallVertCursor * 3
+    wallBatch.positions.set(record.wallArrays.positions, start)
+    record.wallArrays.positions = wallBatch.positions.subarray(start, start + n * 3)
+    record.wallVertStart = wallVertCursor
+    record.ringVertStart = ringBatch.ranges[i].vertStart
+    wallVertCursor += n
+  }
+
+  const ringGeo = new THREE.BufferGeometry()
+  ringGeo.setAttribute('position', new THREE.BufferAttribute(ringBatch.positions, 3))
+  ringGeo.setAttribute('color', new THREE.BufferAttribute(ringBatch.colors, 3))
+  ringGeo.setIndex(new THREE.BufferAttribute(ringBatch.indices, 1))
+
+  const wallGeo = new THREE.BufferGeometry()
+  wallGeo.setAttribute('position', new THREE.BufferAttribute(wallBatch.positions, 3))
+  wallGeo.setAttribute('color', new THREE.BufferAttribute(wallBatch.colors, 3))
+  wallGeo.setIndex(new THREE.BufferAttribute(wallBatch.indices, 1))
+
+  // fog: false — a section marker is an affordance; the haze is for scenery.
+  const ringMat = new THREE.MeshBasicMaterial({
+    fog: false,
+    color: 0xffffff,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const wallMat = new THREE.MeshBasicMaterial({
+    fog: false,
+    color: 0xffffff,
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+
+  const ringMesh = new THREE.Mesh(ringGeo, ringMat)
+  ringMesh.name = 'haloRingBatch'
+  ringMesh.userData.haloBatch = true
+  const wallMesh = new THREE.Mesh(wallGeo, wallMat)
+  wallMesh.name = 'haloWallBatch'
+  wallMesh.userData.haloBatch = true
+  group.add(ringMesh, wallMesh)
+  group.userData.ringMesh = ringMesh
+  group.userData.wallMesh = wallMesh
+  group.userData.ringColors = ringBatch.colors
+  group.userData.wallColors = wallBatch.colors
+
+  for (let i = 0; i < peakRecords.length; i++) {
+    const record = peakRecords[i]
+    const { peak, isTopLevel } = record
+
     const fillArrays = buildHaloFillArrays(
       peak,
       terrain,
       heightScale,
       projection,
-      ringRadii.outer,
+      computeRingRadii(ringMarginFor(isTopLevel)).outer,
       SECTION_MARKERS.ring.hoverOffset,
       outlineContext,
     )
     const fillGeo = new THREE.BufferGeometry()
     fillGeo.setAttribute('position', new THREE.BufferAttribute(fillArrays.positions, 3))
     fillGeo.setIndex(new THREE.BufferAttribute(fillArrays.indices, 1))
-    const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+    const fill = new THREE.Mesh(
+      fillGeo,
+      new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false }),
+    )
     fill.visible = false
 
-    // Vertices are already in the mesh's local frame, so the group is a
-    // plain container at the origin; the summit is carried in userData
-    // for the tooltip to project.
     const peakGroup = new THREE.Group()
-    peakGroup.add(ring, wall, fill)
+    peakGroup.add(fill)
     peakGroup.userData.peakIndex = i
     peakGroup.userData.peak = peak
     peakGroup.userData.isTopLevel = isTopLevel
-    // Per-peak phase so adjacent halos don't beat in unison.
     peakGroup.userData.pulsePhase = (peak.x * 0.7 + peak.y * 1.3) % (Math.PI * 2)
-    peakGroup.userData.ringMaterial = ringMat
-    peakGroup.userData.wallMaterial = wallMat
-    // Wall mesh + the geometry it was built from, so the per-frame height
-    // animation can rescale it about its base instead of its center.
-    peakGroup.userData.wallMesh = wall
-    // The curtain's base ring and up vectors, so the height animation can
-    // move only its top edge (see updateHaloWallHeights).
-    peakGroup.userData.wallArrays = wallArrays
-    peakGroup.userData.wallHeight = wallHeightWorld
-    peakGroup.userData.wallScale = initialHeightScale
-    // Summit in mesh-local space. The group itself is at the origin now
-    // that its children carry absolute positions, so the tooltip can't
-    // just read the group's world position.
-    peakGroup.userData.summitLocal = new THREE.Vector3(local.x, local.y, local.z)
-    // Every halo is scene-graph visible; opacity does the LOD work.
-    // Subsections idle at 0 opacity so they hide until their parent is
-    // hovered (see pickHaloOpacity/relationshipToHover). 'none' hides
-    // the whole group; 'all' just clamps subsection idle floor (unused
-    // for now — Phase 6 filter toggles will formalize this).
+    peakGroup.userData.opacity = record.initialOpacity
+    peakGroup.userData.ringVertStart = record.ringVertStart
+    peakGroup.userData.ringVertCount = record.ringVertCount
+    peakGroup.userData.wallVertStart = record.wallVertStart
+    peakGroup.userData.wallVertCount = record.wallVertCount
+    peakGroup.userData.wallArrays = record.wallArrays
+    peakGroup.userData.wallHeight = record.wallHeightWorld
+    peakGroup.userData.wallScale = record.initialHeightScale
+    peakGroup.userData.summitLocal = new THREE.Vector3(record.local.x, record.local.y, record.local.z)
     peakGroup.visible = !hidden
     group.add(peakGroup)
+
+    writeHaloVertexColors(
+      ringBatch.colors,
+      record.ringVertStart,
+      record.ringVertCount,
+      accentColor,
+      record.initialOpacity,
+    )
+    writeHaloVertexColors(
+      wallBatch.colors,
+      record.wallVertStart,
+      record.wallVertCount,
+      accentColor,
+      record.initialOpacity,
+    )
   }
 
   return group
+}
+
+/**
+ * Concatenate per-peak halo arrays into one indexed mesh buffer.
+ * Indices are remapped so every peak's triangles address its own verts.
+ */
+function concatHaloPieces(pieces) {
+  let vertCount = 0
+  let indexCount = 0
+  for (const piece of pieces) {
+    vertCount += piece.positions.length / 3
+    indexCount += piece.indices.length
+  }
+  const positions = new Float32Array(vertCount * 3)
+  const colors = new Float32Array(vertCount * 3)
+  const indices = new Uint32Array(indexCount)
+  const ranges = []
+  let vCursor = 0
+  let iCursor = 0
+  for (const piece of pieces) {
+    const v0 = vCursor
+    const nVert = piece.positions.length / 3
+    positions.set(piece.positions, vCursor * 3)
+    for (let i = 0; i < piece.indices.length; i += 1) {
+      indices[iCursor++] = piece.indices[i] + v0
+    }
+    ranges.push({ vertStart: v0, vertCount: nVert })
+    vCursor += nVert
+  }
+  return { positions, colors, indices, ranges }
+}
+
+/** Accent × opacity into a vertex-colour range (additive MeshBasic). */
+function writeHaloVertexColors(colors, vertStart, vertCount, accent, opacity) {
+  const r = accent.r * opacity
+  const g = accent.g * opacity
+  const b = accent.b * opacity
+  const end = vertStart + vertCount
+  for (let v = vertStart; v < end; v += 1) {
+    const at = v * 3
+    colors[at] = r
+    colors[at + 1] = g
+    colors[at + 2] = b
+  }
 }
 
 /**
@@ -675,9 +945,15 @@ function updateHalos(nowSeconds) {
   if (!haloGroup) return
   const hoveredIdx = attentionIndex()
   const peaks = props.world?.terrain?.peaks
+  const ringColors = haloGroup.userData.ringColors
+  const wallColors = haloGroup.userData.wallColors
+  const ringMesh = haloGroup.userData.ringMesh
+  const wallMesh = haloGroup.userData.wallMesh
+  if (!ringColors || !wallColors || !ringMesh || !wallMesh) return
 
+  let wallMoved = false
   for (const peakGroup of haloGroup.children) {
-    if (!peakGroup.visible) continue
+    if (peakGroup.userData.peakIndex == null || !peakGroup.visible) continue
     const isSubsection = !peakGroup.userData.isTopLevel
     const rel = relationshipToHover(peakGroup.userData.peak, hoveredIdx, peakGroup.userData.peakIndex, peaks)
     let targetOpacity = pickHaloOpacity(rel, isSubsection)
@@ -687,12 +963,23 @@ function updateHalos(nowSeconds) {
       targetOpacity += computeBreathingPulse(nowSeconds, peakGroup.userData.pulsePhase)
     }
 
-    const ringMat = peakGroup.userData.ringMaterial
-    const wallMat = peakGroup.userData.wallMaterial
-    // Simple exponential lerp toward target for smooth in/out.
     const alpha = 0.15
-    ringMat.opacity += (targetOpacity - ringMat.opacity) * alpha
-    wallMat.opacity += (targetOpacity - wallMat.opacity) * alpha
+    const opacity = peakGroup.userData.opacity + (targetOpacity - peakGroup.userData.opacity) * alpha
+    peakGroup.userData.opacity = opacity
+    writeHaloVertexColors(
+      ringColors,
+      peakGroup.userData.ringVertStart,
+      peakGroup.userData.ringVertCount,
+      accentColor,
+      opacity,
+    )
+    writeHaloVertexColors(
+      wallColors,
+      peakGroup.userData.wallVertStart,
+      peakGroup.userData.wallVertCount,
+      accentColor,
+      opacity,
+    )
 
     // Height animation: the hovered section's wall rises to full height
     // while its parent/siblings/unrelated neighbors sit lower, so the
@@ -708,9 +995,13 @@ function updateHalos(nowSeconds) {
     if (Math.abs(scale - previousScale) > 1e-4) {
       peakGroup.userData.wallScale = scale
       updateHaloWallHeights(peakGroup.userData.wallArrays, peakGroup.userData.wallHeight, scale)
-      peakGroup.userData.wallMesh.geometry.attributes.position.needsUpdate = true
+      wallMoved = true
     }
   }
+
+  ringMesh.geometry.attributes.color.needsUpdate = true
+  wallMesh.geometry.attributes.color.needsUpdate = true
+  if (wallMoved) wallMesh.geometry.attributes.position.needsUpdate = true
 }
 
 /**
@@ -764,7 +1055,9 @@ function updateSectionTooltip() {
   }
 
   // Find the halo peakGroup for the hovered peak — top-level OR subsection.
-  const peakGroup = haloGroup.children.find((c) => c.userData.peakIndex === hoveredIdx)
+  const peakGroup = haloGroup.children.find(
+    (c) => c.userData.peakIndex === hoveredIdx,
+  )
   if (!peakGroup) {
     if (sectionTooltipVisible.value) sectionTooltipVisible.value = false
     return
@@ -807,6 +1100,29 @@ function clearScene() {
     waterMesh.geometry.dispose()
     waterMesh.material.dispose()
   }
+  if (limbGlowMesh) {
+    worldGroup.remove(limbGlowMesh)
+    limbGlowMesh.geometry.dispose()
+    limbGlowMesh.material.dispose()
+    limbGlowMesh = null
+  }
+  if (polarMedallionGroup) {
+    worldGroup.remove(polarMedallionGroup)
+    polarMedallionGroup.traverse((child) => {
+      child.geometry?.dispose()
+      child.material?.dispose()
+    })
+    polarMedallionGroup = null
+  }
+  // The portal form owns resources its objects share — one texture for
+  // the whole layer — so it is disposed as a unit rather than per child.
+  portalForm?.dispose()
+  portalForm = null
+
+  // Dropped before the materials holding them are disposed below, or the
+  // loop would keep writing wind onto a dead program every frame.
+  windMaterials = []
+
   for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup]) {
     if (!group) continue
     worldGroup.remove(group)
@@ -826,10 +1142,25 @@ function rebuildScene() {
   // the next world rebuild without any three.js code touching styling.
   accentColor = resolveAccentColor()
 
+  // Read from CSS rather than stated here so the air stays part of the
+  // palette a theme can change; see --atmosphere for why it is a sky
+  // colour. Range is set per frame by updateAerialPerspective.
+  scene.fog = new THREE.Fog(resolveHazeColor(), 1, 2)
+
   // Resolve the projection BEFORE building anything — every position in
   // the scene goes through it.
   projection = getProjection(props.worldShape)
   if (ambientLight) ambientLight.intensity = projection.ambientLightIntensity
+
+  // The wind is a property of the realm, so it is derived from the same
+  // seed the terrain is: Saturn's wind runs the same way on every visit.
+  // Only the phase depends on the clock, which is why none of this can
+  // reach worldId. Read once per rebuild rather than per frame, since
+  // matchMedia is a DOM query and the answer does not change mid-orbit.
+  environment = createEnvironment({
+    seed: props.world?.seed ?? 1,
+    reducedMotion: prefersReducedMotion(),
+  })
 
   const { mesh, water, portals, halos, understory, canopy, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
@@ -840,10 +1171,44 @@ function rebuildScene() {
   canopyGroup = canopy
   // Apply the current layer toggles so a rebuild respects the user's
   // last on/off state without waiting for the layer-watch to fire.
+  portalGroup.visible = props.showPortals
   haloGroup.visible = props.showSections
   understoryGroup.visible = props.showFoliage
   canopyGroup.visible = props.showFoliage
   worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup)
+
+  // The air around the planet. Only the globe has a limb to glow; the
+  // flat map's edge is a coastline, not a silhouette against the void.
+  // Built after the terrain so the shell clears this world's peaks, and
+  // coloured from the same token the haze already uses.
+  if (projection.isSpherical) {
+    const radius = planetRadius(props.world.terrain)
+    limbGlowMesh = buildLimbGlow({
+      radius,
+      heightScale,
+      color: resolveHazeColor(),
+      // The sun lives in WORLD space (scene.add), and the shell's
+      // normals are transformed to world in its shader, so this is the
+      // direction as the light itself states it.
+      sunDirection: sun.position.clone().normalize(),
+    })
+    worldGroup.add(limbGlowMesh)
+
+    // Ice plates at the poles — replace the puckered lat/long ring the
+    // height map would otherwise paint there. Season grade wants the
+    // same windMaterials list the ground is on.
+    polarMedallionGroup = buildPolarMedallions({
+      radius,
+      heightScale,
+      gridHeight: props.world.terrain.height,
+    })
+    polarMedallionGroup.traverse((child) => {
+      if (child.isMesh && child.material) windMaterials.push(child.material)
+    })
+    worldGroup.add(polarMedallionGroup)
+  }
+
+  markRestless()
 
   currentHeightScale = heightScale
   frameCamera(props.world.terrain, heightScale)
@@ -889,6 +1254,46 @@ function frameCamera(terrain, heightScale) {
   controls?.update()
 }
 
+/**
+ * The portal objects a raycast may hit, or none while the layer is off.
+ *
+ * The gate is explicit because three.js's raycaster tests layers rather
+ * than Object3D.visible — the same reason the invisible halo fills work
+ * as hit areas. Portals used not to exist at all when the layer was off,
+ * so hiding them without this would leave them clickable.
+ */
+function portalTargets() {
+  if (!portalGroup?.visible) return []
+  return portalGroup.children
+}
+
+/**
+ * Resolves a raycast hit to the portal object it belongs to, walking up
+ * to the nearest ancestor that claims to be one.
+ *
+ * The walk is what lets a form return a group rather than a single mesh
+ * — an arch with a lintel and two posts would hit on a child. Both the
+ * click and the hover come through here, so a form whose objects cannot
+ * be identified this way (a single InstancedMesh, where a hit reports an
+ * instanceId instead) has this and findPortalObject to change, and
+ * nothing else.
+ */
+function resolvePortalObject(hit) {
+  let node = hit?.object ?? null
+  while (node && node.userData.markerType === undefined) node = node.parent
+  return node?.userData.markerType === 'portal' ? node : null
+}
+
+/**
+ * The object standing for a given portal, whether or not the layer is
+ * showing — this answers "where is it", not "can it be clicked", and the
+ * dive is camera choreography that should still land somewhere sensible
+ * with the markers turned off.
+ */
+function findPortalObject(portalId) {
+  return portalGroup?.children.find((child) => child.userData.portal?.portalId === portalId) ?? null
+}
+
 function pointerToNdc(event) {
   const rect = containerRef.value.getBoundingClientRect()
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
@@ -912,17 +1317,16 @@ function onPointerClick(event) {
   pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
 
-  // Portal hit takes priority — a portal sprite in front of a halo
-  // still reads as "I meant to travel", not "I meant to focus".
-  if (portalGroup) {
-    const [portalHit] = raycaster.intersectObjects(portalGroup.children)
-    if (portalHit?.object?.userData?.portal) {
-      emit('portal-click', {
-        portal: portalHit.object.userData.portal,
-        anchor: screenPositionOf(portalHit.object.position),
-      })
-      return
-    }
+  // Portal hit takes priority — a portal in front of a halo still reads
+  // as "I meant to travel", not "I meant to focus".
+  const [portalHit] = raycaster.intersectObjects(portalTargets())
+  const clickedPortal = resolvePortalObject(portalHit)
+  if (clickedPortal) {
+    emit('portal-click', {
+      portal: clickedPortal.userData.portal,
+      anchor: screenPositionOf(clickedPortal.position),
+    })
+    return
   }
 
   // Otherwise: same halo-priority raycast the hover logic uses — a click
@@ -972,14 +1376,13 @@ function pickHaloClickTarget() {
 
 function onPointerMove(event) {
   if (!raycaster) return
+  markRestless()
 
   const rect = pointerToNdc(event)
   raycaster.setFromCamera(pointer, camera)
-  const [hit] = raycaster.intersectObjects(portalGroup?.children ?? [], true)
-
-  let node = hit?.object ?? null
-  while (node && node.userData.markerType === undefined) node = node.parent
-  const portal = node?.userData.markerType === 'portal' ? node.userData.portal : null
+  const [hit] = raycaster.intersectObjects(portalTargets(), true)
+  const node = resolvePortalObject(hit)
+  const portal = node?.userData.portal ?? null
 
   hoveredMarker.value = portal ? { title: node.userData.destinationTitle, type: 'portal' } : null
   hoveredPortalId = portal?.portalId ?? null
@@ -1016,7 +1419,7 @@ function collectHaloTargets() {
   const subMeshes = []
   const topMeshes = []
   for (const peakGroup of haloGroup.children) {
-    if (!peakGroup.visible) continue
+    if (peakGroup.userData.peakIndex == null || !peakGroup.visible) continue
     const bucket = peakGroup.userData.isTopLevel ? topMeshes : subMeshes
     for (const child of peakGroup.children) bucket.push(child)
   }
@@ -1096,6 +1499,7 @@ function onPointerLeave() {
   hoveredMarker.value = null
   hoveredPortalId = null
   if (renderer) renderer.domElement.style.cursor = ''
+  markRestless()
 }
 
 function resizeToContainer() {
@@ -1103,9 +1507,117 @@ function resizeToContainer() {
   const { clientWidth, clientHeight } = containerRef.value
   if (clientWidth === 0 || clientHeight === 0) return
 
+  // Re-resolved on every resize, not just at setup: dragging a window to
+  // a monitor with a different density changes devicePixelRatio without
+  // reloading anything.
+  renderer.setPixelRatio(resolvePixelRatio(qualityTier))
   renderer.setSize(clientWidth, clientHeight)
   camera.aspect = clientWidth / clientHeight
   camera.updateProjectionMatrix()
+  markRestless()
+}
+
+/**
+ * Thins both vegetation layers to what the camera can actually resolve.
+ *
+ * An InstancedMesh draws its first `count` instances, and the scatter
+ * hands them over in hash order, so lowering the count sheds plants
+ * evenly across the whole world (see inThinningOrder in
+ * foliageScatter.js). Nothing is rebuilt and no buffer is touched — the
+ * work simply is not submitted.
+ *
+ * The understory needed this. As point sprites it was one vertex per
+ * clump and leaving all of it on from orbit was free; as blade clumps it
+ * is 20 triangles each, and the comment that used to sit here claiming
+ * the layer "reads as ground texture at any distance and costs one draw
+ * call per variant" stopped being true the moment that changed.
+ *
+ * Distance is measured to the nearest GROUND, not to the world's
+ * centre, and on the planet those differ by a whole radius. Using the
+ * centre would have thinned the vegetation hardest exactly where the
+ * camera gets closest to it: at the nearest zoom the camera sits 1.15
+ * radii out but only 0.15 above the surface, so plants would have been
+ * judged 7.7x smaller than they appear and thinned to the floor.
+ *
+ * It is the same distance the measurements in FOLIAGE_SAMPLING were
+ * taken at, and those only reproduce this way.
+ *
+ * It is still one distance for the whole layer rather than one per
+ * plant — the same approximation shouldShowCanopy makes, and a good one
+ * here, since the point is a decision that changes as the camera pulls
+ * away from the world rather than one that differs across it.
+ */
+function updateFoliageDetail() {
+  if (!camera || !renderer) return
+
+  const radius = projection.isSpherical && props.world ? planetRadius(props.world.terrain) : 0
+  const distance = Math.max(camera.position.length() - radius, 1e-3)
+  const viewportHeight = renderer.getDrawingBufferSize(drawingBufferSize).y
+
+  for (const group of [understoryGroup, canopyGroup]) {
+    if (!group?.visible) continue
+    for (const mesh of group.children) {
+      const { fullCount, plantHeight } = mesh.userData
+      if (!fullCount) continue
+
+      const apparent = apparentPixels(plantHeight, distance, viewportHeight, camera.fov)
+      const fraction = foliageDetailFraction(apparent, qualityTier.foliageDensity)
+      // At least one, so a layer never vanishes outright and pops back.
+      mesh.count = Math.max(1, Math.round(fullCount * fraction))
+    }
+  }
+}
+
+/**
+ * Decides how strongly to draw the surf, from how wide one crest lands
+ * on screen.
+ *
+ * The same shape as updateFoliageDetail above and for the same reason:
+ * an effect whose smallest feature falls below a couple of pixels cannot
+ * be drawn honestly, and drawing it anyway costs more than it shows. A
+ * crest that goes sub-pixel does not become subtle, it becomes a crawl.
+ *
+ * apparentPixels answers for a VERTICAL extent, and the shelf is a
+ * horizontal one lying on the ground, so this reads a little generous at
+ * a grazing camera where the shelf is foreshortened. The consequence is
+ * that the surf fades slightly late at the shallowest angles, which is
+ * the harmless direction: those are the views where the shelf is
+ * stretched widest across the screen anyway.
+ */
+function updateSurf() {
+  if (!camera || !renderer || !waterMesh) return
+
+  const radius = projection.isSpherical && props.world ? planetRadius(props.world.terrain) : 0
+  const distance = Math.max(camera.position.length() - radius, 1e-3)
+  const viewportHeight = renderer.getDrawingBufferSize(drawingBufferSize).y
+
+  const shelfPixels = apparentPixels(SHELF_WIDTH, distance, viewportHeight, camera.fov)
+  setSurf(waterMesh.material, surfStrength(shelfPixels / SURF.bands))
+
+  // The chop answers the same question separately, because it is a much
+  // finer feature than a surf band and goes sub-pixel a long way before
+  // the surf does.
+  const wavePixels = apparentPixels(shortestRippleWavelength(), distance, viewportHeight, camera.fov)
+  setRipple(waterMesh.material, rippleStrength(wavePixels))
+}
+
+/**
+ * Slides the haze range to follow the camera.
+ *
+ * One object on the scene rather than a uniform per material: the
+ * renderer pushes scene.fog into everything that opted in, which is how
+ * the terrain, both vegetation layers and the water's standard material
+ * stay in agreement without this function knowing they exist.
+ */
+function updateAerialPerspective() {
+  if (!scene?.fog || !camera || !worldExtent) return
+
+  const { near, far } = hazeRange({
+    cameraDistance: camera.position.length(),
+    worldExtent,
+  })
+  scene.fog.near = near
+  scene.fog.far = far
 }
 
 function animate() {
@@ -1113,41 +1625,61 @@ function animate() {
 
   advanceDive()
 
-  const nowSec = performance.now() * 0.001
+  // One clock for everything that moves. A frozen environment returns
+  // the same reading every frame, so the pulse, the breathing and the
+  // wind hold still together and none of them needs to know why.
+  const weather = sampleEnvironment(environment, performance.now() * 0.001)
+  const nowSec = weather.time
   const peaks = props.world?.terrain?.peaks
+
+  // Grid space to world: the world group is rotated -90° about X, so the
+  // grid's (x, y) plane lies in world (x, -z) and the wind stays flat
+  // against the map. On the globe the shader takes it from here, keeping
+  // only what lies in the tangent plane at each plant.
+  windWorldDirection.set(weather.windDirection.x, 0, -weather.windDirection.y)
+  for (const material of windMaterials) {
+    setWind(material, weather, windWorldDirection)
+    setSeason(material, weather.season)
+  }
   const hoveredTopLevel = resolveHoveredTopLevel(attentionIndex(), peaks)
 
   // Individual trees are meaningless from orbit and expensive to draw
-  // there, so the canopy fades in on descent. The understory stays on:
-  // it reads as ground texture at any distance and costs one draw call
-  // per variant. On the flat map the gate is always open.
+  // there, so the canopy is gated off entirely past a few radii. On the
+  // flat map the gate is always open.
   if (canopyGroup && props.showFoliage) {
     const radius = projection.isSpherical ? planetRadius(props.world.terrain) : 0
     canopyGroup.visible = shouldShowCanopy(camera.position.length(), radius)
   }
 
-  if (portalGroup) {
+  updateFoliageDetail()
+  updateAerialPerspective()
+  updateSurf()
+
+  // Only the numbers are computed here; how a portal wears them is the
+  // form's business (see portalForms.js). Skipped while the layer is
+  // hidden — a portal nobody can see does not need animating.
+  if (portalGroup?.visible && portalForm) {
     const alpha = PORTAL_MARKERS.lerpAlpha
-    for (const sprite of portalGroup.children) {
-      const portal = sprite.userData.portal
+    for (const object of portalGroup.children) {
+      const state = object.userData
+      const portal = state.portal
       const isHovered = hoveredPortalId !== null && portal?.portalId === hoveredPortalId
 
       // Hover growth eases in via the same lerp as the opacity fade, so
-      // the sprite swells under the cursor instead of snapping.
+      // the portal swells under the cursor instead of snapping.
       const targetHoverScale = pickPortalHoverScale(isHovered)
-      const hoverScale = sprite.userData.hoverScale + (targetHoverScale - sprite.userData.hoverScale) * alpha
-      sprite.userData.hoverScale = hoverScale
-
-      const pulse = computePortalPulse(nowSec, sprite.userData.pulsePhase)
-      const scale = computePortalScale(sprite.userData.baseScale, pulse, hoverScale)
-      sprite.scale.set(scale, scale, 1)
+      state.hoverScale += (targetHoverScale - state.hoverScale) * alpha
 
       // Section-link: dim portals whose section isn't the hovered one.
       // Nothing hovered → all at full presence.
       const isRelated = isPortalRelated(portal?.sectionIndex ?? -1, hoveredTopLevel)
-      const target = pickPortalOpacity(isRelated, isHovered)
-      sprite.material.opacity += (target - sprite.material.opacity) * alpha
-      sprite.material.transparent = true
+      state.opacity += (pickPortalOpacity(isRelated, isHovered) - state.opacity) * alpha
+
+      portalForm.apply(object, {
+        scale: computePortalScale(state.baseScale, computePortalPulse(nowSec, state.pulsePhase), state.hoverScale),
+        opacity: state.opacity,
+        time: nowSec,
+      })
     }
   }
 
@@ -1156,8 +1688,22 @@ function animate() {
     updateSectionTooltip()
   }
 
-  controls?.update()
-  renderer?.render(scene, camera)
+  // Returns true when it actually moved the camera, which covers both a
+  // drag and the damping that keeps coasting after one.
+  if (controls?.update() === true) markRestless()
+
+  // A still world does not need redrawing sixty times a second. When the
+  // reader has asked for less motion nothing in the scene changes on its
+  // own, so frames are drawn only while something is settling — the
+  // hover fades and the camera damping are exponential and never quite
+  // arrive, which is what the settle window is for rather than a test
+  // for equality that would never pass.
+  //
+  // With motion allowed the wind is always running, so this is always
+  // true and the loop behaves exactly as it did before.
+  if (weather.animated || performance.now() * 0.001 < restlessUntil) {
+    renderer?.render(scene, camera)
+  }
 }
 
 onMounted(() => {
@@ -1175,6 +1721,22 @@ onMounted(() => {
   // what reads as "far away".
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setClearColor(0x000000, 0)
+  // Soft filmic curve over the stylized half-Lambert look. The canvas
+  // stays transparent so the CSS starfield is untouched; only the lit
+  // world goes through ACES. Exposure 1.0 is the starting point — drop
+  // toward 0.9 if highlights wash after a look pass.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.0
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+
+  // Nothing set this before, and three defaults it to 1 — which means
+  // the drawing buffer was sized in CSS pixels and the browser upscaled
+  // it to the screen. On a 1x monitor that is correct and free; on a 2x
+  // laptop the world was drawn at a quarter of the pixels it was shown
+  // at, and on a 3x phone a ninth. See rendering/quality.js for why this
+  // is a tier and not simply 2.
+  qualityTier = detectQualityTier(readDeviceProfile())
+  renderer.setPixelRatio(resolvePixelRatio(qualityTier))
   containerRef.value.appendChild(renderer.domElement)
 
   // A single rotated group so terrain/water/portals/halos/vegetation all
@@ -1189,8 +1751,11 @@ onMounted(() => {
   // view's ambient level leaves the night side unreadably black.
   ambientLight = new THREE.AmbientLight(0xffffff, FLAT_VIEW.ambientLightIntensity)
   scene.add(ambientLight)
-  const sun = new THREE.DirectionalLight(0xffffff, 0.9)
-  sun.position.set(60, 120, 40)
+  // Kept on the module rather than local now: the cast shadows are traced
+  // along this light's own direction, so the bake has to be able to ask
+  // where it is. One sun, one source of truth for where it is.
+  sun = new THREE.DirectionalLight(0xffffff, 0.9)
+  sun.position.set(SUN_POSITION.x, SUN_POSITION.y, SUN_POSITION.z)
   scene.add(sun)
 
   controls = new OrbitControls(camera, renderer.domElement)
@@ -1222,11 +1787,15 @@ onBeforeUnmount(() => {
   renderer?.dispose()
 })
 
-// Rebuild when the world, the portal-inclusion, or the projection
-// changes. Portals are generated at build-time from world data, and every
-// vertex position depends on the projection — but a view-mode switch only
-// re-renders the SAME world, it never regenerates terrain. Other layer
-// toggles just flip .visible on their existing groups — no rebuild needed.
+// Rebuild when the world or the projection changes: every vertex
+// position depends on the projection, though a view-mode switch only
+// re-renders the SAME world and never regenerates terrain.
+//
+// Every layer toggle is a .visible flip on an existing group. Portals
+// used to be in the watch above, because the layer was only built when
+// it was showing — so turning the markers off discarded and rebuilt the
+// terrain mesh, all 131k of its vertex colours, every halo and all of
+// the vegetation, to stop drawing 24 sprites.
 /**
  * Puts the camera back where a rebuild would have left it. Exposed rather
  * than driven by a prop because it is an EVENT — "do this now" — and a
@@ -1248,10 +1817,10 @@ function recenter() {
 let dive = null
 
 function diveTo(portal) {
-  const sprite = portalGroup?.children.find((child) => child.userData.portal?.portalId === portal?.portalId)
-  if (!sprite || !camera) return
+  const marker = findPortalObject(portal?.portalId)
+  if (!marker || !camera) return
 
-  const destination = sprite.getWorldPosition(new THREE.Vector3())
+  const destination = marker.getWorldPosition(new THREE.Vector3())
   dive = {
     from: camera.position.clone(),
     // Not all the way in: stopping short of the marker leaves the wash to
@@ -1273,6 +1842,7 @@ function cancelDive() {
 
 function advanceDive() {
   if (!dive) return
+  markRestless()
 
   const elapsed = (performance.now() - dive.startedAt) / dive.duration
   const t = Math.min(1, Math.max(0, elapsed))
@@ -1308,7 +1878,7 @@ function legendAnchors() {
     if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
   }
 
-  const portal = portalGroup?.children.find((sprite) => sprite.visible && !isOccluded(sprite.position))
+  const portal = portalTargets().find((marker) => marker.visible && !isOccluded(marker.position))
   if (portal) {
     const point = screenPositionOf(portal.position)
     const title = portal.userData.portal?.targetTitle
@@ -1320,14 +1890,16 @@ function legendAnchors() {
 
 defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
 
-watch(() => [props.world, props.showPortals, props.worldShape], rebuildScene)
+watch(() => [props.world, props.worldShape], rebuildScene)
 
 watch(
-  () => [props.showSections, props.showFoliage],
+  () => [props.showPortals, props.showSections, props.showFoliage],
   () => {
+    if (portalGroup) portalGroup.visible = props.showPortals
     if (haloGroup) haloGroup.visible = props.showSections
     if (understoryGroup) understoryGroup.visible = props.showFoliage
     if (canopyGroup) canopyGroup.visible = props.showFoliage
+    markRestless()
   },
   { immediate: false },
 )

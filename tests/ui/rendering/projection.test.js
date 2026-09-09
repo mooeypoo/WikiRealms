@@ -9,7 +9,7 @@ import {
   rowForLatitude,
   sphereProjection,
 } from '../../../src/ui/rendering/projection.js'
-import { BIOME_THRESHOLDS } from '../../../src/engine/generation/config.js'
+import { BIOME_THRESHOLDS, GRID } from '../../../src/engine/generation/config.js'
 
 /** A small equirectangular grid: 2:1, like the real GRID. */
 function makeTerrain(overrides = {}) {
@@ -177,6 +177,48 @@ describe('sphereProjection', () => {
   })
 })
 
+describe('buildWaterArrays', () => {
+  it('lays the sea out on the same grid as the ground beneath it', () => {
+    const terrain = makeTerrain()
+    for (const projection of [flatProjection, sphereProjection]) {
+      const heightScale = projection.heightScale(terrain)
+      const surface = projection.buildSurfaceArrays(terrain, heightScale)
+      const water = projection.buildWaterArrays(terrain, heightScale)
+      // Vertex for vertex and triangle for triangle, so heightMap and
+      // both light maps index into the water with no remapping.
+      expect(water.positions).toHaveLength(surface.positions.length)
+      expect([...water.indices]).toEqual([...surface.indices])
+    }
+  })
+
+  it('puts every one of its vertices exactly at sea level', () => {
+    const terrain = makeTerrain({ heightMap: new Float64Array(16 * 8).map((_, i) => i / 128) })
+
+    const flat = flatProjection.buildWaterArrays(terrain, 10)
+    const expectedZ = BIOME_THRESHOLDS.oceanMaxHeight * 10
+    for (let i = 2; i < flat.positions.length; i += 3) {
+      expect(flat.positions[i]).toBeCloseTo(expectedZ, 5)
+    }
+
+    // On the globe sea level is a radius, not a height.
+    const heightScale = sphereProjection.heightScale(terrain)
+    const sphere = sphereProjection.buildWaterArrays(terrain, heightScale)
+    const expectedRadius = length(sphereProjection.toLocal(0, 0, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale))
+    for (let i = 0; i < sphere.positions.length; i += 3) {
+      expect(length({ x: sphere.positions[i], y: sphere.positions[i + 1], z: sphere.positions[i + 2] }))
+        .toBeCloseTo(expectedRadius, 5)
+    }
+  })
+
+  it('carries the sea across the antimeridian and not across the flat map\u2019s edge', () => {
+    const terrain = makeTerrain()
+    expect(sphereProjection.buildWaterArrays(terrain, 1).indices)
+      .toHaveLength(terrain.width * (terrain.height - 1) * 6)
+    expect(flatProjection.buildWaterArrays(terrain, 1).indices)
+      .toHaveLength((terrain.width - 1) * (terrain.height - 1) * 6)
+  })
+})
+
 describe('buildSurfaceArrays', () => {
   it('emits one vertex per grid cell in heightMap index order', () => {
     const terrain = makeTerrain()
@@ -220,23 +262,24 @@ describe('buildSurfaceArrays', () => {
     }
   })
 
-  it('winds planet triangles front-face outward', () => {
-    const terrain = makeTerrain()
+  it('sinks polar rows to sea on the real grid so the medallion can cover them', () => {
+    // Fixture grids are too short for POLAR_CAPS.reachRows; use the
+    // production height so the sink actually fires.
+    const width = 32
+    const height = GRID.height
+    const heightMap = new Float64Array(width * height).fill(0.7)
+    const terrain = { width, height, heightMap }
     const heightScale = sphereProjection.heightScale(terrain)
-    const { positions, indices } = sphereProjection.buildSurfaceArrays(terrain, heightScale)
+    const { positions } = sphereProjection.buildSurfaceArrays(terrain, heightScale)
+    const seaRadius = planetRadius(terrain) + BIOME_THRESHOLDS.oceanMaxHeight * heightScale
+    const landRadius = planetRadius(terrain) + 0.7 * heightScale
 
-    const at = (i) => ({ x: positions[i * 3], y: positions[i * 3 + 1], z: positions[i * 3 + 2] })
-    for (let triangle = 0; triangle < 12; triangle++) {
-      const [a, b, c] = [at(indices[triangle * 3]), at(indices[triangle * 3 + 1]), at(indices[triangle * 3 + 2])]
-      const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }
-      const v = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z }
-      const normal = {
-        x: u.y * v.z - u.z * v.y,
-        y: u.z * v.x - u.x * v.z,
-        z: u.x * v.y - u.y * v.x,
-      }
-      // Face normal must point away from the planet centre.
-      expect(normal.x * a.x + normal.y * a.y + normal.z * a.z).toBeGreaterThan(0)
-    }
+    // North pole row sits at sea, mid-latitude keeps the authored height.
+    expect(Math.hypot(positions[0], positions[1], positions[2])).toBeCloseTo(seaRadius, 5)
+    const mid = (height / 2) * width * 3
+    expect(Math.hypot(positions[mid], positions[mid + 1], positions[mid + 2])).toBeCloseTo(
+      landRadius,
+      5,
+    )
   })
 })

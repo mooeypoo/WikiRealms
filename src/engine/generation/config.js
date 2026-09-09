@@ -52,6 +52,62 @@ export const BIOME_THRESHOLDS = Object.freeze({
 })
 
 /**
+ * The shore as COVER, for the same reason rock and snow became cover.
+ *
+ * BIOME_THRESHOLDS above still classify a cell, because a biome id is a
+ * discrete thing that hover, foliage and the legend all need. But a
+ * renderer that interpolates cannot use a classification as a colour:
+ * the 3D mesh evaluates colour per vertex and lets the GPU blend across
+ * each triangle, so a step lands at an arbitrary point INSIDE a triangle
+ * and the boundary takes the shape of the mesh rather than the shape of
+ * the coast. Measured on a zoomed shoreline, the sand-to-grass line was
+ * a regular sawtooth with one tooth every 39px, which was one grid cell
+ * at that camera: the teeth were the triangles. Softening the boundary
+ * took it from 18.4px peak to peak down to 7.5px, and its roughness from
+ * 3.7px rms to 1.2px.
+ *
+ * Smooth functions survive that interpolation, which is why the rock and
+ * snow lines do not show it and this is the same fix. Nothing here moves
+ * a biome or a worldId; it changes only what a surface looks like.
+ *
+ * The widths are in height, not in cells, and that is the point: a
+ * gentle coast spreads its sand over many cells and a cliff gets almost
+ * none, which is how beaches actually work.
+ *
+ * Both are sized against the MEASURED coast, on the Grand Canyon world
+ * the artefact was found on: height changes by 0.0075 across a cell at
+ * the waterline (p50 of 1258 straddling cells; p90 is 0.018), and the
+ * classified beach is 4 cells wide at p50. So a band of width w spans
+ * about w/0.0075 cells, and its cover moves at most 1.5 * 0.0075 / w per
+ * cell — the 1.5 being a smoothstep's steepest slope, at its centre.
+ * Under a tenth of the palette per cell is what stops an edge being
+ * visible, which these widths hold at p50 and a cliff at p90 does not —
+ * correctly, since a cliff has no beach to draw.
+ */
+export const SHORE = Object.freeze({
+  // The sand's inner edge, as a band CENTRED on beachMaxHeight.
+  //
+  // Centred, not appended, and that is the whole of it. Running the fade
+  // upwards from the threshold — 0.36 to 0.42 — softened the edge and
+  // moved the coast inland with it: a smoothstep is symmetric, so half
+  // cover at 0.39 put sand over three hundredths of height that used to
+  // be woodland, and a shore that read as wooded read as beach. Centring
+  // makes the cover integrate to exactly the area the classification
+  // covered, because the two halves of the curve cancel. Same quantity
+  // of sand, softer edge, coastline where it was.
+  //
+  // 0.06 wide spans about 8 cells at the median coast.
+  sandFadeFrom: 0.33,
+  sandFadeTo: 0.39,
+  // Below the waterline the sand goes over to sea floor. This was 0.27,
+  // and at 0.05 wide it was the steepest thing on the coast — the sand
+  // and the deep blue are further apart in colour than the sand and any
+  // land band, so the narrower band carried the bigger step. 0.08 puts
+  // it level with the fade above, and everything deeper is open water.
+  seaFloorFull: 0.24,
+})
+
+/**
  * Altitude, as a second axis over the top of lushness rather than a
  * replacement for it.
  *
@@ -79,19 +135,49 @@ export const BIOME_THRESHOLDS = Object.freeze({
  * thinned the foliage on every second cell of open lowland.
  */
 export const ALTITUDE = Object.freeze({
-  // Bare stone showing through the vegetation. Starts around the 78th
-  // percentile of land height, so it reads as high ground rather than as
-  // a wash over the whole map.
-  rockStart: 0.62,
-  rockFull: 0.86,
+  // Bare stone showing through the vegetation. Starts around the 90th
+  // percentile of land height (story fixture p90 ≈ 0.72), so mid-slopes
+  // stay vegetated and only true high ground goes stony — 0.62 used to
+  // wash roughly a quarter of the land grey.
+  rockStart: 0.70,
+  rockFull: 0.88,
   // Snow lying on top of whatever the rock band left.
+  //
+  // 0.82 is around the 95th percentile of land height — measured on the
+  // story fixture, only 5.1% of land ever reaches it. Snow is meant to be
+  // the summits and nothing else, which is why it cannot also be the band
+  // that decides whether vegetation looks cold. See frostStart.
   snowStart: 0.82,
   snowFull: 0.97,
+  // Vegetation carries snow LOWER than the ground holds it.
+  //
+  // Not a fudge: a crown is a thin exposed thing that takes rime and
+  // wet snow well below where a covering lies on open ground. Frost
+  // begins below rockStart so krummholz can rim before the ground has
+  // gone fully to scree — rock on the terrain and frost on the canopy
+  // are related but not the same band.
+  //
+  // Sharing the terrain's band instead put caps on 4 trees out of 534
+  // even with the treeline raised; this puts them on 38. Only the
+  // canopy reads these — the terrain keeps snowStart/snowFull.
+  frostStart: 0.62,
+  frostFull: 0.88,
   // The treeline: foliage density falls off across this band rather than
-  // vanishing at a line. Deliberately BELOW rockStart — trees thin out
+  // vanishing at a line. It STARTS below rockStart — trees thin out
   // before the stone starts showing, which is the order it happens in.
+  //
+  // It used to end at 0.86, which put the last tree in the world below
+  // the snowline in practice. Measured on the story fixture: the highest
+  // tree stood at 0.844, where snow cover is 6.9%, and of 517 trees
+  // exactly none carried a visible cap. Snow and vegetation were two
+  // features that could not be seen in the same place.
+  //
+  // 0.93 is inside the snow band, so a well-cited range keeps stunted
+  // growth up into the white. It ends above rockFull deliberately: what
+  // survives that high is krummholz on scree, which is what really grows
+  // at a treeline.
   treelineStart: 0.58,
-  treelineEnd: 0.86,
+  treelineEnd: 0.93,
   // Where one kind of tree gives way to another (see foliage.js
   // resolveArchetypeForAltitude). Broadleaf turns to conifer well before
   // the treeline starts, and conifer to stunted krummholz inside it, so a
@@ -249,11 +335,13 @@ export const PEAK_LAYOUT = Object.freeze({
  *
  * The latitude band that keeps continents off the poles (see
  * PEAK_LAYOUT.latitudeCompression) leaves both caps as empty ocean, which
- * reads as an unfinished planet. These fill them with a modest icecap.
+ * reads as an unfinished planet. These fill them with a modest icecap on
+ * the flat map and in the height/biome data the legend reads.
  *
  * Being centred ON the pole is what makes them safe: they cover every
- * longitude at the top and bottom rows, so they converge to a smooth cap
- * rather than the pinched wedge that arbitrary land near a pole produces.
+ * longitude at the top and bottom rows. On the planet view the same
+ * footprint is drawn as a separate faceted ice medallion (see
+ * polarMedallion.js) rather than as the lat/long ring, which puckers.
  * `reachRows` is deliberately small — these are landmarks, not continents.
  */
 export const POLAR_CAPS = Object.freeze({

@@ -4,7 +4,10 @@ import { CANOPY_ARCHETYPES } from '../../../src/ui/rendering/foliage.js'
 import {
   archetypeHeight,
   buildArchetypeGeometry,
+  buildTieredCrown,
   mergeGeometries,
+  tierPitch,
+  tierRadii,
 } from '../../../src/ui/rendering/canopyGeometry.js'
 
 /**
@@ -123,6 +126,95 @@ describe('buildArchetypeGeometry', () => {
     const slenderness = (b) => (b.max[2] - b.min[2]) / (b.max[0] - b.min[0])
 
     expect(slenderness(conifer)).toBeGreaterThan(slenderness(broadleaf))
+  })
+
+  it('puts the tip of a tiered crown at the authored height', () => {
+    // The pitch is solved for this property, so if it drifts the tip is
+    // either short of the tip of the tree or sticking through it.
+    const spec = CANOPY_ARCHETYPES.conifer
+    const { max } = bounds(buildArchetypeGeometry(spec))
+
+    expect(max[2]).toBeCloseTo(spec.trunkHeight + spec.crownHeight, 4)
+  })
+
+  it('builds a conifer crown whose sides face the sky enough to hold frost', () => {
+    // THE REASON THE CROWN IS TIERED. A single cone of the old proportions
+    // had sides 81 degrees off vertical; their normals carried an
+    // up-component of 0.158, below the shader's SNOW_FACING_START of
+    // 0.35, and took nothing. Across the frost band the tree that grows
+    // is a conifer, so the whole band was invisible.
+    //
+    // Measured as the share of surface area whose facing gate is open.
+    // The floor is deliberately below the current 60%: enough that a
+    // regression to a single cone fails, not so tight that a modest
+    // re-proportioning of the tiers fails with it.
+    const SNOW_FACING_START = 0.35
+    const smoothstep = (e0, e1, x) => {
+      const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)))
+      return t * t * (3 - 2 * t)
+    }
+
+    const geo = buildArchetypeGeometry(CANOPY_ARCHETYPES.conifer)
+    const pos = geo.getAttribute('position')
+    const nor = geo.getAttribute('normal')
+    let total = 0
+    let frostable = 0
+    for (let t = 0; t < pos.count; t += 3) {
+      const ax = pos.getX(t),
+        ay = pos.getY(t),
+        az = pos.getZ(t)
+      const bx = pos.getX(t + 1),
+        by = pos.getY(t + 1),
+        bz = pos.getZ(t + 1)
+      const cx = pos.getX(t + 2),
+        cy = pos.getY(t + 2),
+        cz = pos.getZ(t + 2)
+      const ux = bx - ax,
+        uy = by - ay,
+        uz = bz - az
+      const vx = cx - ax,
+        vy = cy - ay,
+        vz = cz - az
+      const area = 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx)
+      const up = (nor.getZ(t) + nor.getZ(t + 1) + nor.getZ(t + 2)) / 3
+      total += area
+      if (smoothstep(SNOW_FACING_START, 1, up) > 0.01) frostable += area
+    }
+
+    expect(frostable / total).toBeGreaterThan(0.4)
+  })
+})
+
+describe('buildTieredCrown', () => {
+  it('fills the authored height without gaps between the skirts', () => {
+    // Overlap by construction: each tier's base sits part-way up its
+    // neighbour, so no arrangement of taper and count can leave a hole
+    // in the silhouette. Asserted as continuous coverage of the Z axis
+    // rather than as a pairwise check, so a future change that drops
+    // the overlap still fails here for the same reason.
+    const parts = buildTieredCrown(0.56, 2.5, 8)
+    const spans = parts
+      .map((part) => {
+        const { min, max } = bounds(part)
+        return [min[2], max[2]]
+      })
+      .sort((a, b) => a[0] - b[0])
+
+    expect(spans[0][0]).toBeCloseTo(0, 4)
+    expect(spans.at(-1)[1]).toBeCloseTo(2.5, 4)
+    for (let i = 1; i < spans.length; i++) {
+      expect(spans[i][0]).toBeLessThan(spans[i - 1][1])
+    }
+  })
+
+  it('solves a pitch that scales with the authored height', () => {
+    // The whole reason the pitch is solved rather than chosen: raise the
+    // crown and the tiers steepen with it, rather than leaving a gap at
+    // the tip or overshooting it.
+    const radii = tierRadii(0.56, 8)
+
+    expect(tierPitch(radii, 5)).toBeCloseTo(2 * tierPitch(radii, 2.5), 6)
+    expect(tierPitch(radii, 2.5)).toBeGreaterThan(tierPitch(radii, 1.5))
   })
 })
 

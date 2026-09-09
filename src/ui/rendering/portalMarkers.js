@@ -3,26 +3,22 @@
  * marks an outbound article link, its idle pulse, and its hover response.
  *
  * Portals are the only markers on the map a click actually navigates
- * through, so they're deliberately the loudest thing in the marker
- * vocabulary: larger than a section summit marker, drawn with an aura so
- * they read as a light source rather than a flat emoji, and they grow
- * under the cursor to confirm they're a target before the click lands.
+ * through, so they need to be findable — but not louder than the section
+ * halos they sit beside. Size and glow stay under the wall markers;
+ * colour (pink/cyan swirl) is what keeps them in a different vocabulary.
  *
  * Kept as constants + pure functions here (no three.js) so the behavior
  * can be tuned and unit-tested without a WebGL context.
  */
 export const PORTAL_MARKERS = Object.freeze({
-  // Sprite world-units at rest. The section wall markers are ~6-8 units
-  // tall, so this reads as a comparable landmark rather than a speck.
-  baseScale: 9,
-  // How far the sprite floats above the surface (or above sea level, for
-  // a portal over water). Proportional to baseScale rather than to the
-  // terrain's vertical exaggeration: the sprite is centred on this point
-  // and extends baseScale/2 below it, so too small a lift buries the
-  // lower half of the whirlpool in the ground. Being size-relative, it
-  // carries over to the planet view unchanged — one grid cell is one
-  // world unit of arc in both projections (see projection.js).
-  hoverOffset: 6,
+  // World-units at rest. Smaller than a section wall (~6–8) so portals
+  // mark a destination without competing with the halo vocabulary —
+  // especially from orbit, where a scale of 9 used to own the silhouette.
+  baseScale: 5,
+  // How far the marker floats above the surface (or above sea level).
+  // Sized with baseScale: the vortex extends about half its scale below
+  // its centre, so too small a lift buries it in the ground.
+  hoverOffset: 3.2,
   texture: Object.freeze({
     size: 128, // px; the aura needs room around the glyph to fade out
     coreRatio: 0.06, // solid-white core radius, fraction of the canvas
@@ -38,16 +34,35 @@ export const PORTAL_MARKERS = Object.freeze({
   }),
   // Slow idle breathing so a map full of portals shimmers rather than
   // strobes. Frequency is rad/sec.
-  pulse: Object.freeze({ frequency: 1.7, amplitude: 0.1 }),
-  // Growth under the cursor — big enough to be unmistakable, small
-  // enough not to swallow neighboring portals.
-  hover: Object.freeze({ scale: 1.45 }),
+  pulse: Object.freeze({ frequency: 1.7, amplitude: 0.08 }),
+  // Phase offset per portal, in radians, so a cluster shimmers instead
+  // of beating in unison. Not a divisor of 2π, or portals would fall
+  // back into step with each other at regular intervals along the list.
+  pulsePhaseStep: 0.7,
+  // Growth under the cursor — clear without swallowing neighbours.
+  hover: Object.freeze({ scale: 1.35 }),
   opacity: Object.freeze({
     related: 1, // nothing hovered, or this portal's section is hovered
-    unrelated: 0.25, // another section is hovered — recede
+    unrelated: 0.2, // another section is hovered — recede
   }),
   // Exponential lerp factor for scale/opacity transitions, per frame.
   lerpAlpha: 0.18,
+  /**
+   * Vortex form palette and spin. Fixed pink/cyan — not the section
+   * accent — so portals never read as another halo ring from orbit.
+   */
+  vortex: Object.freeze({
+    pink: 0xe04a8f,
+    cyan: 0x3aa8d4,
+    core: 0xf0c4d8,
+    /** Radians per second around the surface normal. */
+    spin: 1.35,
+    /**
+     * Multiplier on additive material opacity. Full opacity on additive
+     * pink/cyan washes the planet; keep the glow present but quieter.
+     */
+    intensity: 0.52,
+  }),
 })
 
 /**
