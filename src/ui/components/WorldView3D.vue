@@ -6,6 +6,7 @@ import { detectWebGLSupport } from '../rendering/webglSupport.js'
 import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/terrainMesh.js'
 import { hazeRange } from '../rendering/aerialPerspective.js'
 import { computeSkyVisibility } from '../rendering/occlusion.js'
+import { computeSunlight } from '../rendering/sunlight.js'
 import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
@@ -128,6 +129,40 @@ let animationFrameId = null
 let raycaster = null
 let pointer = null
 let ambientLight = null
+let sun = null
+
+/**
+ * Where the sun stands, in world space.
+ *
+ * A position rather than a direction because that is what three's
+ * DirectionalLight takes; it shines from here toward its target, which
+ * defaults to the origin, so the direction TOWARD the light is this
+ * vector normalised.
+ *
+ * It is a named constant now because two things read it — the light
+ * itself and the shadow bake — and a sun in one place casting shadows
+ * from another is a bug with no visible cause. Its elevation is 59°
+ * above the horizon, which is where the shadows' length comes from: a
+ * ridge shadows about 0.6 of its own height.
+ */
+const SUN_POSITION = Object.freeze({ x: 60, y: 120, z: 40 })
+
+/**
+ * The direction toward the sun, in the terrain mesh's own local frame —
+ * which is the frame the height map indexes into, and the one the
+ * shadow trace needs.
+ *
+ * worldGroup carries the whole world from grid space into a Y-up world
+ * with a single -90° rotation about X, which sends local (x, y, z) to
+ * world (x, z, -y). Inverting that is the whole of this function, and it
+ * is worth having in one named place: handing the trace a world-space
+ * sun instead tilts every shadow in the scene by ninety degrees, which
+ * reads as "the shadows are wrong" rather than as a frame mix-up.
+ */
+function sunDirectionLocal() {
+  const world = sun ? sun.position : SUN_POSITION
+  return { x: world.x, y: -world.z, z: world.y }
+}
 
 // The world's clock and weather (see rendering/environment.js). One
 // object, so the wind, the portal pulse and the halo breathing all read
@@ -300,6 +335,19 @@ function buildTerrainMesh(world) {
     curvatureRadius: projection.isSpherical ? planetRadius(terrain) : 0,
   })
   geometry.setAttribute('occlusion', new THREE.BufferAttribute(skyVisibility, 1))
+
+  // And whether the sun reaches each cell, traced along the sun's own
+  // bearing from the same height map. The sky term above cannot answer
+  // this and deliberately does not try: a slope can see plenty of sky
+  // and still stand in the shadow of the ridge upsun of it.
+  const sunlightMap = computeSunlight(terrain, {
+    sunDirection: sunDirectionLocal(),
+    heightScale,
+    spherical: projection.isSpherical,
+    wrapX: projection.isSpherical,
+    curvatureRadius: projection.isSpherical ? planetRadius(terrain) : 0,
+  })
+  geometry.setAttribute('sunlight', new THREE.BufferAttribute(sunlightMap, 1))
   geometry.computeVertexNormals()
 
   // Smooth normals soften the grid's artificial triangular facets while the
@@ -308,6 +356,7 @@ function buildTerrainMesh(world) {
     vertexColors: true,
     spherical: projection.isSpherical,
     occlusion: true,
+    sunlight: true,
   })
   const mesh = new THREE.Mesh(geometry, material)
 
@@ -340,7 +389,7 @@ function buildTerrainMesh(world) {
 
   const halos = buildSectionHalos(world, heightScale)
 
-  const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility)
+  const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility, sunlightMap)
 
   return { mesh, water, portals, halos, understory, canopy, heightScale }
 }
@@ -426,7 +475,7 @@ const instanceTint = new THREE.Color()
  * @param {number} heightScale
  * @returns {{ understory: THREE.Group, canopy: THREE.Group }}
  */
-function buildFoliage(world, heightScale, skyVisibility) {
+function buildFoliage(world, heightScale, skyVisibility, sunlightMap) {
   // Foliage proportions are in grid cells, and one cell is one world unit
   // of arc in both projections — but the RELIEF those cells rise through
   // is compressed on the planet, so a tree sized for the flat map
@@ -437,6 +486,7 @@ function buildFoliage(world, heightScale, skyVisibility) {
     heightScale,
     cellScale,
     skyVisibility,
+    sunlightMap,
   })
 
   // === Understory: one InstancedMesh of blade clumps per variant ===
@@ -448,6 +498,7 @@ function buildFoliage(world, heightScale, skyVisibility) {
     const geometry = buildUnderstoryGeometry(form, layer.variant.size, cellScale)
     geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
     geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
+    geometry.setAttribute('sunlight', new THREE.InstancedBufferAttribute(layer.sunlights, 1))
 
     const material = createStylizedMaterial({
       // The blade's own root-dark gradient, which is what stops a clump
@@ -457,8 +508,10 @@ function buildFoliage(world, heightScale, skyVisibility) {
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
       swayHeight: understoryHeight(form, layer.variant.size, cellScale),
-      // Per instance: a clump is lit by the sky its own cell can see.
+      // Per instance: a clump is lit by the sky its own cell can see,
+      // and darkens with the ground when a ridge takes the sun off it.
       occlusion: true,
+      sunlight: true,
       // A blade is a strip with no thickness, so half of every clump is
       // seen from behind. three flips the normal for the back face when
       // this is set, so the lighting stays right rather than going black
@@ -481,6 +534,7 @@ function buildFoliage(world, heightScale, skyVisibility) {
     // on a geometry that is only used by this one InstancedMesh.
     geometry.setAttribute('snowHeight', new THREE.InstancedBufferAttribute(layer.heights, 1))
     geometry.setAttribute('occlusion', new THREE.InstancedBufferAttribute(layer.occlusions, 1))
+    geometry.setAttribute('sunlight', new THREE.InstancedBufferAttribute(layer.sunlights, 1))
 
     // The frost band, not the ground's snowline: a crown takes snow far
     // lower than open ground holds it, and on the ground's band no tree
@@ -495,8 +549,10 @@ function buildFoliage(world, heightScale, skyVisibility) {
       spherical: projection.isSpherical,
       snowline: { start: ALTITUDE.frostStart, full: ALTITUDE.frostFull },
       swayHeight: archetypeHeight(spec, cellScale),
-      // Per instance: a tree in a ravine is as dark as the ravine.
+      // Per instance: a tree in a ravine is as dark as the ravine, and a
+      // stand on a shadowed hillside is as dark as the hillside.
       occlusion: true,
+      sunlight: true,
     })
     windMaterials.push(material)
     canopy.add(buildInstancedLayer(geometry, material, layer, archetypeHeight(spec, cellScale)))
@@ -1373,8 +1429,11 @@ onMounted(() => {
   // view's ambient level leaves the night side unreadably black.
   ambientLight = new THREE.AmbientLight(0xffffff, FLAT_VIEW.ambientLightIntensity)
   scene.add(ambientLight)
-  const sun = new THREE.DirectionalLight(0xffffff, 0.9)
-  sun.position.set(60, 120, 40)
+  // Kept on the module rather than local now: the cast shadows are traced
+  // along this light's own direction, so the bake has to be able to ask
+  // where it is. One sun, one source of truth for where it is.
+  sun = new THREE.DirectionalLight(0xffffff, 0.9)
+  sun.position.set(SUN_POSITION.x, SUN_POSITION.y, SUN_POSITION.z)
   scene.add(sun)
 
   controls = new OrbitControls(camera, renderer.domElement)

@@ -100,6 +100,39 @@ describe('createStylizedMaterial', () => {
     expect(material.fragmentShader).not.toContain('directionalLights[0].color * vOcclusion')
   })
 
+  it('reads the sunlight attribute only where one is supplied', () => {
+    // Same failure mode as occlusion, one step further: an unbound
+    // attribute reads as 0, and 0 sunlight is midnight.
+    const withSunlight = createStylizedMaterial({ sunlight: true })
+    const without = createStylizedMaterial()
+
+    expect(withSunlight.defines).toHaveProperty('USE_SUNLIGHT')
+    expect(without.defines).not.toHaveProperty('USE_SUNLIGHT')
+    expect(withSunlight.vertexShader).toContain('attribute float sunlight;')
+  })
+
+  it('scales the sun by the cast shadow, and only the sun', () => {
+    // The mirror of the occlusion rule above, and the other half of the
+    // same question. Whether a surface FACES the sun is the dot product;
+    // whether the sun REACHES it is the baked shadow. Applying this to
+    // the ambient term as well would darken a shadowed surface twice and
+    // take away the skylight that is the only thing lighting it.
+    const material = createStylizedMaterial({ occlusion: true, sunlight: true })
+
+    expect(material.fragmentShader).toContain('wrapped * wrapped * vSunlight')
+    expect(material.fragmentShader).toContain('ambientLightColor * vOcclusion')
+    expect(material.fragmentShader).not.toContain('ambientLightColor * vOcclusion * vSunlight')
+  })
+
+  it('carries both light terms at once, on one material', () => {
+    // The terrain and every vegetation layer take sky visibility AND the
+    // cast shadow, so the defines have to coexist with each other and
+    // with flat shading.
+    const canopy = createStylizedMaterial({ flatShading: true, occlusion: true, sunlight: true })
+
+    expect(Object.keys(canopy.defines).sort()).toEqual(['FLAT_SHADED', 'USE_OCCLUSION', 'USE_SUNLIGHT'])
+  })
+
   it('opts into scene fog, so one range drives every material', () => {
     // `fog: true` is what makes the renderer keep fogColor, fogNear and
     // fogFar current from scene.fog. Without it the uniforms below exist,

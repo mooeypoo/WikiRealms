@@ -433,6 +433,65 @@ describe('scatterFoliage', () => {
     for (const value of understory.occlusions) expect(value).toBe(1)
   })
 
+  it('puts each plant in the shadow its own cell stands in', () => {
+    // A hillside that loses the sun goes dark, and a stand of trees on
+    // it that did not would be the brightest thing in the shot. Same
+    // per-cell lookup as the sky term, for the other light source.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.8 })
+    const sunlightMap = new Float32Array(terrain.width * terrain.height).fill(1)
+    // A band across the world, which is the shape a shadow has anyway —
+    // and a band rather than a row because the layers sample on a
+    // stride, so a single row can fall between samples and be found
+    // nowhere. Same trap as the sky-visibility test above.
+    const middle = Math.floor(terrain.height / 2)
+    for (let y = middle - 4; y <= middle + 4; y += 1) {
+      for (let x = 0; x < terrain.width; x += 1) sunlightMap[y * terrain.width + x] = 0.25
+    }
+
+    const [canopy] = scatterCanopy(terrain, 31, { ...FLAT, sunlightMap })
+    const [understory] = scatterUnderstory(terrain, 31, { ...FLAT, sunlightMap })
+
+    for (const layer of [canopy, understory]) {
+      expect(layer.sunlights).toHaveLength(layer.count)
+      const shaded = [...layer.sunlights].filter((value) => value < 0.5)
+      const sunny = [...layer.sunlights].filter((value) => value === 1)
+      expect(shaded.length).toBeGreaterThan(0)
+      expect(sunny.length).toBeGreaterThan(0)
+      for (const value of shaded) expect(value).toBeCloseTo(0.25, 6)
+    }
+  })
+
+  it('leaves every plant in full sun when no shadow map is supplied', () => {
+    // Zero-filled would leave a caller without a map — every test here —
+    // with vegetation standing in permanent night.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.8 })
+    const [canopy] = scatterCanopy(terrain, 31, FLAT)
+    const [understory] = scatterUnderstory(terrain, 31, FLAT)
+
+    for (const value of canopy.sunlights) expect(value).toBe(1)
+    for (const value of understory.sunlights) expect(value).toBe(1)
+  })
+
+  it('hands both light maps through scatterFoliage together', () => {
+    // The component builds one and then the other and passes both in a
+    // single call; dropping either on the way through is a whole layer
+    // lit differently from the ground it stands on.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.8 })
+    const cells = terrain.width * terrain.height
+    const skyVisibility = new Float32Array(cells).fill(0.5)
+    const sunlightMap = new Float32Array(cells).fill(0.25)
+
+    const { canopy, understory } = scatterFoliage(terrain, 31, { ...FLAT, skyVisibility, sunlightMap })
+
+    for (const layers of [canopy, understory]) {
+      expect(layers.length).toBeGreaterThan(0)
+      for (const layer of layers) {
+        for (const value of layer.occlusions) expect(value).toBeCloseTo(0.5, 6)
+        for (const value of layer.sunlights) expect(value).toBeCloseTo(0.25, 6)
+      }
+    }
+  })
+
   it('orders instances so that any prefix covers the whole world', () => {
     // Distance thinning works by lowering an InstancedMesh's count,
     // which draws the FIRST n instances. Cells are found in scan order,

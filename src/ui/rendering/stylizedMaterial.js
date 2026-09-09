@@ -177,12 +177,21 @@ attribute float snowHeight;
   uniform float uOcclusionStrength;
 #endif
 
+// Whether the sun reaches this surface, in [0, 1], traced along the
+// sun's own bearing from the height map (see sunlight.js). Behind a
+// define for the same reason as occlusion: an attribute with no buffer
+// bound reads as 0, and 0 here is midnight.
+#ifdef USE_SUNLIGHT
+  attribute float sunlight;
+#endif
+
 // Needed by normal_fragment_begin, which derives a face normal from its
 // screen-space derivatives when the material is flat shaded.
 varying vec3 vViewPosition;
 varying float vSnowHeight;
 varying float vFacingUp;
 varying float vOcclusion;
+varying float vSunlight;
 
 void main() {
   #include <color_vertex>
@@ -274,6 +283,11 @@ void main() {
     // result costs one pow per vertex instead of one per pixel.
     vOcclusion = pow(occlusion, uOcclusionStrength);
   #endif
+
+  vSunlight = 1.0;
+  #ifdef USE_SUNLIGHT
+    vSunlight = sunlight;
+  #endif
 }
 `
 
@@ -293,6 +307,7 @@ varying vec3 vViewPosition;
 varying float vSnowHeight;
 varying float vFacingUp;
 varying float vOcclusion;
+varying float vSunlight;
 
 void main() {
   vec3 albedo = vec3(1.0);
@@ -331,9 +346,22 @@ void main() {
   // Half-Lambert, squared: never black on the far side, soft across the
   // terminator. Only the first directional light is read, because the
   // scene has exactly one and a loop would cost more than it buys.
+  //
+  // Scaled by the cast shadow, and by that alone — the two terms answer
+  // the two halves of the question the comment above poses. Whether a
+  // surface FACES the sun is the dot product, and it is a property of
+  // this surface. Whether the sun REACHES it is vSunlight, and it is a
+  // property of everything between here and the sun. A slope can face
+  // the sun squarely and stand in the shadow of the ridge upsun of it,
+  // and before this it was rendered in full daylight.
+  //
+  // Nothing is added back in shadow. That is not an omission: the light
+  // a real shadow is filled by is skylight, which is the ambient term,
+  // and it is already here and already attenuated by how much sky this
+  // surface can see.
   #if NUM_DIR_LIGHTS > 0
     float wrapped = dot(normal, directionalLights[0].direction) * 0.5 + 0.5;
-    irradiance += directionalLights[0].color * wrapped * wrapped;
+    irradiance += directionalLights[0].color * wrapped * wrapped * vSunlight;
   #endif
 
   // RECIPROCAL_PI is not decoration: it is the normalisation factor in
@@ -388,6 +416,8 @@ void main() {
  *   spherical?: boolean,
  *   snowline?: { start: number, full: number },
  *   swayHeight?: number,
+ *   occlusion?: boolean,
+ *   sunlight?: boolean,
  * }} options
  * @returns {THREE.ShaderMaterial}
  */
@@ -399,6 +429,7 @@ export function createStylizedMaterial({
   swayHeight = 0,
   side = THREE.FrontSide,
   occlusion = false,
+  sunlight = false,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -438,6 +469,9 @@ export function createStylizedMaterial({
       // actually bound. An unbound attribute reads as 0, which here
       // would mean a surface that sees no sky at all.
       ...(occlusion ? { USE_OCCLUSION: '' } : {}),
+      // And the same for the cast shadow, where an unbound attribute
+      // would read as midnight.
+      ...(sunlight ? { USE_SUNLIGHT: '' } : {}),
     },
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
