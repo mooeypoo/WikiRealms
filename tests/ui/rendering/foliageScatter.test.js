@@ -563,15 +563,15 @@ describe('scatterFoliage', () => {
     // change WHICH cells grow anything. If this drifts, every world's
     // ground cover has quietly moved.
     //
-    // These figures were read off the sprite implementation this
-    // replaced, running against the same fixture: 1262 ferns and 151
-    // grasses, each in the same cell as before.
+    // The figures track the WOODLAND densities in UNDERSTORY_BY_BAND and
+    // the understory curve in FOLIAGE_DENSITY — raise either and they
+    // move. What they must not do is move because the rolls moved.
     const terrain = uniformTerrain(BIOME.WOODLAND, { height01: 0.35, lushness: 0.7 })
     const layers = scatterUnderstory(terrain, 404, FLAT)
 
     expect(layers.map((layer) => [layer.variant.kind, layer.count])).toEqual([
-      ['fern', 1262],
-      ['grass', 151],
+      ['fern', 1826],
+      ['grass', 228],
     ])
   })
 })

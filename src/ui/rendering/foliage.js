@@ -80,6 +80,23 @@ export const FOLIAGE_SAMPLING = Object.freeze({
  * A band absent from this map has no ground cover: ocean, beach, the
  * polar-cap snow, and DUNES, which means the section cites nothing and
  * should read as bare ground rather than as sparse cover.
+ *
+ * HOW MUCH GROUND EACH BAND COVERS — weight x density, summed:
+ *
+ *   steppe 0.09   light 0.33   meadow 0.54   woodland 0.45   jungle 0.70
+ *
+ * The green three were raised together, from 0.42 / 0.30 / 0.40. A
+ * jungle floor at 0.40 was the tell: the same ground cover as a meadow,
+ * on the band that is supposed to be impenetrable. These are chances per
+ * SAMPLED CELL and the understory stride is 1, so 0.70 means seven cells
+ * in ten carry a clump — dense enough to read as a mat rather than as
+ * dots, which is what the band names promise.
+ *
+ * Woodland dips below meadow on purpose, and is the one place the
+ * sequence does not climb. A closed canopy shades its own floor; an open
+ * meadow is grass all the way across. What the dip must not do is fall
+ * below LIGHT_VEG, which would put more cover on scrubland than in a
+ * wood.
  */
 export const UNDERSTORY_BY_BAND = Object.freeze({
   [BIOME.STEPPE]: [
@@ -87,21 +104,21 @@ export const UNDERSTORY_BY_BAND = Object.freeze({
     { kind: 'grass', color: 0xb5a05c, size: 0.6, density: 0.05, weight: 0.2 }, // bleached, dead
   ],
   [BIOME.LIGHT_VEG]: [
-    { kind: 'grass', color: 0xa7c86b, size: 0.75, density: 0.3, weight: 0.85 },
-    { kind: 'grass', color: 0xe5c04d, size: 0.7, density: 0.05, weight: 0.15 },
+    { kind: 'grass', color: 0xa7c86b, size: 0.75, density: 0.38, weight: 0.85 },
+    { kind: 'grass', color: 0xe5c04d, size: 0.7, density: 0.06, weight: 0.15 },
   ],
   [BIOME.MEADOW]: [
-    { kind: 'grass', color: 0x75ba55, size: 0.85, density: 0.55, weight: 0.72 },
-    { kind: 'grass', color: 0xd66b6b, size: 0.8, density: 0.06, weight: 0.13 }, // wildflower
-    { kind: 'scrub', color: 0x8e9f6a, size: 0.9, density: 0.08, weight: 0.15 },
+    { kind: 'grass', color: 0x75ba55, size: 0.85, density: 0.72, weight: 0.72 },
+    { kind: 'grass', color: 0xd66b6b, size: 0.8, density: 0.08, weight: 0.13 }, // wildflower
+    { kind: 'scrub', color: 0x8e9f6a, size: 0.9, density: 0.1, weight: 0.15 },
   ],
   [BIOME.WOODLAND]: [
-    { kind: 'fern', color: 0x4c8348, size: 0.9, density: 0.34, weight: 0.78 },
-    { kind: 'grass', color: 0x6ba85a, size: 0.8, density: 0.14, weight: 0.22 },
+    { kind: 'fern', color: 0x4c8348, size: 0.9, density: 0.52, weight: 0.78 },
+    { kind: 'grass', color: 0x6ba85a, size: 0.8, density: 0.22, weight: 0.22 },
   ],
   [BIOME.JUNGLE]: [
-    { kind: 'fern', color: 0x2f7a45, size: 1.0, density: 0.46, weight: 0.85 },
-    { kind: 'grass', color: 0xe5be3f, size: 0.85, density: 0.06, weight: 0.15 },
+    { kind: 'fern', color: 0x2f7a45, size: 1.0, density: 0.8, weight: 0.85 },
+    { kind: 'grass', color: 0xe5be3f, size: 0.85, density: 0.1, weight: 0.15 },
   ],
 })
 
@@ -229,12 +246,26 @@ export const CANOPY_ARCHETYPES = Object.freeze({
     crownRadius: 0.62,
     crown: 'round',
   }),
+  // Stacked skirts rather than one cone, so the crown has shoulders that
+  // face the sky and can hold frost — see canopyGeometry.js TIER_SHAPE
+  // for why a single cone could not, and why the tier count follows from
+  // the crown's height rather than from taste.
+  //
+  // A little wider and shorter than the cone it replaces (1.12 cells
+  // across against 0.96, 3.3 tall against 3.65). Both moves buy slope,
+  // and slope is what holds snow — but only so far: a conifer has to
+  // stay NARROWER than a broadleaf, or the two read as the same tree,
+  // and that ceiling is what sets the tier count. Eight tiers over this
+  // crown lie at 1.21 height-over-radius; at the six I first tried, the
+  // same crown had to be a third wider to reach the same slope, and came
+  // out fatter than the broadleaf it is supposed to contrast with.
   conifer: Object.freeze({
-    trunkHeight: 0.65,
+    trunkHeight: 0.8,
     trunkRadius: 0.08,
-    crownHeight: 3.0,
-    crownRadius: 0.48,
-    crown: 'cone',
+    crownHeight: 2.5,
+    crownRadius: 0.56,
+    crown: 'tiered',
+    tiers: 8,
   }),
   // Deliberately the tallest thing that grows, and thin, so it reads as
   // breaking THROUGH a canopy rather than as one more tree in it.
@@ -280,18 +311,30 @@ export const CANOPY_ARCHETYPES = Object.freeze({
  * worse-cited one. The first cut of this table had meadow at 0.102
  * against light vegetation's 0.13, because a meadow honestly carries
  * fewer shrubs than scrubland does; the trees have to make up the
- * difference, and they now do.
+ * difference, and they now do:
+ *
+ *   steppe 0.07   light 0.13   meadow 0.19   woodland 0.55   jungle 0.86
+ *
+ * Unlike the ground cover, this one climbs the whole way. Trees are the
+ * layer that separates the bands — see FOLIAGE_DENSITY on why the canopy
+ * answers to lushness more steeply than the grass does.
  */
 export const CANOPY_BY_BAND = Object.freeze({
   [BIOME.STEPPE]: [{ archetype: 'shrub', color: 0x7c7a48, density: 0.07, weight: 1 }],
   [BIOME.LIGHT_VEG]: [{ archetype: 'shrub', color: 0x6f8c4a, density: 0.13, weight: 1 }],
   [BIOME.MEADOW]: [
-    { archetype: 'broadleaf', color: 0x4a8a44, density: 0.17, weight: 0.6 },
-    { archetype: 'shrub', color: 0x5f8a4c, density: 0.15, weight: 0.4 },
+    { archetype: 'broadleaf', color: 0x4a8a44, density: 0.2, weight: 0.6 },
+    { archetype: 'shrub', color: 0x5f8a4c, density: 0.17, weight: 0.4 },
   ],
+  // 0.55, up from 0.42. Woodland is the band with room to move: jungle
+  // already saturates — 0.86 against a lushness scale that reaches 1.75
+  // means every sampled cell takes a tree and the count is decided by
+  // the canopy stride, which is what a closed canopy should be — while
+  // meadow is meant to stay open. So a wood was the only green band that
+  // read as thinner than its name.
   [BIOME.WOODLAND]: [
-    { archetype: 'broadleaf', color: 0x3f793f, density: 0.42, weight: 0.6 },
-    { archetype: 'conifer', color: 0x2f5e3a, density: 0.42, weight: 0.4 },
+    { archetype: 'broadleaf', color: 0x3f793f, density: 0.55, weight: 0.6 },
+    { archetype: 'conifer', color: 0x2f5e3a, density: 0.55, weight: 0.4 },
   ],
   [BIOME.JUNGLE]: [
     { archetype: 'broadleaf', color: 0x24713c, density: 0.86, weight: 0.55 },
@@ -303,13 +346,32 @@ export const CANOPY_BY_BAND = Object.freeze({
 /**
  * Density scaling factors, applied on top of a variant's own `density`.
  *
- * The scale is a straight lerp across the lushness scalar, chosen so
- * lushness 0.5 — a section citing at exactly its article's own rate —
- * lands on 1.0 and leaves the band default untouched.
+ * The scale is a straight lerp across the lushness scalar, and both
+ * curves are SYMMETRIC about 1.0 — min and max average to it — so that
+ * lushness 0.5, a section citing at exactly its article's own rate,
+ * leaves the band default untouched. Change one end and the other has to
+ * move with it, or every band's tuned density quietly shifts.
+ *
+ * THE TWO LAYERS ANSWER TO LUSHNESS DIFFERENTLY, and they used to share
+ * one curve. Ground cover is the less discriminating of the two: grass
+ * grows on anything that is not desert, so its density says more about
+ * the band than about the citation rate inside it. Trees are the
+ * opposite — a wood is the thing a well-sourced section grows, and the
+ * gap between a thin section and a thorough one should read as forest
+ * against scrub rather than as slightly more scrub.
+ *
+ * So the canopy gets the wider curve: 7x from barren to lush, against
+ * the ground's 2.6x. That ratio is the whole reason for the split.
  */
 export const FOLIAGE_DENSITY = Object.freeze({
-  min: 0.4, // lushness 0
-  max: 1.6, // lushness 1
+  understory: Object.freeze({
+    min: 0.55, // lushness 0
+    max: 1.45, // lushness 1
+  }),
+  canopy: Object.freeze({
+    min: 0.25,
+    max: 1.75,
+  }),
 })
 
 /** Per-instance variation, so a stand is not a lattice. */
@@ -424,10 +486,12 @@ export function resolveArchetypeForAltitude(archetype, height) {
  *
  * @param {number} lushness [0, 1] from lushness.js
  * @param {number} [height] [0, 1] cell height; omit for ground-level cells
+ * @param {{ min: number, max: number }} [curve] which layer is asking,
+ *   from FOLIAGE_DENSITY; the canopy's is the steeper of the two
  */
-export function computeFoliageDensityScale(lushness, height = 0) {
+export function computeFoliageDensityScale(lushness, height = 0, curve = FOLIAGE_DENSITY.canopy) {
   const value = clamp01(lushness)
-  const byLushness = FOLIAGE_DENSITY.min + (FOLIAGE_DENSITY.max - FOLIAGE_DENSITY.min) * value
+  const byLushness = curve.min + (curve.max - curve.min) * value
   return byLushness * treelineFactor(height, value)
 }
 

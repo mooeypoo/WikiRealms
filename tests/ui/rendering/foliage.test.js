@@ -151,10 +151,13 @@ describe('CANOPY_ARCHETYPES', () => {
   })
 
   it('gives the conifer a spire and the broadleaf a mass', () => {
-    expect(CANOPY_ARCHETYPES.conifer.crown).toBe('cone')
+    expect(CANOPY_ARCHETYPES.conifer.crown).toBe('tiered')
     expect(CANOPY_ARCHETYPES.broadleaf.crown).toBe('round')
     // A conifer is taller and narrower than a broadleaf, or the two read
-    // as the same tree.
+    // as the same tree. The narrowness is the binding one: tiers hold
+    // more snow the wider the crown they are spread over, so this is the
+    // constraint the tier count has to work around rather than a
+    // preference — see the archetype's own note.
     expect(CANOPY_ARCHETYPES.conifer.crownHeight).toBeGreaterThan(CANOPY_ARCHETYPES.broadleaf.crownHeight)
     expect(CANOPY_ARCHETYPES.conifer.crownRadius).toBeLessThan(CANOPY_ARCHETYPES.broadleaf.crownRadius)
   })
@@ -503,7 +506,24 @@ describe('computeFoliageDensityScale', () => {
   it('leaves the biome default alone for a section at its article’s own rate', () => {
     // Lushness 0.5 means "cites like the rest of this article", and the
     // variant densities are already tuned for that, so the scale is 1.
-    expect(computeFoliageDensityScale(0.5)).toBeCloseTo(1)
+    //
+    // TRUE OF BOTH CURVES, which is the constraint that keeps them
+    // comparable: each is symmetric about 1.0, so widening one does not
+    // shift every band's tuned density under it.
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(0.5, 0, curve)).toBeCloseTo(1)
+    }
+  })
+
+  it('answers to lushness more steeply for trees than for grass', () => {
+    // The reason there are two curves at all. Grass grows on anything
+    // that is not desert; a wood is what a well-sourced section grows,
+    // so the canopy has to separate a thin section from a thorough one
+    // by more than the ground cover does.
+    const spread = (curve) =>
+      computeFoliageDensityScale(1, 0, curve) / computeFoliageDensityScale(0, 0, curve)
+
+    expect(spread(FOLIAGE_DENSITY.canopy)).toBeGreaterThan(spread(FOLIAGE_DENSITY.understory) * 2)
   })
 
   it('thins foliage across the treeline instead of deleting it', () => {
@@ -537,8 +557,10 @@ describe('computeFoliageDensityScale', () => {
   })
 
   it('spans the configured floor and ceiling across the scalar at ground level', () => {
-    expect(computeFoliageDensityScale(0, 0)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(1, 0)).toBe(FOLIAGE_DENSITY.max)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(0, 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(1, 0, curve)).toBe(curve.max)
+    }
   })
 
   it('is monotone in lushness', () => {
@@ -551,13 +573,17 @@ describe('computeFoliageDensityScale', () => {
   })
 
   it('clamps a scalar outside [0, 1] rather than extrapolating', () => {
-    expect(computeFoliageDensityScale(-3, 0)).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(9, 0)).toBe(FOLIAGE_DENSITY.max)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale(-3, 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(9, 0, curve)).toBe(curve.max)
+    }
   })
 
   it('treats a non-numeric or missing scalar as 0', () => {
-    expect(computeFoliageDensityScale('not-a-number')).toBe(FOLIAGE_DENSITY.min)
-    expect(computeFoliageDensityScale(undefined)).toBe(FOLIAGE_DENSITY.min)
+    for (const curve of Object.values(FOLIAGE_DENSITY)) {
+      expect(computeFoliageDensityScale('not-a-number', 0, curve)).toBe(curve.min)
+      expect(computeFoliageDensityScale(undefined, 0, curve)).toBe(curve.min)
+    }
   })
 })
 

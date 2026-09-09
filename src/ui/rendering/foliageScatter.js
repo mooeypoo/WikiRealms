@@ -35,6 +35,7 @@ import {
   UNDERSTORY_JITTER,
   canopyInstanceTransform,
   cellFoliageRolls,
+  FOLIAGE_DENSITY,
   computeFoliageDensityScale,
   foliageTintColor,
   pickCanopyVariant,
@@ -111,10 +112,12 @@ function inThinningOrder(cells, seed) {
  * The threshold is the variant's band density scaled by this cell's
  * lushness and its altitude, so a better-cited section grows more and a
  * cell above the treeline grows less. Shared by both layers because the
- * test is the same one; only the roll and the table differ.
+ * test is the same one; the roll, the table and the lushness curve
+ * differ — see FOLIAGE_DENSITY for why the canopy answers to lushness
+ * more steeply than the ground does.
  */
-function takesVariant(variant, densityRoll, lushness, height) {
-  return densityRoll < variant.density * computeFoliageDensityScale(lushness, height)
+function takesVariant(variant, densityRoll, lushness, height, curve) {
+  return densityRoll < variant.density * computeFoliageDensityScale(lushness, height, curve)
 }
 
 /**
@@ -162,7 +165,8 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale, skyV
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, seed, SALT.understory)
       const variant = pickUnderstoryVariant(biomeMap[index], variantRoll)
       if (!variant) continue
-      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index])) continue
+      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index], FOLIAGE_DENSITY.understory))
+        continue
 
       const cells = byVariant.get(variant) ?? []
       cells.push({ gridX, gridY, index })
@@ -280,7 +284,8 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, seed, SALT.canopyVariant)
       const variant = pickCanopyVariant(biomeMap[index], variantRoll)
       if (!variant) continue
-      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index])) continue
+      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index], FOLIAGE_DENSITY.canopy))
+        continue
 
       // Altitude substitutes the KIND of tree, not just the count:
       // broadleaf gives way to conifer, conifer to krummholz under the
