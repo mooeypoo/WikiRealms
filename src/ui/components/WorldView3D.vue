@@ -1678,6 +1678,7 @@ function animate() {
       portalForm.apply(object, {
         scale: computePortalScale(state.baseScale, computePortalPulse(nowSec, state.pulsePhase), state.hoverScale),
         opacity: state.opacity,
+        time: nowSec,
       })
     }
   }

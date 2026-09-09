@@ -52,6 +52,17 @@ export const PORTAL_MARKERS = Object.freeze({
   }),
   // Exponential lerp factor for scale/opacity transitions, per frame.
   lerpAlpha: 0.18,
+  /**
+   * Vortex form palette and spin. Fixed pink/cyan — not the section
+   * accent — so portals never read as another halo ring from orbit.
+   */
+  vortex: Object.freeze({
+    pink: 0xff5aad,
+    cyan: 0x4ec8ff,
+    core: 0xffe6f5,
+    /** Radians per second around the surface normal. */
+    spin: 1.35,
+  }),
 })
 
 /**

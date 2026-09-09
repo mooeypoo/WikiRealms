@@ -2,18 +2,18 @@
  * WHAT a portal looks like — one implementation per shape, behind one
  * contract, so the shape can be replaced without touching the renderer.
  *
- * Two shapes ship: `stoneRing` (the default — a lit standing torus that
- * takes the scene's sun) and `aperture` (the older additive billboard,
- * kept so a preference or story can still ask for it).
+ * Two shapes ship: `vortex` (the default — a pink/cyan swirl that reads
+ * as a destination, deliberately unlike section halos) and `aperture`
+ * (the older additive billboard, kept so a preference can still ask).
  *
  * THE CONTRACT
  *
  * A form is created once per layer, so shapes that want shared resources
  * — one texture, one geometry, one material — can hold them:
  *
- *   const form = createPortalForm('stoneRing', { accentColor })
+ *   const form = createPortalForm('vortex', { accentColor })
  *   const object = form.build(placement)     // one per placement
- *   form.apply(object, { scale, opacity })   // every frame
+ *   form.apply(object, { scale, opacity, time })  // every frame
  *   form.dispose()                           // on teardown
  *
  * `build` takes a placement from portalPlacement.js and returns an
@@ -21,9 +21,6 @@
  * route by which per-frame state reaches it: the render loop computes a
  * scale multiplier and an opacity and hands them over, and never touches
  * a material or a transform itself. That indirection is the whole point.
- * A sprite answers a scale by writing `scale.set(s, s, 1)`; a ring answers
- * it by writing `scale.setScalar(s)` and an opacity by writing a
- * material, and the loop would not know the difference.
  *
  * WHAT AN INSTANCED FORM WOULD STILL NEED
  *
@@ -178,47 +175,56 @@ const apertureForm = {
 }
 
 /**
- * A lit standing stone ring. Shared geometry, per-portal material so
- * section-link opacity can differ; oriented to the surface normal from
- * portalPlacement so the hole stays readable on the flat map and the
- * globe alike.
+ * A pink/cyan swirl — deliberately not a ring in the accent colour.
+ *
+ * Section halos are additive gold ribbons draped on the ground. A lit
+ * stone torus read as another of those, especially from orbit. This form
+ * uses a different vocabulary: magenta and cyan, a knot that reads as
+ * motion, spinning around the surface normal so it never settles into
+ * the halo language.
  */
-const stoneRingForm = {
-  id: 'stoneRing',
+const vortexForm = {
+  id: 'vortex',
 
-  create({ accentColor }) {
-    // Major radius ~0.55 so at baseScale it matches the old sprite's
-    // presence; low segment counts keep ≤24 of these cheap.
-    const geometry = new THREE.TorusGeometry(0.55, 0.14, 8, 20)
-    // Default torus lies in XY (hole along Z). Local +Z is the surface
-    // normal after the group's quaternion, so rotate onto XZ: the ring
-    // stands and the hole faces along a tangent.
-    geometry.rotateX(Math.PI / 2)
+  create() {
+    // Shared geometries — ≤24 portals, low segment counts.
+    const knot = new THREE.TorusKnotGeometry(0.42, 0.11, 48, 6, 2, 3)
+    const rim = new THREE.TorusGeometry(0.62, 0.045, 6, 24)
+    rim.rotateX(Math.PI / 2)
+    const core = new THREE.SphereGeometry(0.14, 10, 8)
+    const geometries = [knot, rim, core]
     const materials = []
     const up = new THREE.Vector3(0, 0, 1)
     const normal = new THREE.Vector3()
-    const emissive = new THREE.Color(accentColor.r, accentColor.g, accentColor.b)
+    const { pink, cyan, core: coreHex } = PORTAL_MARKERS.vortex
+
+    const makeGlow = (hex) => {
+      const material = new THREE.MeshBasicMaterial({
+        color: hex,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        // Destinations must not haze into the backdrop — same rule as
+        // the aperture and the section markers' exemption.
+        fog: false,
+      })
+      materials.push(material)
+      return material
+    }
 
     return {
-      id: 'stoneRing',
+      id: 'vortex',
 
       build(placement) {
-        const material = new THREE.MeshStandardMaterial({
-          color: new THREE.Color(0x8a8274),
-          roughness: 0.82,
-          metalness: 0.04,
-          emissive: emissive.clone(),
-          emissiveIntensity: 0.4,
-          transparent: true,
-          depthWrite: true,
-          // Same exemption as the aperture: a destination must not haze away.
-          fog: false,
-        })
-        materials.push(material)
+        const swirl = new THREE.Group()
+        swirl.add(new THREE.Mesh(knot, makeGlow(pink)))
+        const cyanRim = new THREE.Mesh(rim, makeGlow(cyan))
+        cyanRim.rotation.z = 0.6
+        swirl.add(cyanRim)
+        swirl.add(new THREE.Mesh(core, makeGlow(coreHex)))
 
-        const mesh = new THREE.Mesh(geometry, material)
         const group = new THREE.Group()
-        group.add(mesh)
+        group.add(swirl)
         group.position.set(placement.x, placement.y, placement.z)
         normal.set(placement.normal.x, placement.normal.y, placement.normal.z)
         if (normal.lengthSq() > 0) {
@@ -226,19 +232,26 @@ const stoneRingForm = {
           group.quaternion.setFromUnitVectors(up, normal)
         }
         group.scale.setScalar(placement.baseScale)
+        group.userData.swirl = swirl
         return tagPortalObject(group, placement)
       },
 
-      apply(object, { scale, opacity }) {
+      apply(object, { scale, opacity, time = 0 }) {
         object.scale.setScalar(scale)
-        const mesh = object.children[0]
-        if (mesh?.material) mesh.material.opacity = opacity
+        for (const child of object.children[0]?.children ?? []) {
+          if (child.material) child.material.opacity = opacity
+        }
+        // Spin around the surface normal (local Z after orientation).
+        const swirl = object.userData.swirl
+        if (swirl) {
+          swirl.rotation.z = time * PORTAL_MARKERS.vortex.spin + object.userData.pulsePhase
+        }
       },
 
       dispose() {
         for (const material of materials) material.dispose()
         materials.length = 0
-        geometry.dispose()
+        for (const geometry of geometries) geometry.dispose()
       },
     }
   },
@@ -246,12 +259,12 @@ const stoneRingForm = {
 
 /** Every shape a portal can take, by id. */
 export const PORTAL_FORMS = Object.freeze({
-  [stoneRingForm.id]: stoneRingForm,
+  [vortexForm.id]: vortexForm,
   [apertureForm.id]: apertureForm,
 })
 
 /** The shape the map uses when nothing says otherwise. */
-export const DEFAULT_PORTAL_FORM = stoneRingForm.id
+export const DEFAULT_PORTAL_FORM = vortexForm.id
 
 /**
  * Which form an id names, falling back to the default for an
