@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { placePortals, portalPulsePhase } from '../../../src/ui/rendering/portalPlacement.js'
+import {
+  placePortals,
+  portalGridDistance,
+  portalPulsePhase,
+  spreadPortalGridCells,
+} from '../../../src/ui/rendering/portalPlacement.js'
 import { PORTAL_MARKERS } from '../../../src/ui/rendering/portalMarkers.js'
-import { flatProjection, sphereProjection } from '../../../src/ui/rendering/projection.js'
+import { flatProjection, sphereProjection, SPHERE_VIEW } from '../../../src/ui/rendering/projection.js'
 import { BIOME_THRESHOLDS } from '../../../src/engine/generation/config.js'
 
 function terrainOf(heights, width, height) {
@@ -112,5 +117,73 @@ describe('placePortals', () => {
     for (const placement of placements) {
       expect(placement.baseScale).toBe(PORTAL_MARKERS.baseScale)
     }
+  })
+
+  it('leaves flat-mode cells alone even when they sit on top of each other', () => {
+    // Spreading is a planet fix: the flat map already reads pairs as
+    // separate, and moving them would fight the sunflower layout.
+    const portals = [portalAt(4, 4), portalAt(4, 5)]
+    const placements = placePortals(portals, plateau(), 10, flatProjection)
+
+    expect(placements[0].gridX).toBe(4)
+    expect(placements[0].gridY).toBe(4)
+    expect(placements[1].gridX).toBe(4)
+    expect(placements[1].gridY).toBe(5)
+  })
+
+  it('pushes overlapping planet portals far enough apart to pick separately', () => {
+    // The Everest case: two section links land a cell or two apart and
+    // become one vortex under the cursor. The globe nudges them in grid
+    // space before projecting.
+    const terrain = plateau({ width: 64, height: 64 })
+    const heightScale = sphereProjection.heightScale(terrain)
+    const portals = [portalAt(20, 30, { targetTitle: 'Khumbu glacier' }), portalAt(21, 30, { targetTitle: 'Ice cap climate' })]
+    const placements = placePortals(portals, terrain, heightScale, sphereProjection)
+    const dist = portalGridDistance(
+      placements[0].gridX,
+      placements[0].gridY,
+      placements[1].gridX,
+      placements[1].gridY,
+      terrain.width,
+    )
+
+    expect(dist).toBeGreaterThanOrEqual(SPHERE_VIEW.portalMinSeparationCells - 0.5)
+  })
+
+  it('does not drag distant planet portals toward each other', () => {
+    const terrain = plateau({ width: 64, height: 64 })
+    const heightScale = sphereProjection.heightScale(terrain)
+    const portals = [portalAt(8, 10), portalAt(50, 40)]
+    const placements = placePortals(portals, terrain, heightScale, sphereProjection)
+
+    expect(placements[0].gridX).toBe(8)
+    expect(placements[0].gridY).toBe(10)
+    expect(placements[1].gridX).toBe(50)
+    expect(placements[1].gridY).toBe(40)
+  })
+})
+
+describe('spreadPortalGridCells', () => {
+  it('wraps longitude when two portals meet across the date line', () => {
+    const terrain = { width: 32, height: 32 }
+    const [a, b] = spreadPortalGridCells(
+      [{ gridX: 0, gridY: 16 }, { gridX: 31, gridY: 16 }],
+      terrain,
+      { minSeparation: 8, iterations: 16 },
+    )
+    const dist = portalGridDistance(a.gridX, a.gridY, b.gridX, b.gridY, terrain.width)
+
+    expect(dist).toBeGreaterThanOrEqual(7.5)
+  })
+
+  it('separates coincident cells instead of stalling', () => {
+    const terrain = { width: 32, height: 32 }
+    const [a, b] = spreadPortalGridCells(
+      [{ gridX: 10, gridY: 10 }, { gridX: 10, gridY: 10 }],
+      terrain,
+      { minSeparation: 8, iterations: 16 },
+    )
+
+    expect(portalGridDistance(a.gridX, a.gridY, b.gridX, b.gridY, terrain.width)).toBeGreaterThanOrEqual(7.5)
   })
 })

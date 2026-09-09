@@ -24,6 +24,7 @@
  *
  * Free of three.js, so the arithmetic is unit-testable without a context.
  */
+import { SPHERE_VIEW } from './projection.js'
 import { PORTAL_MARKERS } from './portalMarkers.js'
 import { computePortalLocalPosition } from './terrainMesh.js'
 
@@ -42,6 +43,102 @@ export function portalPulsePhase(index) {
 }
 
 /**
+ * Shortest signed step in X on a cylindrical grid (planet longitude wraps).
+ *
+ * @param {number} from
+ * @param {number} to
+ * @param {number} width
+ */
+function wrappedDeltaX(from, to, width) {
+  let dx = to - from
+  if (dx > width / 2) dx -= width
+  if (dx < -width / 2) dx += width
+  return dx
+}
+
+function wrapX(x, width) {
+  return ((x % width) + width) % width
+}
+
+function clampY(y, height) {
+  return Math.min(height - 1, Math.max(0, y))
+}
+
+/**
+ * Grid distance between two cells, wrapping longitude.
+ *
+ * @param {number} ax
+ * @param {number} ay
+ * @param {number} bx
+ * @param {number} by
+ * @param {number} width
+ */
+export function portalGridDistance(ax, ay, bx, by, width) {
+  return Math.hypot(wrappedDeltaX(ax, bx, width), by - ay)
+}
+
+/**
+ * Push portal cells apart until each pair clears `minSeparation` cells.
+ *
+ * Used only for the planet view: the same authored cells can sit closer
+ * than a marker's pick radius, and on the globe that turns two links into
+ * one target. Flat mode leaves the sunflower layout alone.
+ *
+ * Longitude wraps; latitude clamps. Coincident cells get a deterministic
+ * shove so the loop does not stall on a zero-length vector.
+ *
+ * @param {Array<{ gridX: number, gridY: number }>} portals
+ * @param {{ width: number, height: number }} terrain
+ * @param {{ minSeparation?: number, iterations?: number }} [options]
+ * @returns {Array<{ gridX: number, gridY: number }>}
+ */
+export function spreadPortalGridCells(portals, terrain, options = {}) {
+  const { width, height } = terrain
+  const minSeparation = options.minSeparation ?? SPHERE_VIEW.portalMinSeparationCells
+  const iterations = options.iterations ?? SPHERE_VIEW.portalSpreadIterations
+  const cells = portals.map((portal) => ({
+    gridX: wrapX(portal.gridX, width),
+    gridY: clampY(portal.gridY, height),
+  }))
+
+  if (cells.length < 2 || minSeparation <= 0) return cells
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    for (let i = 0; i < cells.length; i += 1) {
+      for (let j = i + 1; j < cells.length; j += 1) {
+        const a = cells[i]
+        const b = cells[j]
+        let dx = wrappedDeltaX(a.gridX, b.gridX, width)
+        let dy = b.gridY - a.gridY
+        let dist = Math.hypot(dx, dy)
+
+        if (dist < 1e-6) {
+          const angle = (i + 1) * 2.399963 + j
+          dx = Math.cos(angle)
+          dy = Math.sin(angle)
+          dist = 1
+        }
+
+        if (dist >= minSeparation) continue
+
+        const push = (minSeparation - dist) / 2
+        const ux = dx / dist
+        const uy = dy / dist
+        a.gridX = wrapX(a.gridX - ux * push, width)
+        a.gridY = clampY(a.gridY - uy * push, height)
+        b.gridX = wrapX(b.gridX + ux * push, width)
+        b.gridY = clampY(b.gridY + uy * push, height)
+      }
+    }
+  }
+
+  return cells.map((cell) => ({
+    gridX: Math.round(wrapX(cell.gridX, width)),
+    gridY: Math.round(clampY(cell.gridY, height)),
+  }))
+}
+
+/**
  * Turns a world's portals into placements, in the terrain mesh's local
  * (pre-rotation) frame.
  *
@@ -49,6 +146,10 @@ export function portalPulsePhase(index) {
  * phase is derived from the index, and a form builds one object per
  * placement in the same order so an object can be found again by its
  * position in the layer.
+ *
+ * On the planet, nearby portals are nudged apart in grid space first so
+ * their pick volumes do not swallow each other. Flat mode uses the
+ * authored cells as-is.
  *
  * @param {Array<object>} portals world.portals
  * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
@@ -60,10 +161,22 @@ export function portalPulsePhase(index) {
  *   pulsePhase: number, destinationTitle: string }>}
  */
 export function placePortals(portals, terrain, heightScale, projection) {
-  return (portals ?? []).map((portal, index) => {
+  const list = portals ?? []
+  const cells = projection.isSpherical
+    ? spreadPortalGridCells(list, terrain)
+    : list.map((portal) => ({ gridX: portal.gridX, gridY: portal.gridY }))
+
+  return list.map((portal, index) => {
+    const cell = cells[index]
     // Submerged cells are lifted to sea level first, so a portal over
     // deep ocean floats above the water rather than drowning under it.
-    const local = computePortalLocalPosition(portal, terrain, heightScale, PORTAL_MARKERS.hoverOffset, projection)
+    const local = computePortalLocalPosition(
+      { ...portal, gridX: cell.gridX, gridY: cell.gridY },
+      terrain,
+      heightScale,
+      PORTAL_MARKERS.hoverOffset,
+      projection,
+    )
     const normal = projection.normalAt(local.gridX, local.gridY, terrain)
 
     return {

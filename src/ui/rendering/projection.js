@@ -71,6 +71,13 @@ export const SPHERE_VIEW = Object.freeze({
   // lattice, plus the smaller plants, reads as bare green on big
   // wooded sections — sample every cell so stands can fill in.
   canopyStride: 1,
+  // Portal markers are ~baseScale × 0.62 ≈ 3 world units in radius, and
+  // grow under the cursor. Authored cells can sit closer than that —
+  // especially two links from the same small section — and on the globe
+  // they become one unpickable blob. Flat keeps the sunflower cells;
+  // planet pushes pairs apart in grid space until this many cells apart.
+  portalMinSeparationCells: 11,
+  portalSpreadIterations: 12,
   // Vertical exaggeration as a fraction of the planet radius. Real
   // planets have imperceptible relief (Everest is 0.14% of Earth's
   // radius); this is the "readable globe" exaggeration, tuned so ranges
