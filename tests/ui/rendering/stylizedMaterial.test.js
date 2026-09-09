@@ -19,6 +19,7 @@ import {
   NO_SNOWLINE,
   createStylizedMaterial,
   setRipple,
+  setSeason,
   setSnowline,
   setSurf,
   setWind,
@@ -216,6 +217,33 @@ describe('createStylizedMaterial', () => {
     expect(createStylizedMaterial().uniforms.uWindSpeed.value).toBe(WIND.speed)
   })
 
+  it('starts at summer, with the winter table already bound', () => {
+    // Season is a blend amount, not a rebuild: the table is shared and
+    // the uniform starts at 0 so a material nobody drives keeps the
+    // summer palette the vertex colours already carry.
+    const material = createStylizedMaterial()
+
+    expect(material.uniforms.uSeason.value).toBe(0)
+    expect(material.uniforms.uColorLut.value).toBeTruthy()
+    expect(material.uniforms.uColorLutSize.value).toBe(16)
+    expect(material.fragmentShader).toContain('texture2D(uColorLut')
+    expect(material.fragmentShader).toContain('mix(albedo, graded, uSeason)')
+  })
+
+  it('grades the albedo after snow and before the light', () => {
+    // Snow has to land first or a frosted crown would be graded with the
+    // leaf under it; the light has to land after or the sun's own colour
+    // would cool with the season.
+    const { fragmentShader } = createStylizedMaterial()
+    const snow = fragmentShader.indexOf('mix(albedo, uSnowColor, cover)')
+    const grade = fragmentShader.indexOf('mix(albedo, graded, uSeason)')
+    const light = fragmentShader.indexOf('albedo * irradiance * RECIPROCAL_PI')
+
+    expect(snow).toBeGreaterThan(0)
+    expect(grade).toBeGreaterThan(snow)
+    expect(light).toBeGreaterThan(grade)
+  })
+
   it('takes the snow band it is given, and defaults to the ground s', () => {
     const ground = createStylizedMaterial()
     expect(ground.uniforms.uSnowStart.value).toBe(ALTITUDE.snowStart)
@@ -282,6 +310,37 @@ describe('setWind', () => {
     // waiting to jump when motion is allowed again.
     expect(material.uniforms.uSway.value).toBe(0)
     expect(material.uniforms.uTime.value).toBe(0)
+  })
+})
+
+describe('setSeason', () => {
+  it('writes the realm’s season onto the material', () => {
+    const material = createStylizedMaterial()
+    const sample = sampleEnvironment(createEnvironment({ seed: 3 }), 0)
+
+    setSeason(material, sample.season)
+
+    expect(material.uniforms.uSeason.value).toBe(sample.season)
+  })
+
+  it('clamps rather than letting a bad caller invert the grade', () => {
+    const material = createStylizedMaterial()
+
+    setSeason(material, 2)
+    expect(material.uniforms.uSeason.value).toBe(1)
+    setSeason(material, -1)
+    expect(material.uniforms.uSeason.value).toBe(0)
+    setSeason(material, 'nope')
+    expect(material.uniforms.uSeason.value).toBe(0)
+  })
+
+  it('does not rebuild the material', () => {
+    const material = createStylizedMaterial()
+    const lut = material.uniforms.uColorLut.value
+
+    setSeason(material, 0.7)
+
+    expect(material.uniforms.uColorLut.value).toBe(lut)
   })
 })
 

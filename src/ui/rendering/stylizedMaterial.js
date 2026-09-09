@@ -106,6 +106,7 @@
 import * as THREE from 'three'
 import { ALTITUDE } from '../../engine/generation/config.js'
 import { SNOW_RGB } from './biomeColor.js'
+import { COLOR_LUT_SIZE, winterColorLut } from './colorLut.js'
 import { WIND, windFrequency } from './environment.js'
 
 /**
@@ -352,6 +353,11 @@ uniform vec3 uSnowColor;
 uniform float uSnowStart;
 uniform float uSnowFull;
 uniform float uSnowFacingStart;
+// The seasons seam. See colorLut.js: a grade of the albedo keyed on
+// the albedo itself, blended by how far this realm sits toward winter.
+uniform sampler2D uColorLut;
+uniform float uColorLutSize;
+uniform float uSeason;
 
 #ifdef USE_RIPPLE
   varying vec3 vLocalPosition;
@@ -462,6 +468,26 @@ void main() {
   // below its edge, and this states the intent where it is read.
   float cover = vSnowHeight < 0.0 ? 0.0 : altitude * facing;
   albedo = mix(albedo, uSnowColor, cover);
+
+  // Season. A blend toward the winter grade of THIS colour, not a tint
+  // over the frame: greens go olive, sand pales, near-whites stay put.
+  // Runs after snow so a frosted crown keeps its cap, and before the
+  // light so the sun's colour is not graded with the leaf.
+  if (uSeason > 0.0) {
+    float size = uColorLutSize;
+    vec3 scaled = clamp(albedo, 0.0, 1.0) * (size - 1.0);
+    float slice = floor(scaled.b);
+    float sliceF = scaled.b - slice;
+    float y = (scaled.g + 0.5) / size;
+    float x0 = (scaled.r + slice * size + 0.5) / (size * size);
+    float x1 = (scaled.r + min(slice + 1.0, size - 1.0) * size + 0.5) / (size * size);
+    vec3 graded = mix(
+      texture2D(uColorLut, vec2(x0, y)).rgb,
+      texture2D(uColorLut, vec2(x1, y)).rgb,
+      sliceF
+    );
+    albedo = mix(albedo, graded, uSeason);
+  }
 
   // Declares \`normal\`, from the interpolated vertex normal or from
   // derivatives when flat shaded — which is what keeps the canopy's
@@ -809,6 +835,11 @@ export function createStylizedMaterial({
         // is simply still rather than moving on default values.
         uSway: { value: 0 },
         uSwayHeight: { value: swayHeight },
+        // Shared across every stylized material: one winter table, one
+        // blend amount written each frame from the environment.
+        uColorLut: { value: winterColorLut() },
+        uColorLutSize: { value: COLOR_LUT_SIZE },
+        uSeason: { value: 0 },
       },
     ]),
   })
@@ -830,6 +861,20 @@ export function setWind(material, { time, sway }, windDirection) {
   material.uniforms.uTime.value = time
   material.uniforms.uSway.value = sway
   material.uniforms.uWindDirection.value.copy(windDirection)
+}
+
+/**
+ * Writes how far toward winter this material should sit.
+ *
+ * A uniform rather than a rebuild: the vertex colours stay the summer
+ * palette, and the grade is applied in the fragment shader. Same shape
+ * as setSnowline — the seam is a number that can move at any time.
+ *
+ * @param {THREE.ShaderMaterial} material
+ * @param {number} season [0, 1]
+ */
+export function setSeason(material, season) {
+  material.uniforms.uSeason.value = Math.min(1, Math.max(0, Number(season) || 0))
 }
 
 /**

@@ -121,11 +121,14 @@ describe('layer boundaries', () => {
    * tree shapes and bladeGeometry.js ground-cover clumps, both for
    * foliageScatter.js's buffers; portalForms.js draws portals for
    * portalPlacement.js's placements; stylizedMaterial.js shades what
-   * biomeColor.js and terrainMesh.js decided the colour of.
+   * biomeColor.js and terrainMesh.js decided the colour of; colorLut.js
+   * packs the winter grade that stylizedMaterial samples — the grade
+   * function itself is pure, the DataTexture is just how it ships.
    */
   const MAY_IMPORT_THREE = [
     'bladeGeometry.js',
     'canopyGeometry.js',
+    'colorLut.js',
     'portalForms.js',
     'stylizedMaterial.js',
   ]

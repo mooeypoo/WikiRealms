@@ -42,6 +42,33 @@ describe('createEnvironment', () => {
     expect(phases.size).toBe(40)
     expect(bearings.size).toBe(40)
   })
+
+  it('gives every realm a season of its own, from its own seed', () => {
+    // Same determinism rule as the wind: season is placement, so Saturn
+    // in winter is Saturn in winter on every visit.
+    const a = createEnvironment({ seed: 4242 })
+    const again = createEnvironment({ seed: 4242 })
+    const other = createEnvironment({ seed: 9001 })
+
+    expect(a.season).toBe(again.season)
+    expect(a.season).toBeGreaterThanOrEqual(0)
+    expect(a.season).toBeLessThanOrEqual(1)
+    expect(other.season).not.toBe(a.season)
+  })
+
+  it('biases season toward summer rather than centering on mid-winter', () => {
+    // Squared draw: the mean of U² is 1/3, so a typical realm keeps most
+    // of its summer palette. A flat draw would put the shelf average at
+    // 0.5 and quietly cool every curated realm.
+    let sum = 0
+    const n = 200
+    for (let seed = 1; seed <= n; seed += 1) {
+      sum += createEnvironment({ seed }).season
+    }
+
+    expect(sum / n).toBeLessThan(0.4)
+    expect(sum / n).toBeGreaterThan(0.2)
+  })
 })
 
 describe('sampleEnvironment', () => {
@@ -103,6 +130,13 @@ describe('reduced motion', () => {
       expect(sample.sway).toBe(0)
       expect(sample.animated).toBe(false)
     }
+  })
+
+  it('still forwards the season, which does not tick with the clock', () => {
+    // Season is placement. Freezing appearance must not zero it out or
+    // every reduced-motion visit would snap to midsummer.
+    expect(sampleEnvironment(still, 0).season).toBe(still.season)
+    expect(sampleEnvironment(still, 900).season).toBe(still.season)
   })
 
   it('keeps the bearing, so nothing downstream has to handle a missing one', () => {

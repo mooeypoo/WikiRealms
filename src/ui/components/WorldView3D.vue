@@ -19,7 +19,7 @@ import {
   shortestRippleWavelength,
   surfStrength,
 } from '../rendering/waterSurface.js'
-import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSurf, setWind } from '../rendering/stylizedMaterial.js'
+import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSeason, setSurf, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
@@ -209,8 +209,9 @@ let restlessUntil = 0
 function markRestless() {
   restlessUntil = performance.now() * 0.001 + SETTLE_SECONDS
 }
-// The canopy materials the wind is written to each frame — one per
-// archetype, since each bends by its own height.
+// The materials the weather is written to each frame — terrain, sea,
+// canopy and understory. Wind is a no-op where swayHeight is 0; season
+// reaches all of them through the same list.
 let windMaterials = []
 // World-space wind, converted once per frame from the grid-space bearing
 // the environment states. Held here so the loop allocates nothing.
@@ -388,6 +389,10 @@ function buildTerrainMesh(world) {
     // already draws, so this needs nothing said about where peaks are.
     specular: GROUND_SPECULAR,
   })
+  // Joins the weather list so the season grade reaches the ground too —
+  // setWind is a no-op here (swayHeight is 0), and setSeason is the
+  // reason it is on the list.
+  windMaterials.push(material)
   const mesh = new THREE.Mesh(geometry, material)
 
   const water = buildWaterMesh(terrain, heightScale)
@@ -1474,7 +1479,10 @@ function animate() {
   // against the map. On the globe the shader takes it from here, keeping
   // only what lies in the tangent plane at each plant.
   windWorldDirection.set(weather.windDirection.x, 0, -weather.windDirection.y)
-  for (const material of windMaterials) setWind(material, weather, windWorldDirection)
+  for (const material of windMaterials) {
+    setWind(material, weather, windWorldDirection)
+    setSeason(material, weather.season)
+  }
   const hoveredTopLevel = resolveHoveredTopLevel(attentionIndex(), peaks)
 
   // Individual trees are meaningless from orbit and expensive to draw

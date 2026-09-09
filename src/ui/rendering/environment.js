@@ -28,14 +28,15 @@
  * arrive is appearance, and depends on nothing but the clock. Nothing
  * here feeds back into generation, so none of it can move a worldId.
  *
- * WHAT IS DELIBERATELY NOT HERE YET
+ * WHAT IS HERE NOW THAT WAS NOT
  *
- * The snowline, the sun direction and a season blend all belong in this
- * object — they are the same shape of thing, a uniform's worth of state
- * that no geometry depends on. They are left out because nothing reads
- * them yet and a field with no reader cannot be wrong in a way a test
- * would catch. setSnowline() in stylizedMaterial.js is the seam they
- * will arrive through.
+ * Season. A realm's place on the summer→winter grade, drawn from the
+ * seed the same way the wind bearing is. Geometry does not depend on
+ * it — vertex colours stay the summer palette — so moving the blend is
+ * a uniform write, which is the whole point of the colour LUT seam
+ * (see colorLut.js). The snowline and the sun direction still wait:
+ * setSnowline() is ready for the first, and the sun is still a fixed
+ * light in the scene for the second.
  */
 import { createRng } from '../../engine/generation/rng.js'
 
@@ -104,11 +105,15 @@ export const WIND = Object.freeze({
  * @param {{ seed?: number, reducedMotion?: boolean }} options
  *   `seed` is the world's own seed, so the wind is a property of the
  *   realm. `reducedMotion` freezes the clock; see the header.
- * @returns {{ windDirection: { x: number, y: number }, gustPhase: number, animated: boolean }}
+ * @returns {{ windDirection: { x: number, y: number }, gustPhase: number, season: number, animated: boolean }}
  *   windDirection is a unit vector in GRID space (x across the width, y
  *   down the height), the same frame the terrain arrays use. Converting
  *   it into a world direction is the renderer's job, because only the
  *   renderer knows how the world group is turned.
+ *   `season` is how far this realm sits toward winter, in [0, 1] — see
+ *   the header. Squared so most realms stay near summer and a few lean
+ *   cold; a flat draw would put the average world at mid-winter and
+ *   quietly cool the whole shelf.
  */
 export function createEnvironment({ seed = 1, reducedMotion = false } = {}) {
   const rng = createRng(Number(seed) || 1)
@@ -117,10 +122,17 @@ export function createEnvironment({ seed = 1, reducedMotion = false } = {}) {
   // whose winds happen to blow the same way are not also gusting in
   // step with each other.
   const gustPhase = rng() * TAU
+  // A third draw, and squared: the mean of U² on [0, 1] is 1/3, so a
+  // typical realm keeps most of its summer palette and the ones that
+  // lean winter do so because of their seed, not because the shelf
+  // average drifted.
+  const seasonRoll = rng()
+  const season = seasonRoll * seasonRoll
 
   return {
     windDirection: { x: Math.cos(bearing), y: Math.sin(bearing) },
     gustPhase,
+    season,
     animated: !reducedMotion,
   }
 }
@@ -131,17 +143,25 @@ export function createEnvironment({ seed = 1, reducedMotion = false } = {}) {
  *
  * @param {ReturnType<createEnvironment>} environment
  * @param {number} clockSeconds monotonic seconds, e.g. performance.now() * 0.001
- * @returns {{ time: number, windDirection: { x: number, y: number }, sway: number, animated: boolean }}
+ * @returns {{ time: number, windDirection: { x: number, y: number }, sway: number, season: number, animated: boolean }}
  *   `sway` is the lean at a plant's top as a fraction of its height, so
  *   a shrub and an emergent both bend by the same PROPORTION and the
  *   caller multiplies by whatever it is drawing.
+ *   `season` is forwarded unchanged: it is placement, not appearance,
+ *   and does not tick with the clock.
  */
 export function sampleEnvironment(environment, clockSeconds) {
   // A frozen world is not a still frame of a moving one: time itself
   // stops at zero, so every phase is fixed and nothing drifts even if
   // the loop keeps running for the sake of hover and camera damping.
   if (!environment.animated) {
-    return { time: 0, windDirection: environment.windDirection, sway: 0, animated: false }
+    return {
+      time: 0,
+      windDirection: environment.windDirection,
+      sway: 0,
+      season: environment.season,
+      animated: false,
+    }
   }
 
   const time = Math.max(0, Number(clockSeconds) || 0)
@@ -151,6 +171,7 @@ export function sampleEnvironment(environment, clockSeconds) {
     time,
     windDirection: environment.windDirection,
     sway: WIND.sway * (1 - WIND.gustDepth + WIND.gustDepth * swell),
+    season: environment.season,
     animated: true,
   }
 }
