@@ -72,10 +72,15 @@ export const SPHERE_VIEW = Object.freeze({
   cameraDistanceRatio: 3.2,
   minDistanceRatio: 1.15,
   maxDistanceRatio: 9,
-  // A directional sun on a globe gives a real day/night terminator,
-  // which looks great — but at the flat view's 0.6 ambient the night
-  // side goes to pure black and half the planet is unreadable.
-  ambientLightIntensity: 0.85,
+  // A directional sun on a globe gives a real day/night terminator.
+  // The bake already puts half the cells at sunlight ≈ 0 (measured
+  // 64k night / 59k day on Everest), so the night side's brightness is
+  // almost entirely this ambient. At 0.85 the anti-sun view was only
+  // 1.25× darker than noon — readable, but not night. At 0.5 the same
+  // view lands near 1.5× with night land still around luminance 75,
+  // which is dim without going black; half-Lambert and the limb glow
+  // keep the dark side from falling into a void.
+  ambientLightIntensity: 0.5,
 })
 
 function clamp(value, min, max) {
