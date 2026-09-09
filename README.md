@@ -1,5 +1,7 @@
 # WikiRealms
 
+[![CI](https://github.com/mooeypoo/WikiRealms/actions/workflows/ci.yml/badge.svg)](https://github.com/mooeypoo/WikiRealms/actions/workflows/ci.yml)
+
 A private prototype for a procedural Wikipedia-to-world exploration web app.
 
 ## Concept
