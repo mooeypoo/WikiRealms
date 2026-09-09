@@ -364,6 +364,43 @@ describe('scatterFoliage', () => {
     expect(bareOffset).toBeCloseTo(scaledOffset, 5)
   })
 
+  it('packs more cover on the planet so woods do not look bare', () => {
+    // Same rolls, same grid — but SPHERE_VIEW.foliageDensityBoost raises
+    // the take threshold, so wooded bands close the gaps that smaller
+    // plants leave when foliageScale alone is applied.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { lushness: 0.85, height01: 0.3 })
+    const count = (layers) => layers.reduce((sum, layer) => sum + layer.count, 0)
+    const flat = count(scatterUnderstory(terrain, 17, FLAT))
+    const sphere = count(
+      scatterUnderstory(terrain, 17, {
+        projection: sphereProjection,
+        heightScale: sphereProjection.heightScale(terrain),
+      }),
+    )
+
+    expect(SPHERE_VIEW.foliageDensityBoost).toBeGreaterThan(1)
+    expect(sphere).toBeGreaterThan(flat)
+  })
+
+  it('samples canopy more tightly on the planet so large woods fill in', () => {
+    // Flat keeps the authored every-other-cell lattice; the globe packs
+    // trees on every cell so a big woodland section does not read as
+    // tinted dirt with the odd shrub.
+    const terrain = uniformTerrain(BIOME.WOODLAND, { lushness: 0.9, height01: 0.3 })
+    const count = (layers) => layers.reduce((sum, layer) => sum + layer.count, 0)
+    const flat = count(scatterCanopy(terrain, 23, FLAT))
+    const sphere = count(
+      scatterCanopy(terrain, 23, {
+        projection: sphereProjection,
+        heightScale: sphereProjection.heightScale(terrain),
+      }),
+    )
+
+    expect(sphereProjection.canopyStride).toBe(1)
+    expect(flatProjection.canopyStride).toBe(2)
+    expect(sphere).toBeGreaterThan(flat * 1.5)
+  })
+
   it('gives the understory the same instance attributes a tree gets', () => {
     // A sprite had nothing but a position — it faced the camera whatever
     // the ground did. Real geometry has to be told which way is up, or it

@@ -114,10 +114,12 @@ function inThinningOrder(cells, seed) {
  * cell above the treeline grows less. Shared by both layers because the
  * test is the same one; the roll, the table and the lushness curve
  * differ — see FOLIAGE_DENSITY for why the canopy answers to lushness
- * more steeply than the ground does.
+ * more steeply than the ground does. `densityBoost` is the projection's
+ * foliageDensityBoost: the planet packs more instances so smaller plants
+ * still close wooded bands.
  */
-function takesVariant(variant, densityRoll, lushness, height, curve) {
-  return densityRoll < variant.density * computeFoliageDensityScale(lushness, height, curve)
+function takesVariant(variant, densityRoll, lushness, height, curve, densityBoost = 1) {
+  return densityRoll < variant.density * computeFoliageDensityScale(lushness, height, curve) * densityBoost
 }
 
 /**
@@ -154,6 +156,7 @@ function takesVariant(variant, densityRoll, lushness, height, curve) {
 export function scatterUnderstory(terrain, seed, { projection, heightScale, skyVisibility, sunlightMap }) {
   const { width, height, heightMap, biomeMap, lushnessMap } = terrain
   const stride = FOLIAGE_SAMPLING.understoryStride
+  const densityBoost = projection.foliageDensityBoost ?? 1
   const byVariant = new Map()
 
   // The border row and column are skipped: a clump there has no
@@ -165,7 +168,14 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale, skyV
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, seed, SALT.understory)
       const variant = pickUnderstoryVariant(biomeMap[index], variantRoll)
       if (!variant) continue
-      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index], FOLIAGE_DENSITY.understory))
+      if (!takesVariant(
+        variant,
+        densityRoll,
+        lushnessMap[index],
+        heightMap[index],
+        FOLIAGE_DENSITY.understory,
+        densityBoost,
+      ))
         continue
 
       const cells = byVariant.get(variant) ?? []
@@ -275,7 +285,8 @@ function fullyLitBuffer(count) {
  */
 export function scatterCanopy(terrain, seed, { projection, heightScale, cellScale = 1, skyVisibility, sunlightMap }) {
   const { width, height, heightMap, biomeMap, lushnessMap } = terrain
-  const stride = FOLIAGE_SAMPLING.canopyStride
+  const stride = projection.canopyStride ?? FOLIAGE_SAMPLING.canopyStride
+  const densityBoost = projection.foliageDensityBoost ?? 1
   const byArchetype = new Map()
 
   for (let gridY = 1; gridY < height - 1; gridY += stride) {
@@ -284,7 +295,14 @@ export function scatterCanopy(terrain, seed, { projection, heightScale, cellScal
       const { variantRoll, densityRoll } = cellFoliageRolls(gridX, gridY, seed, SALT.canopyVariant)
       const variant = pickCanopyVariant(biomeMap[index], variantRoll)
       if (!variant) continue
-      if (!takesVariant(variant, densityRoll, lushnessMap[index], heightMap[index], FOLIAGE_DENSITY.canopy))
+      if (!takesVariant(
+        variant,
+        densityRoll,
+        lushnessMap[index],
+        heightMap[index],
+        FOLIAGE_DENSITY.canopy,
+        densityBoost,
+      ))
         continue
 
       // Altitude substitutes the KIND of tree, not just the count:

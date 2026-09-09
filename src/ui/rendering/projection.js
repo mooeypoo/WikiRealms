@@ -37,6 +37,10 @@ export const FLAT_VIEW = Object.freeze({
   // flat map is the view they were authored against, so they pass
   // through unscaled.
   foliageScale: 1,
+  // Instance density is likewise authored for the flat map.
+  foliageDensityBoost: 1,
+  // Canopy sampling lattice — every other cell on the flat map.
+  canopyStride: 2,
   // Camera pull-back as a fraction of the larger grid axis.
   cameraDistanceRatio: 0.9,
   // Keeps the flat camera above the horizon — a plane viewed edge-on or
@@ -51,12 +55,22 @@ export const SPHERE_VIEW = Object.freeze({
   // views, but the HEIGHT range those cells rise through is 66.6 units
   // flat against 12.2 on the globe — a 5.4x compression. A tree authored
   // at 3 cells tall is 7% of a flat-view mountain and 36% of the same
-  // mountain on the planet, which is why the old sizes read as a fuzzy
-  // shell from orbit. Not the full 1/5.4: that would put the canopy
-  // below a pixel, and the canopy is distance-gated anyway, so this is
-  // the compromise that keeps a tree readable up close without letting
-  // it out-scale the range it stands on.
-  foliageScale: 0.42,
+  // mountain on the planet, which is why unscaled sizes read as a fuzzy
+  // shell from orbit.
+  //
+  // 0.42 / 0.58 still left wooded bands looking like tinted dirt from
+  // orbit — same plant count as flat, much smaller footprint. 0.65 is
+  // still under the relief ratio; canopy stays orbit-gated
+  // (shouldShowCanopy), understory stays on as ground texture.
+  foliageScale: 0.65,
+  // Extra chance a cell takes its variant on the globe. Equirectangular
+  // land is the same grid, but smaller plants leave gaps the eye reads
+  // as sparse; this closes woods without growing taller than the ranges.
+  foliageDensityBoost: 1.7,
+  // Flat keeps canopyStride 2 (see FOLIAGE_SAMPLING). On the globe that
+  // lattice, plus the smaller plants, reads as bare green on big
+  // wooded sections — sample every cell so stands can fill in.
+  canopyStride: 1,
   // Vertical exaggeration as a fraction of the planet radius. Real
   // planets have imperceptible relief (Everest is 0.14% of Earth's
   // radius); this is the "readable globe" exaggeration, tuned so ranges
@@ -184,6 +198,8 @@ export const flatProjection = Object.freeze({
   isSpherical: false,
   ambientLightIntensity: FLAT_VIEW.ambientLightIntensity,
   foliageScale: FLAT_VIEW.foliageScale,
+  foliageDensityBoost: FLAT_VIEW.foliageDensityBoost,
+  canopyStride: FLAT_VIEW.canopyStride,
 
   heightScale(terrain) {
     return Math.min(terrain.width, terrain.height) * HEIGHT_SCALE_RATIO
@@ -282,6 +298,8 @@ export const sphereProjection = Object.freeze({
   isSpherical: true,
   ambientLightIntensity: SPHERE_VIEW.ambientLightIntensity,
   foliageScale: SPHERE_VIEW.foliageScale,
+  foliageDensityBoost: SPHERE_VIEW.foliageDensityBoost,
+  canopyStride: SPHERE_VIEW.canopyStride,
 
   heightScale(terrain) {
     return planetRadius(terrain) * SPHERE_VIEW.reliefRatio

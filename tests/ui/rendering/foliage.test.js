@@ -401,9 +401,9 @@ describe('apparentPixels', () => {
     const treeHeight = 2.15 * SPHERE_VIEW.foliageScale
     const at = (ratio) => apparentPixels(treeHeight, radius * (ratio - 1), 900, 50)
 
-    expect(at(SPHERE_VIEW.cameraDistanceRatio)).toBeCloseTo(4.9, 1)
-    expect(at(SPHERE_VIEW.minDistanceRatio)).toBeCloseTo(71.3, 0)
-    expect(at(SPHERE_VIEW.maxDistanceRatio)).toBeCloseTo(1.3, 1)
+    expect(at(SPHERE_VIEW.cameraDistanceRatio)).toBeCloseTo(7.5, 1)
+    expect(at(SPHERE_VIEW.minDistanceRatio)).toBeCloseTo(110.3, 0)
+    expect(at(SPHERE_VIEW.maxDistanceRatio)).toBeCloseTo(2.1, 1)
   })
 
   it('halves when the camera doubles its distance', () => {
@@ -497,13 +497,14 @@ describe('foliageDetailFraction', () => {
 
   it('still thins hard at the orbit the camera can reach', () => {
     // Which is the whole point: at the furthest zoom a grass clump is
-    // under a pixel, and 3,890 of them is 67,000 triangles of shimmer.
+    // under a pixel, and thousands of them is tens of thousands of
+    // triangles of shimmer.
     const radius = 512 / (Math.PI * 2)
     const grass = 1.15 * 0.75 * 0.9665 * SPHERE_VIEW.foliageScale
     const furthest = apparentPixels(grass, radius * (SPHERE_VIEW.maxDistanceRatio - 1), 1080, 50)
 
     expect(furthest).toBeLessThan(1)
-    expect(foliageDetailFraction(furthest)).toBeLessThan(0.25)
+    expect(foliageDetailFraction(furthest)).toBeLessThan(0.45)
   })
 
   it('stays under a pixel of shimmer, which is what the threshold means', () => {
