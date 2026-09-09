@@ -36,9 +36,10 @@ describe('createApertureTexture', () => {
 })
 
 describe('PORTAL_FORMS', () => {
-  it('registers the aperture as the default', () => {
-    expect(DEFAULT_PORTAL_FORM).toBe('aperture')
+  it('registers the stone ring as the default', () => {
+    expect(DEFAULT_PORTAL_FORM).toBe('stoneRing')
     expect(PORTAL_FORMS[DEFAULT_PORTAL_FORM]).toBeDefined()
+    expect(PORTAL_FORMS.aperture).toBeDefined()
   })
 
   it('every registered form declares the whole contract', () => {
@@ -59,6 +60,30 @@ describe('resolvePortalForm', () => {
 
   it('returns the form an id names', () => {
     expect(resolvePortalForm('aperture').id).toBe('aperture')
+    expect(resolvePortalForm('stoneRing').id).toBe('stoneRing')
+  })
+})
+
+describe('stoneRing form', () => {
+  it('builds a lit group oriented to the surface normal', () => {
+    const form = PORTAL_FORMS.stoneRing.create({ accentColor: ACCENT })
+    const place = placement()
+    const object = form.build(place)
+
+    expect(object.type).toBe('Group')
+    expect(object.children[0].type).toBe('Mesh')
+    expect(object.userData.markerType).toBe('portal')
+    expect(object.position.toArray()).toEqual([place.x, place.y, place.z])
+    // Standing on +Z ground: local +Z maps to the placement normal.
+    const localUp = new THREE.Vector3(0, 0, 1).applyQuaternion(object.quaternion)
+    expect(localUp.x).toBeCloseTo(place.normal.x, 5)
+    expect(localUp.y).toBeCloseTo(place.normal.y, 5)
+    expect(localUp.z).toBeCloseTo(place.normal.z, 5)
+
+    form.apply(object, { scale: 2.5, opacity: 0.4 })
+    expect(object.scale.x).toBeCloseTo(2.5)
+    expect(object.children[0].material.opacity).toBeCloseTo(0.4)
+    form.dispose()
   })
 })
 

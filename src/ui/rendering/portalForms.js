@@ -2,19 +2,16 @@
  * WHAT a portal looks like — one implementation per shape, behind one
  * contract, so the shape can be replaced without touching the renderer.
  *
- * Only `aperture` exists: the camera-facing glyph inside an accent-tinted
- * aura that the map has always used. The reason there is a registry at
- * all is that a portal is the one marker a click travels through, and a
- * billboard is a weak way to say that — a stone arch you could walk under
- * would say it far better, and would take the scene's light while doing
- * it. That change is not made here. This is the seam it needs.
+ * Two shapes ship: `stoneRing` (the default — a lit standing torus that
+ * takes the scene's sun) and `aperture` (the older additive billboard,
+ * kept so a preference or story can still ask for it).
  *
  * THE CONTRACT
  *
  * A form is created once per layer, so shapes that want shared resources
  * — one texture, one geometry, one material — can hold them:
  *
- *   const form = createPortalForm('aperture', { accentColor })
+ *   const form = createPortalForm('stoneRing', { accentColor })
  *   const object = form.build(placement)     // one per placement
  *   form.apply(object, { scale, opacity })   // every frame
  *   form.dispose()                           // on teardown
@@ -24,25 +21,18 @@
  * route by which per-frame state reaches it: the render loop computes a
  * scale multiplier and an opacity and hands them over, and never touches
  * a material or a transform itself. That indirection is the whole point.
- * A sprite answers a scale by writing `scale.set(s, s, 1)`; an arch would
- * answer it by writing `scale.setScalar(s)` and an opacity by writing a
- * uniform, and the loop would not know the difference.
+ * A sprite answers a scale by writing `scale.set(s, s, 1)`; a ring answers
+ * it by writing `scale.setScalar(s)` and an opacity by writing a
+ * material, and the loop would not know the difference.
  *
- * WHAT A GEOMETRY FORM WOULD STILL NEED
+ * WHAT AN INSTANCED FORM WOULD STILL NEED
  *
- * Two things this does not yet abstract, recorded so they are found
- * before they are hit rather than after:
- *
- * - PICKING. Every object carries `userData.portal`, and the component
- *   resolves a raycast hit by walking up to the nearest ancestor that has
- *   it. That works for one Object3D per portal and would not for a single
- *   InstancedMesh, where a hit reports an `instanceId` instead. The
- *   component funnels all three call sites — click, hover, dive — through
- *   one resolver for that reason, so an instanced form has one place to
- *   change rather than three.
- * - LIGHTING. The aperture is additive and unlit, so the layer needs no
- *   light of its own. A lit form inherits the scene's ambient and sun,
- *   which are currently set per projection in the component.
+ * Picking. Every object carries `userData.portal`, and the component
+ * resolves a raycast hit by walking up to the nearest ancestor that has
+ * it. That works for one Object3D per portal and would not for a single
+ * InstancedMesh, where a hit reports an `instanceId` instead. At the
+ * portal cap (24) separate meshes are cheap enough that we do not
+ * instance yet.
  */
 import * as THREE from 'three'
 import { PORTAL_MARKERS } from './portalMarkers.js'
@@ -187,13 +177,81 @@ const apertureForm = {
   },
 }
 
+/**
+ * A lit standing stone ring. Shared geometry, per-portal material so
+ * section-link opacity can differ; oriented to the surface normal from
+ * portalPlacement so the hole stays readable on the flat map and the
+ * globe alike.
+ */
+const stoneRingForm = {
+  id: 'stoneRing',
+
+  create({ accentColor }) {
+    // Major radius ~0.55 so at baseScale it matches the old sprite's
+    // presence; low segment counts keep ≤24 of these cheap.
+    const geometry = new THREE.TorusGeometry(0.55, 0.14, 8, 20)
+    // Default torus lies in XY (hole along Z). Local +Z is the surface
+    // normal after the group's quaternion, so rotate onto XZ: the ring
+    // stands and the hole faces along a tangent.
+    geometry.rotateX(Math.PI / 2)
+    const materials = []
+    const up = new THREE.Vector3(0, 0, 1)
+    const normal = new THREE.Vector3()
+    const emissive = new THREE.Color(accentColor.r, accentColor.g, accentColor.b)
+
+    return {
+      id: 'stoneRing',
+
+      build(placement) {
+        const material = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(0x8a8274),
+          roughness: 0.82,
+          metalness: 0.04,
+          emissive: emissive.clone(),
+          emissiveIntensity: 0.4,
+          transparent: true,
+          depthWrite: true,
+          // Same exemption as the aperture: a destination must not haze away.
+          fog: false,
+        })
+        materials.push(material)
+
+        const mesh = new THREE.Mesh(geometry, material)
+        const group = new THREE.Group()
+        group.add(mesh)
+        group.position.set(placement.x, placement.y, placement.z)
+        normal.set(placement.normal.x, placement.normal.y, placement.normal.z)
+        if (normal.lengthSq() > 0) {
+          normal.normalize()
+          group.quaternion.setFromUnitVectors(up, normal)
+        }
+        group.scale.setScalar(placement.baseScale)
+        return tagPortalObject(group, placement)
+      },
+
+      apply(object, { scale, opacity }) {
+        object.scale.setScalar(scale)
+        const mesh = object.children[0]
+        if (mesh?.material) mesh.material.opacity = opacity
+      },
+
+      dispose() {
+        for (const material of materials) material.dispose()
+        materials.length = 0
+        geometry.dispose()
+      },
+    }
+  },
+}
+
 /** Every shape a portal can take, by id. */
 export const PORTAL_FORMS = Object.freeze({
+  [stoneRingForm.id]: stoneRingForm,
   [apertureForm.id]: apertureForm,
 })
 
 /** The shape the map uses when nothing says otherwise. */
-export const DEFAULT_PORTAL_FORM = apertureForm.id
+export const DEFAULT_PORTAL_FORM = stoneRingForm.id
 
 /**
  * Which form an id names, falling back to the default for an
