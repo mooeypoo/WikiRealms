@@ -43,19 +43,39 @@ describe('hazeRange', () => {
     // smoothstep, which is what three's fog applies.
     const haze = t * t * (3 - 2 * t)
 
-    expect(haze).toBeGreaterThan(0.15) // enough to read as distance
-    expect(haze).toBeLessThan(0.45) // not enough to lose the terrain
+    // The upper bound is the one with teeth. Past roughly half, the
+    // terrain's own modelling starts washing out faster than the cue
+    // improves — measured as spread of luminance across the band, which
+    // the table on AERIAL_PERSPECTIVE records.
+    expect(haze).toBeGreaterThan(0.3) // enough to read as distance
+    expect(haze).toBeLessThan(0.55) // not enough to lose the terrain
   })
 
-  it('keeps the near half of the world nearly clear', () => {
-    // The near edge should be barely touched — otherwise the whole frame
-    // is veiled and the gradient stops being a gradient.
+  it('keeps the near edge of the world nearly clear', () => {
+    // Whatever the far edge gets, the near edge has to stay close to
+    // untouched, or the whole frame is veiled and the gradient stops
+    // being a gradient. This is the constraint that keeps the range
+    // anchored to the world rather than simply made denser.
     const { near, far } = hazeRange(FLAT)
     const nearEdgeDepth = Math.hypot(460 - 128, 200)
 
     const t = (nearEdgeDepth - near) / (far - near)
 
-    expect(t * t * (3 - 2 * t)).toBeLessThan(0.08)
+    expect(t * t * (3 - 2 * t)).toBeLessThan(0.12)
+  })
+
+  it('separates far from near by a good margin', () => {
+    // The pair above pin down two absolute levels; this pins down the
+    // ratio between them, which is what actually reads as depth. Both
+    // ends could drift together and still satisfy the bounds.
+    const { near, far } = hazeRange(FLAT)
+    const smoothstep = (t) => t * t * (3 - 2 * t)
+    const at = (depth) => smoothstep((depth - near) / (far - near))
+
+    const farEdge = at(Math.hypot(460 + 128, 200))
+    const nearEdge = at(Math.hypot(460 - 128, 200))
+
+    expect(farEdge / nearEdge).toBeGreaterThan(3)
   })
 
   it('slides with the camera rather than sitting at a fixed depth', () => {

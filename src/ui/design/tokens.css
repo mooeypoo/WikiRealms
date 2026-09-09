@@ -17,15 +17,6 @@
   --surface-void: #05070d;                  /* behind the world */
   --surface-nebula: #0d1120;                /* the body gradient's lift */
   --surface-deep: #0a0d14;
-  /* What distance fades into. The renderer reads this and hazes far
-     terrain toward it, so the horizon dissolves into the backdrop
-     instead of ending on a hard silhouette. It lives here, with the
-     sky it has to agree with, rather than as a number in a shader:
-     the body gradient behind the canvas is CSS, and a haze that did
-     not match it would draw a seam along every distant ridge. Lifted
-     a little off --surface-void so distance reads as veiled rather
-     than merely unlit. */
-  --surface-haze: #0a0f1c;
   --surface-1-solid: #0a0d14;               /* panel fill with no alpha */
   --surface-1: rgba(10, 13, 20, 0.9);       /* panels */
   --surface-2: rgba(16, 20, 28, 0.94);      /* raised, inside a panel */
@@ -37,6 +28,29 @@
      and at 0.72 --ink-2 falls to 3.81:1. This is the floor; it is why the
      old user-facing opacity slider is being retired rather than retuned. */
   --panel-alpha-min: 0.9;
+
+  /* ── ATMOSPHERE ────────────────────────────────────────────────────
+     The colour of the AIR over a realm, which the renderer mixes into
+     distant terrain so that distance reads as distance.
+
+     Deliberately NOT a surface, and deliberately not near --surface-void,
+     which is what it was first set to on the reasoning that a haze
+     matching the backdrop would let the horizon dissolve into it. That
+     reasoning was wrong twice over. The world's edge is a hard silhouette
+     against the starfield whatever colour the air is, because the haze
+     never reaches full strength inside the world. And a haze darker than
+     what it veils inverts the cue it exists for: aerial perspective works
+     because distant things shift toward a SKY brighter than the land, so
+     hazing toward near-black made far hills read as unlit rather than as
+     far, which is why the effect measured fine and could not be seen.
+
+     So this is a sky, not a shadow. At luminance 88 it sits just above
+     the terrain it veils (grass 87, water 77), which is the point: far
+     ground pales and shifts blue instead of darkening. Measured on the
+     default flat view, far land shifts 15.9 levels toward blue against
+     mid-ground's 8.2, while its own luminance moves -1.9 — a hue cue,
+     not a brightness one. */
+  --atmosphere: #34597c;
 
   /* ── INK ───────────────────────────────────────────────────────────
      Measured against --surface-1 over snow, the worst case in the app. */

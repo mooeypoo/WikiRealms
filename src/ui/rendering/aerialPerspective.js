@@ -8,10 +8,10 @@
  * thing is small and close and made of painted plaster.
  *
  * This module owns only the RANGE: at what depth the haze starts and at
- * what depth it is total. The colour lives in the stylesheet next to the
- * backdrop it has to agree with (see --surface-haze), and the mixing is
- * three's own fog, so the terrain, both vegetation layers and the
- * water's standard material all recede together.
+ * what depth it is total. The colour is a design token (--atmosphere,
+ * which explains at length why it is a sky rather than a shadow), and
+ * the mixing is three's own fog, so the terrain, both vegetation layers
+ * and the water's standard material all recede together.
  *
  * WHY THE RANGE FOLLOWS THE CAMERA
  *
@@ -40,21 +40,33 @@
  * world extents.
  *
  * Deliberately more than 1. Fog is total at `far`, so putting `far` one
- * extent out would erase the back of the world rather than veil it. At 2
- * the far edge lands about a third of the way into the haze, and since
- * three's Fog smoothsteps rather than ramps linearly, the near half of
- * the world stays almost clear and the change happens over the depth
- * where the cue is wanted.
+ * extent out would erase the back of the world rather than veil it. At
+ * 1.6 the far edge lands a little under halfway into the haze, and since
+ * three's Fog smoothsteps rather than ramps linearly, the near edge of
+ * the world sits at 8% and the change happens over the depth where the
+ * cue is wanted.
  *
- * Measured on the default flat view against the water, which is one
- * uniform colour and so isolates depth from albedo: the far edge loses
- * 20% of its brightness and the near edge 4%, taking the near-to-far
- * brightness ratio from 1.11 — which is only the sun's own falloff — to
- * 1.32. At 2.5 the far edge lost 13%, which measured as a gradient but
- * did not read as one.
+ * HOW THIS WAS TUNED, since the first attempt measured well and could
+ * not be seen. Comparing each frame against the same frame with fog off
+ * cancels albedo, so the numbers below are the haze's own contribution
+ * at two depths, on grass, on the default flat view.
+ *
+ *   extents   far shift toward sky   mid-ground   detail kept (far/mid)
+ *      2.5           7.1                 3.6           96% / 96%
+ *      2.0          10.7                 5.5           95% / 94%
+ *      1.6          15.9                 8.2           92% / 91%
+ *      1.3          22.7                12.0           89% / 87%
+ *      1.0          34.6                18.9           85% / 79%
+ *
+ * "Detail kept" is the spread of luminance across the band as a fraction
+ * of its unhazed spread — how much of the terrain's own modelling
+ * survives. It is the thing that stops this going further: at 1.0 the
+ * mid-ground has lost a fifth of its contrast, which is the whole
+ * picture going milky rather than the distance receding. 1.6 buys half
+ * again the cue of 2.0 for 3 points of it.
  */
 export const AERIAL_PERSPECTIVE = Object.freeze({
-  fullHazeExtents: 2,
+  fullHazeExtents: 1.6,
 })
 
 /**

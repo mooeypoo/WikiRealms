@@ -208,19 +208,20 @@ let portalForm = null
 
 /** Reads the app's --accent CSS variable and returns it as a THREE.Color. */
 /**
- * The colour distance fades into, read from the stylesheet.
+ * The colour of the air over the world, read from the stylesheet.
  *
  * Same shape as resolveAccentColor below, and the same reason: the look
- * is owned by CSS, and three reads it rather than restating it.
+ * is owned by CSS, and three reads it rather than restating it. See
+ * --atmosphere for why it is a sky colour and not a backdrop one.
  */
 function resolveHazeColor() {
   try {
-    const value = getComputedStyle(document.documentElement).getPropertyValue('--surface-haze').trim()
+    const value = getComputedStyle(document.documentElement).getPropertyValue('--atmosphere').trim()
     if (value) return new THREE.Color(value)
   } catch {
-    // ignore — fall through to the void behind the world
+    // ignore — fall through to the token's own value
   }
-  return new THREE.Color(0x0a0f1c)
+  return new THREE.Color(0x34597c)
 }
 
 function resolveAccentColor() {
@@ -840,11 +841,9 @@ function rebuildScene() {
   // the next world rebuild without any three.js code touching styling.
   accentColor = resolveAccentColor()
 
-  // The haze colour comes from the same stylesheet as the backdrop it
-  // has to dissolve into, for the reason given at --surface-haze: the
-  // sky behind the canvas is a CSS gradient, and a haze picked
-  // independently would draw a visible seam along every far ridge.
-  // Range is set per frame by updateAerialPerspective.
+  // Read from CSS rather than stated here so the air stays part of the
+  // palette a theme can change; see --atmosphere for why it is a sky
+  // colour. Range is set per frame by updateAerialPerspective.
   scene.fog = new THREE.Fog(resolveHazeColor(), 1, 2)
 
   // Resolve the projection BEFORE building anything — every position in
