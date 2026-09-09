@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  RIPPLE,
   SHELF_WIDTH,
   SURF,
   WATER,
+  WATER_SKY_REFLECTION,
   computeWaterAttributes,
   dropDryTriangles,
+  rippleStrength,
+  rippleWaveFrequency,
+  shortestRippleWavelength,
   surfStrength,
   waterDepth,
   waterOpacity,
@@ -312,5 +317,148 @@ describe('SURF', () => {
 
   it('sharpens the sine rather than flattening it', () => {
     expect(SURF.sharpness).toBeGreaterThan(1)
+  })
+})
+
+describe('rippleWaveFrequency', () => {
+  it('lets long swells outrun short chop', () => {
+    // Deep-water dispersion, which is the whole reason the rate is
+    // derived rather than set: with one shared rate the wave set slides
+    // along as a single texture being dragged across the bay.
+    const long = rippleWaveFrequency(20)
+    const short = rippleWaveFrequency(5)
+    expect(short).toBeGreaterThan(long)
+  })
+
+  it('turns as the square root of the wavenumber', () => {
+    // Quadrupling the wavelength quarters the wavenumber, which halves
+    // the angular frequency.
+    expect(rippleWaveFrequency(5) / rippleWaveFrequency(20)).toBeCloseTo(2, 6)
+  })
+})
+
+describe('RIPPLE', () => {
+  it('gives every wave a frequency it did not have to be told', () => {
+    for (const wave of RIPPLE.waves) {
+      expect(wave.frequency).toBeCloseTo(rippleWaveFrequency(wave.wavelength), 10)
+    }
+  })
+
+  it('has more than three waves, because three made a lattice', () => {
+    // Three crossing sinusoids came out as visible diagonal rows. This
+    // is the count that fixed it, and dropping back to three would
+    // reintroduce a defect that only shows up on screen.
+    expect(RIPPLE.waves.length).toBeGreaterThan(3)
+  })
+
+  it('keeps no two wavelengths in a simple ratio', () => {
+    // Any finite sum of sines repeats; harmonics make it repeat SOON,
+    // and a short period is what the eye reads as a pattern rather than
+    // as water.
+    const lengths = RIPPLE.waves.map((wave) => wave.wavelength)
+    for (let i = 0; i < lengths.length; i++) {
+      for (let j = i + 1; j < lengths.length; j++) {
+        const ratio = Math.max(lengths[i], lengths[j]) / Math.min(lengths[i], lengths[j])
+        expect(Math.abs(ratio - Math.round(ratio))).toBeGreaterThan(0.08)
+      }
+    }
+  })
+
+  it('tilts the surface far enough to matter, and not absurdly far', () => {
+    // What reaches the lighting is amplitude times wavenumber. Below
+    // about ten degrees the sky reflection barely moves; far above
+    // twenty and the sea stops looking like water.
+    const slopes = RIPPLE.waves.map((wave) => wave.amplitude * ((Math.PI * 2) / wave.wavelength))
+    const rms = Math.sqrt(slopes.reduce((sum, slope) => sum + slope * slope, 0))
+    const degrees = (Math.atan(rms) * 180) / Math.PI
+    expect(degrees).toBeGreaterThan(12)
+    expect(degrees).toBeLessThan(28)
+  })
+
+  it('points its waves in genuinely different directions', () => {
+    // Each wave has two still points on a sphere, where its direction is
+    // radial and its crest has no component along the surface. Waves
+    // that agree on a direction would share those dead spots.
+    const unit = ([x, y, z]) => {
+      const length = Math.hypot(x, y, z)
+      return [x / length, y / length, z / length]
+    }
+    const directions = RIPPLE.waves.map((wave) => unit(wave.direction))
+    for (let i = 0; i < directions.length; i++) {
+      for (let j = i + 1; j < directions.length; j++) {
+        const alignment = Math.abs(directions[i].reduce((sum, value, axis) => sum + value * directions[j][axis], 0))
+        expect(alignment).toBeLessThan(0.9)
+      }
+    }
+  })
+})
+
+describe('shortestRippleWavelength', () => {
+  it('reports the finest wave, because that is what has to be resolved', () => {
+    expect(shortestRippleWavelength()).toBe(Math.min(...RIPPLE.waves.map((wave) => wave.wavelength)))
+  })
+})
+
+describe('rippleStrength', () => {
+  it('draws no chop it cannot resolve', () => {
+    // A slope field is the highest spatial frequency in the scene, and
+    // below a few pixels per wave the highlight it carries samples at
+    // random: a field of crawling specks rather than a soft shimmer.
+    expect(rippleStrength(0)).toBe(0)
+    expect(rippleStrength(RIPPLE.minWavePixels)).toBe(0)
+    expect(rippleStrength(RIPPLE.minWavePixels - 1)).toBe(0)
+  })
+
+  it('draws it fully once there is room for a crest and a trough', () => {
+    expect(rippleStrength(RIPPLE.fullWavePixels)).toBe(1)
+    expect(rippleStrength(RIPPLE.fullWavePixels * 4)).toBe(1)
+  })
+
+  it('fades rather than switches', () => {
+    const midpoint = (RIPPLE.minWavePixels + RIPPLE.fullWavePixels) / 2
+    const strength = rippleStrength(midpoint)
+    expect(strength).toBeGreaterThan(0)
+    expect(strength).toBeLessThan(1)
+    // Monotonic, so pulling the camera back never brings chop BACK.
+    let previous = -1
+    for (let pixels = 0; pixels <= RIPPLE.fullWavePixels + 4; pixels += 0.5) {
+      const value = rippleStrength(pixels)
+      expect(value).toBeGreaterThanOrEqual(previous)
+      previous = value
+    }
+  })
+
+  it('treats nonsense as no chop', () => {
+    expect(rippleStrength(Number.NaN)).toBe(0)
+    expect(rippleStrength(-10)).toBe(0)
+    expect(rippleStrength(undefined)).toBe(0)
+  })
+
+  it('leaves room to fade in', () => {
+    expect(RIPPLE.fullWavePixels).toBeGreaterThan(RIPPLE.minWavePixels * 2)
+  })
+})
+
+describe('WATER_SKY_REFLECTION', () => {
+  it('reflects almost nothing straight down, which is what water does', () => {
+    // The point of a fresnel curve is how far it travels. A high floor
+    // is the difference between a sea and a sheet of steel.
+    expect(WATER_SKY_REFLECTION.facing).toBeLessThan(0.05)
+    expect(WATER_SKY_REFLECTION.facing).toBeGreaterThan(0)
+  })
+
+  it('relaxes Schlick, because this world is read from above', () => {
+    // Schlick's exponent is 5, which puts the whole effect in the last
+    // few degrees before the horizon. Measured at a shoreline camera it
+    // lifted the sea by 1.7 levels against 6.1 for this.
+    expect(WATER_SKY_REFLECTION.falloff).toBeLessThan(5)
+    // But it is still a curve that rises toward grazing, not a flat
+    // tint: at 1 or below there is nothing fresnel about it.
+    expect(WATER_SKY_REFLECTION.falloff).toBeGreaterThan(1)
+  })
+
+  it('leaves the sea some colour of its own', () => {
+    expect(WATER_SKY_REFLECTION.strength).toBeGreaterThan(0)
+    expect(WATER_SKY_REFLECTION.strength).toBeLessThan(1)
   })
 })

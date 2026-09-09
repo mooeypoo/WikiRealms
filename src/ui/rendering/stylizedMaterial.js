@@ -141,6 +141,32 @@ const SNOW_FACING_START = 0.35
  */
 const OCCLUSION_STRENGTH = 2
 
+const TAU = Math.PI * 2
+
+/**
+ * The ground's shine: none on rock, grass or sand, a tight highlight on
+ * snow.
+ *
+ * A single profile for the whole terrain, because the only part of it
+ * that reflects is the part the material draws itself. Snow is already
+ * computed per fragment as `cover`, so the sparkle can ride it and no
+ * caller has to say where the caps are.
+ *
+ * `strength` is 0 deliberately. Wet rock and wet sand do shine, but the
+ * shader cannot tell wet from dry — that is a fact about proximity to
+ * water, which lives in the height map and not in this fragment. Adding
+ * a base shine here would put a highlight on every dry cliff in the
+ * world to get one on the shore.
+ */
+export const GROUND_SPECULAR = Object.freeze({
+  strength: 0,
+  // Snow is not a mirror: it is a scatterer full of facets. So this is
+  // a modest amount through a fairly tight lobe, which reads as glitter
+  // catching the light rather than as a wet plastic cap.
+  snowStrength: 0.55,
+  sharpness: 32,
+})
+
 /** Snow's albedo, from the palette the 2D map and the legend also use. */
 const SNOW_COLOR = new THREE.Color(
   SNOW_RGB[0] / 255,
@@ -205,6 +231,13 @@ varying float vSnowHeight;
 varying float vFacingUp;
 varying float vOcclusion;
 varying float vSunlight;
+
+#ifdef USE_RIPPLE
+  // The chop is anchored to the SURFACE, not to the screen, or it would
+  // swim as the camera moves. This is the untransformed position, which
+  // is the only frame that stands still while the camera does not.
+  varying vec3 vLocalPosition;
+#endif
 
 void main() {
   #include <color_vertex>
@@ -297,6 +330,10 @@ void main() {
     vOcclusion = pow(occlusion, uOcclusionStrength);
   #endif
 
+  #ifdef USE_RIPPLE
+    vLocalPosition = position;
+  #endif
+
   vSunlight = 1.0;
   #ifdef USE_SUNLIGHT
     vSunlight = sunlight;
@@ -315,6 +352,42 @@ uniform vec3 uSnowColor;
 uniform float uSnowStart;
 uniform float uSnowFull;
 uniform float uSnowFacingStart;
+
+#ifdef USE_RIPPLE
+  varying vec3 vLocalPosition;
+  // Which way is up in local space, and so which way the sea's own
+  // normal points before the chop tilts it. Declared in the vertex
+  // stage as well, where the wind asks the same question.
+  uniform float uSpherical;
+  // A wave vector is a direction times a spatial frequency, so its dot
+  // product with a position is a phase in radians and its magnitude is
+  // what turns an amplitude into a slope. Sized by a define so the wave
+  // COUNT stays a number in waterSurface.js rather than a shape the
+  // shader imposes — it was three, and three made a lattice.
+  uniform vec3 uRippleWaves[RIPPLE_WAVES];
+  uniform float uRippleAmplitudes[RIPPLE_WAVES];
+  uniform float uRippleFrequencies[RIPPLE_WAVES];
+  uniform float uRippleStrength;
+  // three declares this for the vertex stage only, but a uniform belongs
+  // to the PROGRAM, so declaring it here binds the same matrix the
+  // renderer already keeps current per object. It is needed because the
+  // slope is derived in local space and the lighting happens in view
+  // space.
+  uniform mat3 normalMatrix;
+#endif
+
+#ifdef USE_SKY_REFLECTION
+  uniform vec3 uSkyColor;
+  uniform float uSkyReflection;
+  uniform float uSkyReflectionFacing;
+  uniform float uSkyReflectionFalloff;
+#endif
+
+#ifdef USE_SPECULAR
+  uniform float uSpecular;
+  uniform float uSpecularSnow;
+  uniform float uSpecularSharpness;
+#endif
 
 #ifdef USE_SURF
   // The clock is declared in the vertex stage too; three writes one
@@ -395,6 +468,47 @@ void main() {
   // faceted crowns faceted.
   #include <normal_fragment_begin>
 
+  // Chop, as a slope rather than a shape.
+  //
+  // The sea's local normal is known without reading anything: the flat
+  // map's surface lies in XY so it points along Z, and the globe's is
+  // radial. Two vectors across that normal give a frame to tilt in, and
+  // each wave's contribution to the tilt is its own derivative — the
+  // cosine of the phase it is already computing, times how much of the
+  // wave runs along each axis of the frame.
+  //
+  // This replaces the normal rather than adding to it, so the chop
+  // reaches the diffuse term too and not only the highlight. That is
+  // the honest version: a tilted piece of water faces the sun a little
+  // differently in every respect, and the wrapped diffuse turns that
+  // into the soft light-and-dark that reads as a moving surface even
+  // where the sun's own image is nowhere near.
+  #ifdef USE_RIPPLE
+    if (uRippleStrength > 0.0) {
+      vec3 upLocal = uSpherical > 0.5 ? normalize(vLocalPosition) : vec3(0.0, 0.0, 1.0);
+      // Any two axes across the surface will do, so long as the one we
+      // cross with is not parallel to the normal.
+      vec3 across = abs(upLocal.z) > 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
+      vec3 tangentA = normalize(cross(upLocal, across));
+      vec3 tangentB = cross(upLocal, tangentA);
+
+      vec2 slope = vec2(0.0);
+      for (int i = 0; i < RIPPLE_WAVES; i++) {
+        vec3 waveVector = uRippleWaves[i];
+        float phase = dot(vLocalPosition, waveVector) + uTime * uRippleFrequencies[i];
+        // The derivative of the wave, which is all the lighting needs:
+        // a sine's slope is its cosine, so this is exact and there is
+        // no height field to build or filter.
+        float derivative = cos(phase) * uRippleAmplitudes[i];
+        slope += derivative * vec2(dot(waveVector, tangentA), dot(waveVector, tangentB));
+      }
+      slope *= uRippleStrength;
+
+      vec3 rippled = normalize(upLocal - tangentA * slope.x - tangentB * slope.y);
+      normal = normalize(normalMatrix * rippled);
+    }
+  #endif
+
   // Occlusion attenuates the AMBIENT term and only that term, which is
   // what it means: the ambient light stands in for a sky shining from
   // every direction, and this is the fraction of that sky the surface
@@ -438,7 +552,105 @@ void main() {
   // go pale and the whole world reads overexposed. The intensities in
   // the view configs were tuned against a material that divided, so
   // this is also what keeps them meaning what they meant.
-  gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, alpha);
+  vec3 outgoing = albedo * irradiance * RECIPROCAL_PI;
+
+  // A highlight: the sun seen IN the surface rather than on it.
+  //
+  // The SUN only. Grazing-angle reflection used to be weighted in here
+  // as well and is not any more, because the two answer different
+  // questions and wanted different curves: this one is where a single
+  // small light sits, which is a fact about the sun's position, while
+  // reflecting the sky is a fact about the viewing angle alone. They
+  // are separated so that snow can have one without the other.
+  //
+  // This is added to the outgoing light and not mixed into the albedo,
+  // which is the whole difference between a highlight and a coat of
+  // white paint. Snow and foam above are cover — they change what the
+  // surface IS, so they are lit by it. A reflection is not part of the
+  // surface at all, so it arrives after the light has been applied and
+  // is not multiplied by the albedo. A snowfield in shadow can still
+  // catch the sun on the one facet turned the right way.
+  //
+  // Scaled by vSunlight for the same reason the diffuse term is: this
+  // is the sun's own image, so a fragment the sun cannot reach has no
+  // sun to show. It is NOT scaled by occlusion, which answers about
+  // skylight from every direction and has nothing to say about where
+  // one light sits.
+  #if defined( USE_SPECULAR ) && NUM_DIR_LIGHTS > 0
+    // Where the shine comes from. A base for surfaces that are shiny
+    // everywhere, plus a term that rides the snow the material has
+    // already decided to draw — so caps sparkle wherever they are,
+    // without a second attribute or anyone naming a peak.
+    float shine = uSpecular + uSpecularSnow * cover;
+
+    if (shine > 0.0) {
+      vec3 viewDir = normalize(vViewPosition);
+      // Blinn's half vector rather than a mirrored ray: one normalize
+      // instead of a reflect, and the lobe it makes is rounder, which
+      // suits a world that is already lit by a wrapped diffuse.
+      //
+      // three gives directionalLights[].direction in VIEW space and
+      // normal_fragment_begin leaves the normal there too, so all three
+      // vectors agree without a matrix.
+      vec3 halfDir = normalize(directionalLights[0].direction + viewDir);
+      float highlight = pow(max(dot(normal, halfDir), 0.0), uSpecularSharpness);
+
+      vec3 glint = directionalLights[0].color * highlight * shine * vSunlight;
+      outgoing += glint;
+    }
+  #endif
+
+  // The sky seen in the surface, which is the other half of what makes
+  // water look like water — and the half that does not depend on where
+  // the sun happens to be.
+  //
+  // A sun highlight is the sun's own image, so it appears only when the
+  // eye is near the mirror direction. Measured on this world, whose sun
+  // stands at 59 degrees, that condition is simply not met at the
+  // cameras a reader uses: the mirror direction sits some 38 degrees off
+  // the sea's normal and the lobe returns 4e-11. The sky, by contrast,
+  // is everywhere the sun is not, so its reflection depends on the
+  // viewing angle alone and is therefore always somewhere in frame.
+  //
+  // Schlick's approximation, with water's real numbers: about 2% of the
+  // light striking it head-on comes back, rising to all of it at a
+  // grazing angle. That rise is why a lake looks into itself at your
+  // feet and looks like sky at the far shore, and it is the strongest
+  // single cue that a surface is liquid rather than painted.
+  //
+  // The chop matters here more than it does to the highlight. It tilts
+  // the normal a few degrees either way, which moves each fragment
+  // along that steep curve, so the reflection arrives already broken up
+  // into the light and dark bands of a moving surface.
+  //
+  // WHAT SKY, IN A WORLD WITH NO SKY
+  //
+  // The backdrop is a starfield, so reflecting what is literally up
+  // there returns darkness: measured, the sea changed by -0.2 levels,
+  // because the haze colour is dimmer than the lit water it was being
+  // mixed into. But the scene does assert a sky — that is precisely
+  // what its ambient term is, a light with no direction standing in for
+  // one shining from everywhere. So the sea reflects THAT, tinted by
+  // the same hue the haze uses, which keeps one story about the air and
+  // makes the reflection follow the lighting for free: the globe's
+  // brighter ambient gives a brighter sea without a second constant.
+  #ifdef USE_SKY_REFLECTION
+    {
+      vec3 skyView = normalize(vViewPosition);
+      float facing = clamp(dot(normal, skyView), 0.0, 1.0);
+      float reflectance = mix(uSkyReflectionFacing, 1.0, pow(1.0 - facing, uSkyReflectionFalloff)) * uSkyReflection;
+      // uSkyColor carries hue only — its brightest channel is 1 — so
+      // the ambient decides how bright the sky is and the token decides
+      // what colour it is.
+      outgoing = mix(outgoing, ambientLightColor * uSkyColor, reflectance);
+      // A reflection sits ON the water, so it hides the floor by as much
+      // as it returns. Without this the sea's own transparency would
+      // blend away the very thing that makes it read as a surface.
+      alpha = max(alpha, reflectance);
+    }
+  #endif
+
+  gl_FragColor = vec4(outgoing, alpha);
 
   #include <colorspace_fragment>
 
@@ -486,6 +698,9 @@ void main() {
  *   sunlight?: boolean,
  *   transparent?: boolean,
  *   surf?: { ceiling: number, bands: number, speed: number, sharpness: number, foam: number, color: number } | null,
+ *   specular?: { strength: number, snowStrength: number, sharpness: number } | null,
+ *   ripple?: { waves: Array<{ wavelength: number, direction: number[], amplitude: number, frequency: number }> } | null,
+ *   skyReflection?: { color: THREE.Color, strength: number, facing: number, falloff: number } | null,
  * }} options
  * @returns {THREE.ShaderMaterial}
  */
@@ -500,6 +715,9 @@ export function createStylizedMaterial({
   sunlight = false,
   transparent = false,
   surf = null,
+  specular = null,
+  ripple = null,
+  skyReflection = null,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -547,6 +765,14 @@ export function createStylizedMaterial({
       // would read as midnight.
       ...(sunlight ? { USE_SUNLIGHT: '' } : {}),
       ...(surf ? { USE_SURF: '' } : {}),
+      // Off by default, and worth being strict about: this is the one
+      // term that runs a pow per fragment on surfaces that have no
+      // reason to shine. Grass and rock do not.
+      ...(specular ? { USE_SPECULAR: '' } : {}),
+      // The chop, which brings a varying with it and a loop over the
+      // wave set. Only the sea has any use for either.
+      ...(ripple ? { USE_RIPPLE: '', RIPPLE_WAVES: String(ripple.waves.length) } : {}),
+      ...(skyReflection ? { USE_SKY_REFLECTION: '' } : {}),
     },
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.lights,
@@ -564,6 +790,14 @@ export function createStylizedMaterial({
         uSurfSharpness: { value: surf?.sharpness ?? 1 },
         uSurfFoam: { value: surf?.foam ?? 0 },
         uSurfColor: { value: new THREE.Color(surf?.color ?? 0xffffff) },
+        uSpecular: { value: specular?.strength ?? 0 },
+        uSpecularSnow: { value: specular?.snowStrength ?? 0 },
+        uSpecularSharpness: { value: specular?.sharpness ?? 1 },
+        ...rippleUniforms(ripple),
+        uSkyColor: { value: skyReflection?.color?.clone() ?? new THREE.Color(0xffffff) },
+        uSkyReflection: { value: skyReflection?.strength ?? 0 },
+        uSkyReflectionFacing: { value: skyReflection?.facing ?? 0 },
+        uSkyReflectionFalloff: { value: skyReflection?.falloff ?? 5 },
         uSnowFacingStart: { value: SNOW_FACING_START },
         uOcclusionStrength: { value: OCCLUSION_STRENGTH },
         uSpherical: { value: spherical ? 1 : 0 },
@@ -596,6 +830,44 @@ export function setWind(material, { time, sway }, windDirection) {
   material.uniforms.uTime.value = time
   material.uniforms.uSway.value = sway
   material.uniforms.uWindDirection.value.copy(windDirection)
+}
+
+/**
+ * Turns a wave set into the three uniforms the chop's loop reads.
+ *
+ * A wave vector is a direction times a spatial frequency, so that the
+ * shader's dot product of it with a position is a phase in radians and
+ * its own magnitude is what converts a slope into a tilt. Doing that
+ * here rather than in the shader means the wavelengths in RIPPLE stay
+ * written in world units, which is the only form anybody can reason
+ * about — see shortestRippleWavelength, which the camera needs.
+ *
+ * @param {{ waves: Array<object>, speed: number } | null} ripple
+ */
+function rippleUniforms(ripple) {
+  const waves = ripple?.waves ?? []
+  return {
+    // A Vector3 per wave and a plain number per amplitude: three uploads
+    // these as vec3[] and float[] to match the shader's arrays.
+    uRippleWaves: {
+      value: waves.map((wave) => new THREE.Vector3(...wave.direction).normalize().multiplyScalar(TAU / wave.wavelength)),
+    },
+    uRippleAmplitudes: { value: waves.map((wave) => wave.amplitude) },
+    uRippleFrequencies: { value: waves.map((wave) => wave.frequency) },
+    uRippleStrength: { value: 0 },
+  }
+}
+
+/**
+ * Sets how strongly the chop tilts the surface, which the camera decides
+ * for the same reason it decides the surf's: a wave narrower than a few
+ * pixels cannot carry a highlight without turning it into specks.
+ *
+ * @param {THREE.ShaderMaterial} material
+ * @param {number} strength in [0, 1]
+ */
+export function setRipple(material, strength) {
+  material.uniforms.uRippleStrength.value = Math.min(1, Math.max(0, Number(strength) || 0))
 }
 
 /**

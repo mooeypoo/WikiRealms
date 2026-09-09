@@ -15,8 +15,10 @@ import { describe, expect, it } from 'vitest'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
 import {
+  GROUND_SPECULAR,
   NO_SNOWLINE,
   createStylizedMaterial,
+  setRipple,
   setSnowline,
   setSurf,
   setWind,
@@ -124,7 +126,10 @@ describe('createStylizedMaterial', () => {
     // of 3 leaves it at the 1.0 it was initialised to.
     const material = createStylizedMaterial({ vertexColors: true, transparent: true })
     expect(material.fragmentShader).toContain('alpha = vColor.a;')
-    expect(material.fragmentShader).toContain('gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, alpha);')
+    // That the channel reaches the output, rather than the exact sum in
+    // between: the highlight adds a term to that arithmetic.
+    expect(material.fragmentShader).toContain('gl_FragColor = vec4(outgoing, alpha);')
+    expect(material.fragmentShader).toContain('albedo * irradiance * RECIPROCAL_PI')
     expect(material.transparent).toBe(true)
   })
 
@@ -407,5 +412,245 @@ describe('setSurf', () => {
     const program = material.version
     setSurf(material, 0.7)
     expect(material.version).toBe(program)
+  })
+})
+
+describe('the sun\'s highlight', () => {
+  const SHINE = { strength: 0, snowStrength: 0.55, sharpness: 32 }
+
+  it('compiles out of anything that has no reason to shine', () => {
+    // The one term here that runs a pow per fragment. Grass and rock do
+    // not reflect, and there are a great many fragments of both.
+    const matte = createStylizedMaterial({ vertexColors: true })
+    expect(matte.defines).not.toHaveProperty('USE_SPECULAR')
+
+    const shiny = createStylizedMaterial({ specular: SHINE })
+    expect(shiny.defines).toHaveProperty('USE_SPECULAR')
+  })
+
+  it('adds light rather than painting the surface white', () => {
+    // The difference between a highlight and a coat of paint. Snow and
+    // foam are cover — they change what the surface IS, so they are lit
+    // by it and mix into the albedo. A reflection is not part of the
+    // surface, so it lands after the lighting and is never multiplied by
+    // the albedo, which is what lets dark water still glint.
+    const material = createStylizedMaterial({ specular: SHINE })
+    expect(material.fragmentShader).toContain('outgoing += glint')
+    // And the albedo is finished being assembled before that point.
+    const albedoLast = material.fragmentShader.lastIndexOf('albedo = mix(')
+    expect(albedoLast).toBeLessThan(material.fragmentShader.indexOf('outgoing += glint'))
+  })
+
+  it('shows no sun where no sun reaches', () => {
+    // A glint inside a ridge's shadow is the same error as a lit slope
+    // inside one, and this material already knows the answer.
+    const material = createStylizedMaterial({ specular: SHINE, sunlight: true })
+    expect(material.fragmentShader).toMatch(/glint\s*=\s*directionalLights\[0\]\.color[^;]*vSunlight/)
+  })
+
+  it('rides the snow the material already draws', () => {
+    // No second attribute and nobody naming a peak: the shader has
+    // computed snow cover a few lines above, so the sparkle follows the
+    // caps wherever the snowline puts them.
+    const material = createStylizedMaterial({ specular: SHINE })
+    expect(material.fragmentShader).toContain('uSpecular + uSpecularSnow * cover')
+  })
+
+  it('reads every uniform it declares', () => {
+    const material = createStylizedMaterial({ specular: SHINE })
+    for (const name of ['uSpecular', 'uSpecularSnow', 'uSpecularSharpness']) {
+      expect(Object.keys(material.uniforms)).toContain(name)
+      expect(material.fragmentShader.split(name).length - 1).toBeGreaterThan(1)
+    }
+  })
+
+  it('takes its numbers from the caller', () => {
+    const material = createStylizedMaterial({ specular: { strength: 0.4, snowStrength: 0.7, sharpness: 48 } })
+    expect(material.uniforms.uSpecular.value).toBe(0.4)
+    expect(material.uniforms.uSpecularSnow.value).toBe(0.7)
+    expect(material.uniforms.uSpecularSharpness.value).toBe(48)
+  })
+})
+
+describe('GROUND_SPECULAR', () => {
+  it('shines on the snow and nowhere else', () => {
+    // Wet rock and wet sand do shine, but the shader cannot tell wet
+    // from dry — that is a fact about being near water, which lives in
+    // the height map rather than in a fragment. A base shine here would
+    // gloss every dry cliff in the world to catch one shore.
+    expect(GROUND_SPECULAR.strength).toBe(0)
+    expect(GROUND_SPECULAR.snowStrength).toBeGreaterThan(0)
+  })
+
+  it('keeps the lobe tight enough to read as glitter', () => {
+    // Snow is a scatterer full of facets, not a mirror; a broad lobe on
+    // it reads as wet plastic.
+    expect(GROUND_SPECULAR.sharpness).toBeGreaterThan(8)
+  })
+})
+
+describe('the sea\'s chop', () => {
+  const WAVES = {
+    waves: [
+      { wavelength: 12, direction: [1, 0, 0], amplitude: 0.4, frequency: 0.5 },
+      { wavelength: 6, direction: [0, 1, 0], amplitude: 0.2, frequency: 0.7 },
+    ],
+  }
+
+  it('compiles out where nothing ripples', () => {
+    // It brings a varying and a loop with it, and only the sea has any
+    // use for either.
+    expect(createStylizedMaterial({}).defines).not.toHaveProperty('USE_RIPPLE')
+    expect(createStylizedMaterial({ ripple: WAVES }).defines).toHaveProperty('USE_RIPPLE')
+  })
+
+  it('sizes its loop to the wave set rather than the other way round', () => {
+    // The count was three, and three made a lattice. It has to stay a
+    // number in waterSurface.js.
+    const material = createStylizedMaterial({ ripple: WAVES })
+    expect(material.defines.RIPPLE_WAVES).toBe('2')
+    expect(material.uniforms.uRippleWaves.value).toHaveLength(2)
+    expect(material.fragmentShader).toContain('i < RIPPLE_WAVES')
+  })
+
+  it('turns each wavelength into a wave vector', () => {
+    // A direction times a spatial frequency, so the shader's dot product
+    // with a position is a phase in radians. Done here so the wavelength
+    // stays written in world units, which is the only form anyone can
+    // reason about.
+    const material = createStylizedMaterial({ ripple: WAVES })
+    const [first, second] = material.uniforms.uRippleWaves.value
+    expect(first.length()).toBeCloseTo((Math.PI * 2) / 12, 6)
+    expect(second.length()).toBeCloseTo((Math.PI * 2) / 6, 6)
+    // Direction preserved, not just magnitude.
+    expect(first.x).toBeGreaterThan(0)
+    expect(first.y).toBeCloseTo(0, 6)
+  })
+
+  it('carries the frequencies the wave set derived', () => {
+    const material = createStylizedMaterial({ ripple: WAVES })
+    expect(material.uniforms.uRippleFrequencies.value).toEqual([0.5, 0.7])
+    expect(material.uniforms.uRippleAmplitudes.value).toEqual([0.4, 0.2])
+  })
+
+  it('anchors the chop to the surface, not the screen', () => {
+    // Otherwise it swims as the camera moves. The untransformed position
+    // is the only frame that stands still while the camera does not.
+    const material = createStylizedMaterial({ ripple: WAVES })
+    expect(material.vertexShader).toContain('vLocalPosition = position;')
+    expect(material.fragmentShader).toContain('varying vec3 vLocalPosition;')
+  })
+
+  it('replaces the normal, so the chop reaches the diffuse too', () => {
+    // A tilted piece of water faces the sun differently in every
+    // respect, and the wrapped diffuse turns that into the light and
+    // dark of a moving surface even where no highlight is in frame.
+    const material = createStylizedMaterial({ ripple: WAVES })
+    expect(material.fragmentShader).toContain('normal = normalize(normalMatrix * rippled);')
+    // Before the lighting reads it.
+    const perturb = material.fragmentShader.indexOf('normal = normalize(normalMatrix * rippled);')
+    expect(perturb).toBeLessThan(material.fragmentShader.indexOf('vec3 irradiance ='))
+  })
+
+  it('knows which way is up in either projection', () => {
+    // The flat map's surface lies in local XY so its normal is Z; the
+    // globe's is radial.
+    const material = createStylizedMaterial({ ripple: WAVES, spherical: true })
+    expect(material.fragmentShader).toContain('uSpherical > 0.5 ? normalize(vLocalPosition)')
+    // And the fragment stage has to declare it: the vertex stage's copy
+    // is a different declaration of the same program uniform.
+    expect(material.fragmentShader).toContain('uniform float uSpherical;')
+  })
+
+  it('reads every uniform it declares', () => {
+    const material = createStylizedMaterial({ ripple: WAVES })
+    for (const name of ['uRippleWaves', 'uRippleAmplitudes', 'uRippleFrequencies', 'uRippleStrength']) {
+      expect(Object.keys(material.uniforms)).toContain(name)
+      expect(material.fragmentShader.split(name).length - 1).toBeGreaterThan(1)
+    }
+  })
+})
+
+describe('setRipple', () => {
+  const WAVES = { waves: [{ wavelength: 12, direction: [1, 0, 0], amplitude: 0.4, frequency: 0.5 }] }
+
+  it('starts at nothing, so a camera has to ask for it', () => {
+    expect(createStylizedMaterial({ ripple: WAVES }).uniforms.uRippleStrength.value).toBe(0)
+  })
+
+  it('clamps, and treats nonsense as still water', () => {
+    const material = createStylizedMaterial({ ripple: WAVES })
+    setRipple(material, 0.42)
+    expect(material.uniforms.uRippleStrength.value).toBeCloseTo(0.42)
+    setRipple(material, 5)
+    expect(material.uniforms.uRippleStrength.value).toBe(1)
+    setRipple(material, -3)
+    expect(material.uniforms.uRippleStrength.value).toBe(0)
+    setRipple(material, Number.NaN)
+    expect(material.uniforms.uRippleStrength.value).toBe(0)
+  })
+
+  it('rebuilds nothing, so the camera can call it every frame', () => {
+    const material = createStylizedMaterial({ ripple: WAVES })
+    const program = material.version
+    setRipple(material, 0.6)
+    expect(material.version).toBe(program)
+  })
+})
+
+describe('the sky in the sea', () => {
+  const SKY = { color: new THREE.Color(0.17, 0.5, 1), strength: 0.62, facing: 0.02, falloff: 1.5 }
+
+  it('compiles out of every surface but the one that reflects', () => {
+    expect(createStylizedMaterial({}).defines).not.toHaveProperty('USE_SKY_REFLECTION')
+    expect(createStylizedMaterial({ skyReflection: SKY }).defines).toHaveProperty('USE_SKY_REFLECTION')
+  })
+
+  it('reflects the sky the scene claims to have, not the backdrop', () => {
+    // The backdrop is a starfield, so reflecting what is literally up
+    // there returns darkness — measured, the sea moved by -0.2 levels.
+    // The ambient term IS this scene's sky: a light with no direction,
+    // standing in for one shining from everywhere.
+    const material = createStylizedMaterial({ skyReflection: SKY })
+    expect(material.fragmentShader).toContain('ambientLightColor * uSkyColor')
+  })
+
+  it('takes brightness from the light and colour from the token', () => {
+    // Which is what lets a theme repaint the air without also making
+    // the sea darker or brighter than the light falling on it.
+    const material = createStylizedMaterial({ skyReflection: SKY })
+    expect(Math.max(...material.uniforms.uSkyColor.value.toArray())).toBeCloseTo(1, 6)
+    expect(material.uniforms.uSkyReflection.value).toBe(0.62)
+  })
+
+  it('rises toward grazing rather than tinting flatly', () => {
+    const material = createStylizedMaterial({ skyReflection: SKY })
+    expect(material.fragmentShader).toContain('pow(1.0 - facing, uSkyReflectionFalloff)')
+    expect(material.uniforms.uSkyReflectionFacing.value).toBe(0.02)
+    expect(material.uniforms.uSkyReflectionFalloff.value).toBe(1.5)
+  })
+
+  it('brings its own opacity', () => {
+    // The sea's alpha says how much of the FLOOR it hides, and a
+    // reflection is not the floor. Without this the water's own
+    // transparency blends away the thing that makes it read as a
+    // surface.
+    const material = createStylizedMaterial({ skyReflection: SKY, transparent: true })
+    expect(material.fragmentShader).toContain('alpha = max(alpha, reflectance);')
+  })
+
+  it('lands after the lighting, like the highlight', () => {
+    const material = createStylizedMaterial({ skyReflection: SKY })
+    const mix = material.fragmentShader.indexOf('outgoing = mix(outgoing, ambientLightColor * uSkyColor')
+    expect(mix).toBeGreaterThan(material.fragmentShader.indexOf('vec3 outgoing ='))
+    expect(mix).toBeLessThan(material.fragmentShader.indexOf('gl_FragColor ='))
+  })
+
+  it('reads every uniform it declares', () => {
+    const material = createStylizedMaterial({ skyReflection: SKY })
+    for (const name of ['uSkyColor', 'uSkyReflection', 'uSkyReflectionFacing', 'uSkyReflectionFalloff']) {
+      expect(Object.keys(material.uniforms)).toContain(name)
+      expect(material.fragmentShader.split(name).length - 1).toBeGreaterThan(1)
+    }
   })
 })

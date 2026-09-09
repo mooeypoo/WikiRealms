@@ -327,3 +327,189 @@ export function dropDryTriangles(indices, terrain) {
   }
   return kept.subarray(0, out)
 }
+
+/**
+ * Ripple: the chop that gives the sea's reflection something to break
+ * up on.
+ *
+ * WHY A FLAT SEA CANNOT GLINT
+ *
+ * The water is a grid pinned to sea level, so every one of its normals
+ * points the same way, and a highlight needs the surface to face
+ * halfway between the sun and the eye. One normal means that condition
+ * is either met everywhere or nowhere: measured on the shipped sea at a
+ * shoreline camera, a sun-tight lobe brightened it by 0.00 levels, and
+ * widening the lobe until it did anything at all brightened the whole
+ * bay uniformly by 14 to 80 levels. Uniformly brighter water is not a
+ * glint, it is paler water.
+ *
+ * Real water glitters because its surface is covered in slopes, so
+ * somewhere in view there is always a facet turned the right way. This
+ * supplies those slopes — not as geometry, which would need vertices
+ * far finer than one cell, but as a slope field the shader evaluates
+ * per fragment.
+ *
+ * WHY PLANE WAVES AND NOT NOISE
+ *
+ * A sine's derivative is another sine, so the SLOPE is exact and
+ * analytic: no texture to sample, no noise to hash, and nothing to
+ * filter. A few of them crossing at angles is the classic cheap chop,
+ * and it is enough here because the result is only ever read as light
+ * on a surface rather than as a height field in its own right.
+ *
+ * The wave vectors are three-dimensional so that one set serves both
+ * projections. On the flat map the surface lies in local XY, so a wave
+ * vector's Z component contributes nothing to the in-plane slope and
+ * merely shifts the phase; on the globe the surface is radial and all
+ * three components matter. Each wave does have two still points on a
+ * sphere, where its direction is exactly radial and the crest has no
+ * component along the surface, which is another reason there are
+ * several of them pointing different ways.
+ */
+
+/** How fast the set travels, as a multiplier on the shared clock. */
+const RIPPLE_SPEED = 0.55
+
+/**
+ * How fast one wave's phase turns, per unit of the shared clock.
+ *
+ * Deep-water dispersion: a wave's phase speed goes as the square root
+ * of its wavelength and angular frequency is that speed times the
+ * wavenumber, which leaves the square root of the wavenumber. Written
+ * as a rule rather than as five hand-set numbers because it is a fact
+ * about water and not a taste, and because numbers set by hand would
+ * drift off it the first time a wavelength was retuned.
+ *
+ * It is also most of what stops a sum of sines from looking like one.
+ * Given a single shared rate the whole set slides along together and
+ * reads as one texture being dragged; with dispersion the long swells
+ * outrun the short chop and the crests drift through each other.
+ *
+ * @param {number} wavelength in world units
+ */
+export function rippleWaveFrequency(wavelength) {
+  return RIPPLE_SPEED * Math.sqrt((Math.PI * 2) / wavelength)
+}
+
+/**
+ * The wave set, before dispersion is applied to it.
+ *
+ * Amplitudes are written as amplitudes, but what reaches the lighting
+ * is amplitude times wavenumber — the SLOPE, since only a slope changes
+ * how a surface faces. These come to about 0.37 RMS, a tilt of some 20
+ * degrees, which is choppy but not implausible water.
+ *
+ * What the slope is FOR is worth stating, because it was first sized
+ * for something else. The chop was originally cut to bridge the gap to
+ * the sun's mirror direction, and it cannot: at this world's 59-degree
+ * sun that direction sits 38 degrees off the sea's normal, which no
+ * plausible water reaches, and the attempt read as a lattice of bright
+ * stamps rather than as sparkle. Its real job is to modulate the sky
+ * reflection, whose curve is steep enough that twenty degrees of tilt
+ * is the difference between dark water and bright — measured, it moves
+ * the sea by 2.3 levels on average and 41 at the peaks, which is what
+ * turns a flat wash into bands that read as a surface.
+ */
+const WAVE_SET = [
+  { wavelength: 19, direction: [0.2, 0.62, 1], amplitude: 0.475 },
+  { wavelength: 13, direction: [1, 0.28, 0.15], amplitude: 0.418 },
+  { wavelength: 8.6, direction: [-0.42, 1, 0.22], amplitude: 0.248 },
+  { wavelength: 6.1, direction: [0.7, -0.72, 0.3], amplitude: 0.153 },
+  { wavelength: 5, direction: [-0.88, -0.38, 0.4], amplitude: 0.098 },
+]
+
+export const RIPPLE = Object.freeze({
+  /**
+   * Five waves, not three, and no two of them harmonics.
+   *
+   * Three crossing sinusoids make a LATTICE. That is not a subtle
+   * defect: with three the glitter came out in visible diagonal rows,
+   * reading as a halftone screen laid over the bay rather than as light
+   * on water. Any finite sum of sines is periodic, so the goal is not to
+   * abolish the pattern but to push its period past what the eye will
+   * look for, which takes both more waves and wavelengths that do not
+   * divide into one another.
+   *
+   */
+  waves: Object.freeze(WAVE_SET.map((wave) => Object.freeze({
+    ...wave,
+    direction: Object.freeze([...wave.direction]),
+    // Derived, never written by hand. See rippleWaveFrequency.
+    frequency: rippleWaveFrequency(wave.wavelength),
+  }))),
+  /**
+   * The wavelengths, in device pixels, between which the chop fades in.
+   *
+   * The same rule as SURF.minBandPixels and for the same reason, except
+   * that here it is not optional. A slope field is the highest spatial
+   * frequency in the scene, and once a wavelength falls near a pixel the
+   * highlight it carries samples at random — which is not a soft
+   * shimmer but a field of white specks that crawl. Nothing is drawn
+   * below the floor; by the ceiling there is room for a crest, a trough
+   * and the slope between them.
+   */
+  minWavePixels: 6,
+  fullWavePixels: 20,
+})
+
+/**
+ * How strongly to draw the chop, given how wide its shortest wave lands
+ * on screen. See RIPPLE.minWavePixels.
+ *
+ * @param {number} wavePixels device pixels across the shortest wave
+ */
+export function rippleStrength(wavePixels) {
+  return smoothstep(RIPPLE.minWavePixels, RIPPLE.fullWavePixels, Math.max(0, Number(wavePixels) || 0))
+}
+
+/**
+ * The shortest wavelength in the set, which is the one that has to be
+ * resolved: the set is only as drawable as its finest member.
+ */
+export function shortestRippleWavelength() {
+  return Math.min(...RIPPLE.waves.map((wave) => wave.wavelength))
+}
+
+/**
+ * How much sky the sea returns.
+ *
+ * Fresnel, with water's own numbers rather than invented ones: about 2%
+ * of the light meeting the surface head-on is reflected, rising to all
+ * of it at a grazing angle. Everyone has seen both ends of that curve —
+ * a lake looks into itself at your feet and looks like sky at the far
+ * shore — which is what makes it such a strong cue for liquid, and why
+ * a sea without it reads as coloured glass however well it moves.
+ *
+ * `strength` scales the whole curve and is the one number here that is
+ * taste rather than physics. At 1 the far water goes fully to sky and,
+ * with the aerial haze already lightening distance, the two together
+ * flatten the horizon into a single band. Held back, the sea keeps its
+ * own colour while still turning toward the sky as it recedes.
+ */
+export const WATER_SKY_REFLECTION = Object.freeze({
+  strength: 0.62,
+  /**
+   * How sharply reflectance climbs as the view turns toward grazing.
+   *
+   * Schlick's own exponent is 5, and 5 is unusable here: it concentrates
+   * the whole effect in the last few degrees before the horizon, and
+   * this world is read from above. Measured at a shoreline camera, an
+   * exponent of 5 lifted the sea by 1.7 levels, where 1.5 lifts it by
+   * 6.1 and leaves the chop room to modulate.
+   *
+   * So this is the one number here that is frankly a lie, and the lie
+   * is chosen rather than stumbled into: the shape of the curve is kept
+   * — dark underfoot, bright as it recedes — while its steepness is
+   * relaxed until the range it acts over is the range a reader actually
+   * looks from.
+   */
+  falloff: 1.5,
+  /**
+   * Reflectance when looking straight down into the water.
+   *
+   * Water's real value, and small on purpose: the point of the curve is
+   * how far it travels. Raising this floor is the difference between a
+   * sea and a sheet of steel.
+   */
+  facing: 0.02,
+})

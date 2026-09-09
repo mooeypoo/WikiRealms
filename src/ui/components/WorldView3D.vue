@@ -7,8 +7,19 @@ import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/t
 import { hazeRange } from '../rendering/aerialPerspective.js'
 import { computeSkyVisibility } from '../rendering/occlusion.js'
 import { computeSunlight } from '../rendering/sunlight.js'
-import { SHELF_WIDTH, SURF, WATER, computeWaterAttributes, dropDryTriangles, surfStrength } from '../rendering/waterSurface.js'
-import { NO_SNOWLINE, createStylizedMaterial, setSurf, setWind } from '../rendering/stylizedMaterial.js'
+import {
+  RIPPLE,
+  SHELF_WIDTH,
+  SURF,
+  WATER,
+  WATER_SKY_REFLECTION,
+  computeWaterAttributes,
+  dropDryTriangles,
+  rippleStrength,
+  shortestRippleWavelength,
+  surfStrength,
+} from '../rendering/waterSurface.js'
+import { GROUND_SPECULAR, NO_SNOWLINE, createStylizedMaterial, setRipple, setSurf, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
@@ -260,6 +271,21 @@ function resolveHazeColor() {
   return new THREE.Color(0x34597c)
 }
 
+/**
+ * The sky's HUE, with its brightness thrown away.
+ *
+ * The sea's reflection takes how bright the sky is from the ambient
+ * light, which is the scene's own statement about skylight, and only
+ * needs the colour from the token. Scaling the brightest channel to 1
+ * is what separates the two, so a theme can repaint the air without
+ * also making the sea darker or lighter than the light falling on it.
+ */
+function skyTint() {
+  const color = resolveHazeColor()
+  const brightest = Math.max(color.r, color.g, color.b)
+  return brightest > 0 ? color.multiplyScalar(1 / brightest) : color
+}
+
 function resolveAccentColor() {
   try {
     const value = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
@@ -358,6 +384,9 @@ function buildTerrainMesh(world) {
     spherical: projection.isSpherical,
     occlusion: true,
     sunlight: true,
+    // Glitter on the caps. The ground's only shiny part is the snow it
+    // already draws, so this needs nothing said about where peaks are.
+    specular: GROUND_SPECULAR,
   })
   const mesh = new THREE.Mesh(geometry, material)
 
@@ -456,6 +485,14 @@ function buildWaterMesh(terrain, heightScale) {
     // shelf saturates at, which is what turns the alpha channel into a
     // distance from the waterline.
     surf: { ceiling: WATER.maxOpacity, ...SURF },
+    // Chop, which is what the reflection below breaks up on. A flat sea
+    // has one normal, and one normal reflects the same amount of sky
+    // everywhere, which is a tinted sheet rather than a surface.
+    ripple: RIPPLE,
+    // And the sky in it. Read from the same token the haze uses, so the
+    // sea reflects the air the rest of the scene is veiled by rather
+    // than a second sky of its own.
+    skyReflection: { color: skyTint(), ...WATER_SKY_REFLECTION },
   })
   // The sea joins the things with a clock. setWind carries uTime, and
   // the sample it reads returns a time of 0 for a frozen world, so the
@@ -1393,6 +1430,12 @@ function updateSurf() {
 
   const shelfPixels = apparentPixels(SHELF_WIDTH, distance, viewportHeight, camera.fov)
   setSurf(waterMesh.material, surfStrength(shelfPixels / SURF.bands))
+
+  // The chop answers the same question separately, because it is a much
+  // finer feature than a surf band and goes sub-pixel a long way before
+  // the surf does.
+  const wavePixels = apparentPixels(shortestRippleWavelength(), distance, viewportHeight, camera.fov)
+  setRipple(waterMesh.material, rippleStrength(wavePixels))
 }
 
 /**
