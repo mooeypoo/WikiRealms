@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALTITUDE, LUSHNESS } from '../../../src/engine/generation/config.js'
+import { ALTITUDE, BIOME_THRESHOLDS, LUSHNESS, SHORE } from '../../../src/engine/generation/config.js'
 import {
   BIOME,
   LUSHNESS_BANDS,
@@ -7,6 +7,8 @@ import {
   lushnessBand,
   rockCover,
   frostCover,
+  sandCover,
+  seaFloorCover,
   snowCover,
   treelineFactor,
 } from '../../../src/engine/generation/terrain.js'
@@ -116,6 +118,93 @@ describe('rockCover', () => {
       expect(current - previous).toBeLessThan(0.12)
       previous = current
     }
+  })
+})
+
+describe('sandCover', () => {
+  it('is complete at the waterline and gone above the band', () => {
+    expect(sandCover(BIOME_THRESHOLDS.oceanMaxHeight)).toBeCloseTo(1)
+    expect(sandCover(SHORE.sandFadeFrom)).toBeCloseTo(1)
+    expect(sandCover(SHORE.sandFadeTo)).toBeCloseTo(0)
+    expect(sandCover(1)).toBe(0)
+  })
+
+  it('is centred on the threshold it replaces, so the coast does not move', () => {
+    // The property that matters, and the one an earlier cut of this got
+    // wrong: a band running upwards FROM the threshold softens the edge
+    // and carries the sand inland with it. Centred, the two halves of
+    // the curve cancel and the total cover is what the classification
+    // covered — same sand, softer edge.
+    expect(sandCover(BIOME_THRESHOLDS.beachMaxHeight)).toBeCloseTo(0.5, 5)
+
+    const step = 0.0005
+    let area = 0
+    for (let h = 0; h <= 1; h += step) area += sandCover(h) * step
+    // The classification's own area: full sand from 0 to beachMaxHeight.
+    expect(area).toBeCloseTo(BIOME_THRESHOLDS.beachMaxHeight, 2)
+  })
+
+  it('stays complete below the waterline, since a shelf is still sand', () => {
+    // seaFloorCover is what takes the sand back down there, not this.
+    expect(sandCover(0.1)).toBeCloseTo(1)
+    expect(sandCover(0)).toBeCloseTo(1)
+  })
+
+  it('falls without ever going back up', () => {
+    // Monotone is the shape claim; how big a move it makes across one
+    // grid cell is a question about colour, and is asserted where the
+    // colour is composed. See groundRgbAt's tests.
+    let previous = sandCover(0)
+    for (let height = 0.005; height <= 1.0001; height += 0.005) {
+      const current = sandCover(height)
+      expect(current).toBeLessThanOrEqual(previous + 1e-9)
+      previous = current
+    }
+  })
+
+  it('passes through the middle of its band rather than jumping it', () => {
+    const quarter = SHORE.sandFadeFrom + (SHORE.sandFadeTo - SHORE.sandFadeFrom) * 0.25
+    expect(sandCover(quarter)).toBeGreaterThan(0.7)
+    expect(sandCover(quarter)).toBeLessThan(1)
+  })
+})
+
+describe('seaFloorCover', () => {
+  it('is nothing at the waterline and complete below the shelf', () => {
+    expect(seaFloorCover(BIOME_THRESHOLDS.oceanMaxHeight)).toBeCloseTo(0)
+    expect(seaFloorCover(SHORE.seaFloorFull)).toBeCloseTo(1)
+    expect(seaFloorCover(0)).toBeCloseTo(1)
+  })
+
+  it('takes nothing back on dry land', () => {
+    expect(seaFloorCover(BIOME_THRESHOLDS.beachMaxHeight)).toBe(0)
+    expect(seaFloorCover(0.5)).toBe(0)
+  })
+
+  it('rises without ever going back down', () => {
+    let previous = seaFloorCover(1)
+    for (let height = 0.995; height >= -0.0001; height -= 0.005) {
+      const current = seaFloorCover(height)
+      expect(current).toBeGreaterThanOrEqual(previous - 1e-9)
+      previous = current
+    }
+  })
+
+  it('is no steeper than the fade above it, which it once was', () => {
+    // The sand and the deep blue are further apart than the sand and any
+    // land band, so this band carrying the narrower width made it the
+    // steepest thing on the coast. See SHORE.seaFloorFull.
+    const sandWidth = SHORE.sandFadeTo - SHORE.sandFadeFrom
+    const floorWidth = BIOME_THRESHOLDS.oceanMaxHeight - SHORE.seaFloorFull
+
+    expect(floorWidth).toBeGreaterThanOrEqual(sandWidth)
+  })
+
+  it('does not overlap the rock band, so the two covers cannot fight', () => {
+    // Their order in groundRgbAt is then for reading rather than for
+    // arithmetic, which is what that comment claims.
+    expect(seaFloorCover(ALTITUDE.rockStart)).toBe(0)
+    expect(rockCover(SHORE.sandFadeTo)).toBe(0)
   })
 })
 

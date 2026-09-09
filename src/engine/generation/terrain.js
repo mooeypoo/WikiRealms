@@ -1,4 +1,4 @@
-import { ALTITUDE, BIOME_THRESHOLDS, LUSHNESS } from './config.js'
+import { ALTITUDE, BIOME_THRESHOLDS, LUSHNESS, SHORE } from './config.js'
 
 /**
  * Biome ids stored in World.terrain.biomeMap.
@@ -135,6 +135,37 @@ export function rockCover(height) {
  */
 export function snowCover(height) {
   return smoothstep(ALTITUDE.snowStart, ALTITUDE.snowFull, Number(height) || 0)
+}
+
+/**
+ * How much sand lies over the ground at this height, in [0, 1].
+ *
+ * Half cover at BIOME_THRESHOLDS.beachMaxHeight, since the band is
+ * centred there: the classification this replaces for colour purposes
+ * put a hard step at that height, which a mesh cannot draw without
+ * showing its own triangles, and a band centred on it carries the same
+ * amount of sand rather than moving the coast. See SHORE.
+ *
+ * Note this keeps returning 1 below the waterline: a submerged shelf is
+ * still sand. seaFloorCover is what takes it back again down there.
+ *
+ * @param {number} height [0, 1]
+ */
+export function sandCover(height) {
+  return 1 - smoothstep(SHORE.sandFadeFrom, SHORE.sandFadeTo, Number(height) || 0)
+}
+
+/**
+ * How much sea floor shows at this height, in [0, 1] — 0 at the
+ * waterline, complete by SHORE.seaFloorFull below it.
+ *
+ * Applied over the sand rather than instead of it, so the two boundaries
+ * a coast has are two ramps rather than two steps.
+ *
+ * @param {number} height [0, 1]
+ */
+export function seaFloorCover(height) {
+  return 1 - smoothstep(SHORE.seaFloorFull, BIOME_THRESHOLDS.oceanMaxHeight, Number(height) || 0)
 }
 
 /**

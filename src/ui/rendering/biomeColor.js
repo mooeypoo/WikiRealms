@@ -1,4 +1,12 @@
-import { BIOME, LUSHNESS_BANDS, rockCover, snowCover } from '../../engine/generation/terrain.js'
+import {
+  BIOME,
+  LUSHNESS_BANDS,
+  lushnessBand,
+  rockCover,
+  sandCover,
+  seaFloorCover,
+  snowCover,
+} from '../../engine/generation/terrain.js'
 
 /**
  * Base RGB color per biome, before altitude cover and height shading.
@@ -124,8 +132,7 @@ export function biomeColor(biome, height) {
  */
 export function biomeGroundRgb(biome, height) {
   const base = BIOME_BASE_COLORS[biome] ?? FALLBACK_COLOR
-  const shade = clamp(0.7 + height * 0.5, 0.5, 1.3)
-  const shaded = base.map((channel) => channel * shade)
+  const shaded = shadeByHeight(base, height)
 
   // Water takes no rock: the bands sit far above sea level, but skipping
   // explicitly keeps a deep-ocean cell honest if they ever move down.
@@ -133,6 +140,63 @@ export function biomeGroundRgb(biome, height) {
 
   const lushness = LUSHNESS_BY_BAND.get(biome) ?? 0
   return mixRgb(shaded, mixRgb(ROCK_DRY, ROCK_MOSSY, lushness), rockCover(height))
+}
+
+/** Height shading, which every path applies before any cover. */
+function shadeByHeight(base, height) {
+  const shade = clamp(0.7 + height * 0.5, 0.5, 1.3)
+  return base.map((channel) => channel * shade)
+}
+
+/**
+ * The colour under the snow for a POINT on the surface, given the
+ * section's lushness scalar rather than a biome id.
+ *
+ * WHY THERE ARE TWO OF THESE
+ *
+ * biomeGroundRgb answers "what colour is this biome", which is what a
+ * legend swatch and the per-cell 2D map want: discrete, and readable
+ * straight off a biome id. This answers "what colour is the ground
+ * here", which is a different question, and the 3D mesh is the caller
+ * that needs it — see lushnessBand's own note that a renderer able to
+ * vary continuously should read the scalar and leave the bands to the
+ * legend.
+ *
+ * The difference that matters is the shore. Given a biome id, sand is
+ * all-or-nothing, and a mesh interpolating between an all and a nothing
+ * draws its own triangles instead of a coastline. Given the height, sand
+ * is cover like rock and snow, and the boundary is an iso-height line at
+ * whatever resolution the screen has. See SHORE.
+ *
+ * Lushness still only chooses among the six bands, deliberately: those
+ * are a designed signal with swatches in the legend, and making them a
+ * continuous ramp here would quietly contradict it.
+ *
+ * @param {number} biome one of the BIOME ids, for the cases that are not
+ *   a lushness band at all — polar ice is white at sea level
+ * @param {number} lushness [0, 1] from lushness.js
+ * @param {number} height [0, 1]
+ * @returns {[number, number, number]} channels in [0, 255], unrounded
+ */
+export function groundRgbAt(biome, lushness, height) {
+  // The caps belong to no section and are not high ground; they are flat
+  // ice sitting at sea level, so they take neither a band nor cover.
+  if (biome === BIOME.SNOW) return shadeByHeight(BIOME_BASE_COLORS[BIOME.SNOW], height)
+
+  const band = BIOME_BASE_COLORS[lushnessBand(lushness)] ?? FALLBACK_COLOR
+  const ground = shadeByHeight(band, height)
+
+  // Rock first, because it is the land's own surface; then the shore
+  // over the top of it, seaward. The bands do not overlap in practice —
+  // rockCover is 0 anywhere near the water — so this order is for
+  // reading rather than for arithmetic.
+  const withRock = mixRgb(
+    ground,
+    mixRgb(ROCK_DRY, ROCK_MOSSY, clamp(Number(lushness) || 0, 0, 1)),
+    rockCover(height),
+  )
+  const withSand = mixRgb(withRock, shadeByHeight(BIOME_BASE_COLORS[BIOME.BEACH], height), sandCover(height))
+  return mixRgb(withSand, shadeByHeight(BIOME_BASE_COLORS[BIOME.OCEAN], height), seaFloorCover(height))
 }
 
 /**

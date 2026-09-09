@@ -1,4 +1,4 @@
-import { biomeGroundRgb, biomeSnowCover } from './biomeColor.js'
+import { biomeSnowCover, groundRgbAt } from './biomeColor.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 import { flatProjection } from './projection.js'
 
@@ -26,21 +26,27 @@ export const NEVER_SNOWED = -1
  * Water is not, at any altitude — see biomeSnowCover — and it says so by
  * carrying NEVER_SNOWED instead of its real height.
  *
- * @param {{ width: number, height: number, heightMap: Float64Array, biomeMap: Uint8Array }} terrain
+ * @param {{ width: number, height: number, heightMap: Float64Array,
+ *   biomeMap: Uint8Array, lushnessMap?: Float32Array }} terrain
  * @returns {{ colors: Float32Array, snowHeights: Float32Array }}
  */
 export function computeGroundAttributes(terrain) {
-  const { width, height, heightMap, biomeMap } = terrain
+  const { width, height, heightMap, biomeMap, lushnessMap } = terrain
   const cells = width * height
   const colors = new Float32Array(cells * 3)
   const snowHeights = new Float32Array(cells)
 
   for (let i = 0; i < cells; i++) {
-    // biomeGroundRgb is deliberately unclamped, since biomeRgb clamps
-    // once at the end. Height shading multiplies by up to 1.3, so a pale
-    // band could exceed 255 and reach the GPU brighter than white — the
-    // clamp belongs at the upload, which is here.
-    const [r, g, b] = biomeGroundRgb(biomeMap[i], heightMap[i])
+    // groundRgbAt rather than biomeGroundRgb, because these colours are
+    // interpolated: the GPU blends between vertices across every
+    // triangle, and a colour that steps at a threshold makes the mesh's
+    // own triangulation visible along the coast. See SHORE.
+    //
+    // Deliberately unclamped there, since biomeRgb clamps once at the
+    // end. Height shading multiplies by up to 1.3, so a pale band could
+    // exceed 255 and reach the GPU brighter than white — the clamp
+    // belongs at the upload, which is here.
+    const [r, g, b] = groundRgbAt(biomeMap[i], lushnessMap?.[i] ?? 0, heightMap[i])
     colors[i * 3] = clamp(r / 255, 0, 1)
     colors[i * 3 + 1] = clamp(g / 255, 0, 1)
     colors[i * 3 + 2] = clamp(b / 255, 0, 1)

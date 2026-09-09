@@ -5,9 +5,15 @@ import {
   computePeakFlagPosition,
   computePortalLocalPosition,
 } from '../../../src/ui/rendering/terrainMesh.js'
-import { biomeGroundRgb, biomeRgb } from '../../../src/ui/rendering/biomeColor.js'
-import { BIOME, snowCover } from '../../../src/engine/generation/terrain.js'
-import { ALTITUDE } from '../../../src/engine/generation/config.js'
+import { SNOW_RGB, biomeGroundRgb, groundRgbAt } from '../../../src/ui/rendering/biomeColor.js'
+import { BIOME, lushnessBand, snowCover } from '../../../src/engine/generation/terrain.js'
+import { ALTITUDE, SHORE } from '../../../src/engine/generation/config.js'
+
+/**
+ * Lushness scalars that land in a known band, asserted rather than
+ * assumed — the cuts are config and could move.
+ */
+const LUSH = { meadow: 0.5, woodland: 0.7, jungle: 0.95 }
 
 function makeTerrain(overrides = {}) {
   const width = 4
@@ -18,6 +24,7 @@ function makeTerrain(overrides = {}) {
     height,
     heightMap: new Float64Array(cellCount).fill(0.5),
     biomeMap: new Uint8Array(cellCount).fill(BIOME.MEADOW),
+    lushnessMap: new Float32Array(cellCount).fill(LUSH.meadow),
     ...overrides,
   }
 }
@@ -34,18 +41,38 @@ describe('computeGroundAttributes', () => {
   it('leaves the snow out of the colour', () => {
     // A cell high enough to be fully covered: the ground buffer must
     // still carry its band colour, or a snowline could never move off it.
+    expect(lushnessBand(LUSH.jungle)).toBe(BIOME.JUNGLE)
     const terrain = makeTerrain({
       heightMap: new Float64Array(16).fill(ALTITUDE.snowFull),
       biomeMap: new Uint8Array(16).fill(BIOME.JUNGLE),
+      lushnessMap: new Float32Array(16).fill(LUSH.jungle),
     })
     const { colors } = computeGroundAttributes(terrain)
-    const [r, g, b] = biomeGroundRgb(BIOME.JUNGLE, ALTITUDE.snowFull)
+    const [r, g, b] = groundRgbAt(BIOME.JUNGLE, LUSH.jungle, ALTITUDE.snowFull)
 
     expect(colors[0]).toBeCloseTo(r / 255, 5)
     expect(colors[1]).toBeCloseTo(g / 255, 5)
     expect(colors[2]).toBeCloseTo(b / 255, 5)
     // Not already white, which is what baking the two together gives.
     expect(colors[0]).toBeLessThan(0.9)
+  })
+
+  it('takes its band from the lushness scalar, not the biome id', () => {
+    // The mesh interpolates, so it reads the scalar; see groundRgbAt.
+    // Two cells that agree on biome and height but differ in lushness
+    // have to come out different colours, or the plumbing is not wired.
+    const terrain = makeTerrain({
+      width: 2,
+      height: 1,
+      heightMap: new Float64Array([0.5, 0.5]),
+      biomeMap: new Uint8Array([BIOME.MEADOW, BIOME.MEADOW]),
+      lushnessMap: new Float32Array([LUSH.meadow, LUSH.jungle]),
+    })
+    const { colors } = computeGroundAttributes(terrain)
+
+    expect([colors[0], colors[1], colors[2]]).not.toEqual([colors[3], colors[4], colors[5]])
+    // The jungle band is the darker, more saturated green of the two.
+    expect(colors[4]).toBeLessThan(colors[1])
   })
 
   it('carries the cell height, not the cover, so the line can move', () => {
@@ -61,17 +88,19 @@ describe('computeGroundAttributes', () => {
     heights.forEach((h, i) => expect(snowHeights[i]).toBeCloseTo(h, 5))
   })
 
-  it('reconstructs the baked colour when the shader rule is applied', () => {
+  it('reconstructs the ground plus snow when the shader rule is applied', () => {
     // The buffers plus the smoothstep the shader runs have to land on
-    // what the 2D view draws. This is the assertion that catches the
+    // the colour the palette says. This is the assertion that catches the
     // GLSL and biomeColor drifting apart, since the shader itself cannot
     // be run here.
-    const heights = [0.2, 0.5, 0.7, 0.85, 0.95, 1]
+    expect(lushnessBand(LUSH.woodland)).toBe(BIOME.WOODLAND)
+    const heights = [0.5, 0.7, 0.85, 0.95, 1]
     const terrain = makeTerrain({
       width: heights.length,
       height: 1,
       heightMap: Float64Array.from(heights),
       biomeMap: new Uint8Array(heights.length).fill(BIOME.WOODLAND),
+      lushnessMap: new Float32Array(heights.length).fill(LUSH.woodland),
     })
     const { colors, snowHeights } = computeGroundAttributes(terrain)
 
@@ -79,11 +108,38 @@ describe('computeGroundAttributes', () => {
       // snowCover IS the smoothstep the shader runs between the two
       // snowline uniforms, so this compares against the authority.
       const cover = snowCover(snowHeights[i])
-      const expected = biomeRgb(BIOME.WOODLAND, h)
+      const expected = groundRgbAt(BIOME.WOODLAND, LUSH.woodland, h)
       for (let channel = 0; channel < 3; channel += 1) {
         const ground = colors[i * 3 + channel]
-        const white = [245, 245, 250][channel] / 255
-        expect(ground + (white - ground) * cover).toBeCloseTo(expected[channel] / 255, 2)
+        const white = SNOW_RGB[channel] / 255
+        const white_over = ground + (white - ground) * cover
+        const bakedGround = expected[channel] / 255
+        expect(white_over).toBeCloseTo(bakedGround + (white - bakedGround) * cover, 2)
+      }
+    })
+  })
+
+  it('agrees with the 2D map on open land, away from the coast', () => {
+    // The two paths answer different questions (see groundRgbAt) and are
+    // allowed to differ over the shore and, slightly, over rock. Between
+    // those they must not: the flat map and the mesh are the same world,
+    // and a reader switching views should not see the palette change.
+    const heights = [0.45, 0.5, 0.55, 0.6]
+    const terrain = makeTerrain({
+      width: heights.length,
+      height: 1,
+      heightMap: Float64Array.from(heights),
+      biomeMap: new Uint8Array(heights.length).fill(BIOME.WOODLAND),
+      lushnessMap: new Float32Array(heights.length).fill(LUSH.woodland),
+    })
+    const { colors } = computeGroundAttributes(terrain)
+
+    heights.forEach((h, i) => {
+      expect(h).toBeGreaterThan(SHORE.sandFadeTo)
+      expect(h).toBeLessThan(ALTITUDE.rockStart)
+      const flat = biomeGroundRgb(BIOME.WOODLAND, h)
+      for (let channel = 0; channel < 3; channel += 1) {
+        expect(colors[i * 3 + channel]).toBeCloseTo(flat[channel] / 255, 5)
       }
     })
   })
@@ -120,10 +176,14 @@ describe('computeGroundAttributes colours', () => {
     }
   })
 
-  it('distinguishes water from land at the same height', () => {
+  it('distinguishes the sea floor from open land', () => {
+    // Heights that a real world would actually produce for these biomes:
+    // classifyBiome cannot return a land band below the waterline, so a
+    // meadow at 0.1 is not a case worth defending, and this path now
+    // takes the surface's height as the authority on where it is.
     const terrain = makeTerrain({
       biomeMap: new Uint8Array([BIOME.OCEAN, BIOME.MEADOW, BIOME.OCEAN, BIOME.MEADOW]),
-      heightMap: new Float64Array([0.1, 0.1, 0.1, 0.1]),
+      heightMap: new Float64Array([0.1, 0.5, 0.1, 0.5]),
       width: 2,
       height: 2,
     })
@@ -132,6 +192,24 @@ describe('computeGroundAttributes colours', () => {
     // Ocean is blue-dominant, the meadow band green-dominant.
     expect(colors[2]).toBeGreaterThan(colors[0])
     expect(colors[4]).toBeGreaterThan(colors[5])
+  })
+
+  it('puts a land band under the water when the height says so', () => {
+    // The consequence of height being the authority, stated so it is a
+    // decision rather than a surprise: a submerged cell reads as sea
+    // floor whatever its biome id claims, which is what keeps the
+    // coastline a contour of the surface instead of of the biome map.
+    const terrain = makeTerrain({
+      width: 2,
+      height: 1,
+      biomeMap: new Uint8Array([BIOME.MEADOW, BIOME.MEADOW]),
+      heightMap: new Float64Array([0.15, 0.5]),
+      lushnessMap: new Float32Array([LUSH.meadow, LUSH.meadow]),
+    })
+    const { colors } = computeGroundAttributes(terrain)
+
+    expect(colors[2]).toBeGreaterThan(colors[1]) // submerged: blue over green
+    expect(colors[4]).toBeGreaterThan(colors[5]) // dry land: green over blue
   })
 
   it('is deterministic for a given terrain', () => {

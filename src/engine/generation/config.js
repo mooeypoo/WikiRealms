@@ -52,6 +52,62 @@ export const BIOME_THRESHOLDS = Object.freeze({
 })
 
 /**
+ * The shore as COVER, for the same reason rock and snow became cover.
+ *
+ * BIOME_THRESHOLDS above still classify a cell, because a biome id is a
+ * discrete thing that hover, foliage and the legend all need. But a
+ * renderer that interpolates cannot use a classification as a colour:
+ * the 3D mesh evaluates colour per vertex and lets the GPU blend across
+ * each triangle, so a step lands at an arbitrary point INSIDE a triangle
+ * and the boundary takes the shape of the mesh rather than the shape of
+ * the coast. Measured on a zoomed shoreline, the sand-to-grass line was
+ * a regular sawtooth with one tooth every 39px, which was one grid cell
+ * at that camera: the teeth were the triangles. Softening the boundary
+ * took it from 18.4px peak to peak down to 7.5px, and its roughness from
+ * 3.7px rms to 1.2px.
+ *
+ * Smooth functions survive that interpolation, which is why the rock and
+ * snow lines do not show it and this is the same fix. Nothing here moves
+ * a biome or a worldId; it changes only what a surface looks like.
+ *
+ * The widths are in height, not in cells, and that is the point: a
+ * gentle coast spreads its sand over many cells and a cliff gets almost
+ * none, which is how beaches actually work.
+ *
+ * Both are sized against the MEASURED coast, on the Grand Canyon world
+ * the artefact was found on: height changes by 0.0075 across a cell at
+ * the waterline (p50 of 1258 straddling cells; p90 is 0.018), and the
+ * classified beach is 4 cells wide at p50. So a band of width w spans
+ * about w/0.0075 cells, and its cover moves at most 1.5 * 0.0075 / w per
+ * cell — the 1.5 being a smoothstep's steepest slope, at its centre.
+ * Under a tenth of the palette per cell is what stops an edge being
+ * visible, which these widths hold at p50 and a cliff at p90 does not —
+ * correctly, since a cliff has no beach to draw.
+ */
+export const SHORE = Object.freeze({
+  // The sand's inner edge, as a band CENTRED on beachMaxHeight.
+  //
+  // Centred, not appended, and that is the whole of it. Running the fade
+  // upwards from the threshold — 0.36 to 0.42 — softened the edge and
+  // moved the coast inland with it: a smoothstep is symmetric, so half
+  // cover at 0.39 put sand over three hundredths of height that used to
+  // be woodland, and a shore that read as wooded read as beach. Centring
+  // makes the cover integrate to exactly the area the classification
+  // covered, because the two halves of the curve cancel. Same quantity
+  // of sand, softer edge, coastline where it was.
+  //
+  // 0.06 wide spans about 8 cells at the median coast.
+  sandFadeFrom: 0.33,
+  sandFadeTo: 0.39,
+  // Below the waterline the sand goes over to sea floor. This was 0.27,
+  // and at 0.05 wide it was the steepest thing on the coast — the sand
+  // and the deep blue are further apart in colour than the sand and any
+  // land band, so the narrower band carried the bigger step. 0.08 puts
+  // it level with the fade above, and everything deeper is open water.
+  seaFloorFull: 0.24,
+})
+
+/**
  * Altitude, as a second axis over the top of lushness rather than a
  * replacement for it.
  *
