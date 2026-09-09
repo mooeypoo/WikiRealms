@@ -14,7 +14,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { ALTITUDE } from '../../../src/engine/generation/config.js'
 import { WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
-import { createStylizedMaterial, setSnowline, setWind } from '../../../src/ui/rendering/stylizedMaterial.js'
+import { NO_SNOWLINE, createStylizedMaterial, setSnowline, setWind } from '../../../src/ui/rendering/stylizedMaterial.js'
 
 const WIND_UNIFORMS = ['uTime', 'uWindDirection', 'uWindFrequency', 'uWindSpeed', 'uSway', 'uSwayHeight']
 
@@ -109,6 +109,33 @@ describe('createStylizedMaterial', () => {
     expect(withSunlight.defines).toHaveProperty('USE_SUNLIGHT')
     expect(without.defines).not.toHaveProperty('USE_SUNLIGHT')
     expect(withSunlight.vertexShader).toContain('attribute float sunlight;')
+  })
+
+  it('takes its opacity from the vertex colour, for the sea', () => {
+    // No define and no attribute of its own. three's vColor is always a
+    // vec4, so alpha rides along in the colour: an itemSize of 4 makes
+    // three define USE_COLOR_ALPHA and fill the channel, and an itemSize
+    // of 3 leaves it at the 1.0 it was initialised to.
+    const material = createStylizedMaterial({ vertexColors: true, transparent: true })
+    expect(material.fragmentShader).toContain('alpha = vColor.a;')
+    expect(material.fragmentShader).toContain('gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, alpha);')
+    expect(material.transparent).toBe(true)
+  })
+
+  it('can be given a snowline no surface can reach', () => {
+    // snowHeight is a height in [0, 1], so a band starting above 1 never
+    // opens whatever the attribute says — including an unbound one.
+    const material = createStylizedMaterial({ snowline: NO_SNOWLINE })
+    expect(material.uniforms.uSnowStart.value).toBeGreaterThan(1)
+    expect(material.uniforms.uSnowFull.value).toBeGreaterThan(material.uniforms.uSnowStart.value)
+  })
+
+  it('stays in the opaque pass unless a mesh asks not to', () => {
+    expect(createStylizedMaterial({ vertexColors: true }).transparent).toBe(false)
+    // Land and sea otherwise share the material completely: one lighting
+    // model, so a coastline is lit the same on both sides of itself.
+    expect(createStylizedMaterial({ vertexColors: true, transparent: true }).fragmentShader)
+      .toBe(createStylizedMaterial({ vertexColors: true }).fragmentShader)
   })
 
   it('scales the sun by the cast shadow, and only the sun', () => {

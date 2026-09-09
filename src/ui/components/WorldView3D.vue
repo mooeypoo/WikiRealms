@@ -7,7 +7,8 @@ import { computeGroundAttributes, computePeakFlagPosition } from '../rendering/t
 import { hazeRange } from '../rendering/aerialPerspective.js'
 import { computeSkyVisibility } from '../rendering/occlusion.js'
 import { computeSunlight } from '../rendering/sunlight.js'
-import { createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
+import { computeWaterAttributes, dropDryTriangles } from '../rendering/waterSurface.js'
+import { NO_SNOWLINE, createStylizedMaterial, setWind } from '../rendering/stylizedMaterial.js'
 import { createEnvironment, sampleEnvironment } from '../rendering/environment.js'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
 import { FLAT_VIEW, SPHERE_VIEW, getProjection, planetRadius } from '../rendering/projection.js'
@@ -360,27 +361,7 @@ function buildTerrainMesh(world) {
   })
   const mesh = new THREE.Mesh(geometry, material)
 
-  const waterMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1e5fae,
-    transparent: true,
-    opacity: 0.55,
-    roughness: 0.15,
-    metalness: 0.1,
-  })
-
-  let water
-  if (projection.isSpherical) {
-    // Segment counts are independent of the grid — a sea-level sphere has
-    // no detail to resolve, it only has to read as round at the horizon.
-    // Backfaces are culled by default, so only the near hemisphere
-    // blends over the terrain beneath it.
-    water = new THREE.Mesh(new THREE.SphereGeometry(projection.waterSurface(terrain, heightScale), 96, 48), waterMaterial)
-  } else {
-    // width-1 / height-1: the surface spans integer cell spacing, so the
-    // water plane has to match its footprint exactly.
-    water = new THREE.Mesh(new THREE.PlaneGeometry(width - 1, height - 1), waterMaterial)
-    water.position.z = projection.waterSurface(terrain, heightScale)
-  }
+  const water = buildWaterMesh(terrain, heightScale)
 
   // Built whether or not the layer is showing, so the toggle is a
   // visibility flip like Sections and Foliage rather than a rebuild of
@@ -392,6 +373,92 @@ function buildTerrainMesh(world) {
   const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility, sunlightMap)
 
   return { mesh, water, portals, halos, understory, canopy, heightScale }
+}
+
+/**
+ * The sea, as a lit surface rather than a blue sheet.
+ *
+ * It shares the terrain's material, which is the point of it: the same
+ * wrapped diffuse, the same sky occlusion, the same cast shadows and the
+ * same aerial haze. Before this the land was drawn by our own shader and
+ * the sea by three's PBR, so the two sides of every coastline were lit
+ * by different models — most visibly on the globe, where land has a soft
+ * terminator by design and a Lambert ocean does not.
+ *
+ * What it does NOT get is the two baked light maps, and that took three
+ * measurements to settle rather than one, so it is worth writing down
+ * before someone adds them back on principle.
+ *
+ * The terrain's own maps cannot be reused: sky visibility and cast
+ * shadow belong to a POINT, and the water's points are at sea level
+ * while the terrain's are on the floor beneath, which is lower and so
+ * sees more of whatever stands over it. Over the ocean of a generated
+ * world the floor's sky visibility understates the surface's for 76% of
+ * cells — means of 0.894 against 0.968, worst case 0.48 — and the shader
+ * squares that term, so the open sea would come out wrongly dark.
+ *
+ * Tracing the water its own maps over the height field raised to sea
+ * level is correct, and it was tried. It cost 178ms per rebuild, roughly
+ * doubling the light baking and taking the projection-switch hitch from
+ * about 345ms to 525ms. What it bought, measured over the sea across
+ * three cameras, was a mean of 0.34 to 0.53 levels out of 255, with
+ * fewer than 11% of sea pixels moving even 2 levels, and the cast shadow
+ * changing NOTHING at all.
+ *
+ * The reason is not that the maths was wrong but that the two effects
+ * land where the water cannot show them. Sky visibility only drops near
+ * a coast, which is exactly where the shelf has made the water nearly
+ * clear; and at this sun's elevation almost no sea is shadowed at all,
+ * the sea being the lowest ground there is. So the sea takes the shared
+ * lighting without the two attenuations. If the sun is ever lowered
+ * enough to throw a headland's shadow across a bay, this is the measure
+ * to take again — that, and nothing else, is what would justify the cost.
+ *
+ * The floor's own values are not lost either way: the floor is part of
+ * the terrain mesh, already shaded with them, and the water composites
+ * over it.
+ */
+function buildWaterMesh(terrain, heightScale) {
+  const { positions, indices } = projection.buildWaterArrays(terrain, heightScale)
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  // Only the triangles with water on them: a third fewer, for the same
+  // pixels. See dropDryTriangles for what that is and is not worth.
+  geometry.setIndex(new THREE.BufferAttribute(dropDryTriangles(indices, terrain), 1))
+
+  // FOUR components, which is what makes this a per-vertex alpha rather
+  // than a colour: three reads the itemSize to decide. See waterSurface.
+  geometry.setAttribute('color', new THREE.BufferAttribute(computeWaterAttributes(terrain), 4))
+
+  // Flat, so every normal is the same and computing them per vertex
+  // would be 131,072 identical answers. The surface normal of the sea is
+  // up, which on the globe is the radial — exactly what the projection
+  // already reports for a point.
+  const normals = new Float32Array(positions.length)
+  for (let i = 0; i < positions.length; i += 3) {
+    const { x, y, z } = projection.isSpherical
+      ? normalise(positions[i], positions[i + 1], positions[i + 2])
+      : { x: 0, y: 0, z: 1 }
+    normals[i] = x
+    normals[i + 1] = y
+    normals[i + 2] = z
+  }
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+
+  return new THREE.Mesh(geometry, createStylizedMaterial({
+    vertexColors: true,
+    spherical: projection.isSpherical,
+    transparent: true,
+    // The sea does not hold snow. Said with a band rather than with
+    // 131,072 copies of the same per-vertex opt-out.
+    snowline: NO_SNOWLINE,
+  }))
+}
+
+/** A unit vector from a point, for the globe's radial normals. */
+function normalise(x, y, z) {
+  const length = Math.hypot(x, y, z) || 1
+  return { x: x / length, y: y / length, z: z / length }
 }
 
 /**

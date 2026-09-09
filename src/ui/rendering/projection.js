@@ -183,6 +183,31 @@ export const flatProjection = Object.freeze({
   },
 
 
+
+  /**
+   * The water as a GRID at sea level, rather than the single quad it
+   * used to be.
+   *
+   * A plane of two triangles can only carry one colour and one opacity
+   * across the whole sea. Depth is what makes water read as water (see
+   * waterSurface.js), and depth is per cell, so the surface needs a
+   * vertex per cell to carry it — the same vertex layout as the terrain,
+   * in the same index space, so heightMap and both light maps index
+   * straight into it with no remapping.
+   *
+   * It spans the whole footprint including the parts over dry land,
+   * where the terrain simply draws in front of it. Trimming it to the
+   * cells below sea level would give the sea a boundary at cell
+   * resolution, which is the staircase this is meant to remove.
+   */
+  buildWaterArrays(terrain, heightScale) {
+    return buildGridArrays(
+      terrain,
+      (gridX, gridY) => this.toLocal(gridX, gridY, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale),
+      false,
+    )
+  },
+
   waterSurface(terrain, heightScale) {
     return BIOME_THRESHOLDS.oceanMaxHeight * heightScale
   },
@@ -269,6 +294,30 @@ export const sphereProjection = Object.freeze({
     return { gridX, gridY }
   },
 
+
+/**
+   * The water as a GRID at sea level, rather than the single quad it
+   * used to be.
+   *
+   * A plane of two triangles can only carry one colour and one opacity
+   * across the whole sea. Depth is what makes water read as water (see
+   * waterSurface.js), and depth is per cell, so the surface needs a
+   * vertex per cell to carry it — the same vertex layout as the terrain,
+   * in the same index space, so heightMap and both light maps index
+   * straight into it with no remapping.
+   *
+   * It spans the whole footprint including the parts over dry land,
+   * where the terrain simply draws in front of it. Trimming it to the
+   * cells below sea level would give the sea a boundary at cell
+   * resolution, which is the staircase this is meant to remove.
+   */
+  buildWaterArrays(terrain, heightScale) {
+    return buildGridArrays(
+      terrain,
+      (gridX, gridY) => this.toLocal(gridX, gridY, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale),
+      true,
+    )
+  },
 
   /** Sea level as a RADIUS from the planet centre, not a Z height. */
   waterSurface(terrain, heightScale) {

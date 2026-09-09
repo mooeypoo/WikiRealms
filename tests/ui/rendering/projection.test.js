@@ -177,6 +177,48 @@ describe('sphereProjection', () => {
   })
 })
 
+describe('buildWaterArrays', () => {
+  it('lays the sea out on the same grid as the ground beneath it', () => {
+    const terrain = makeTerrain()
+    for (const projection of [flatProjection, sphereProjection]) {
+      const heightScale = projection.heightScale(terrain)
+      const surface = projection.buildSurfaceArrays(terrain, heightScale)
+      const water = projection.buildWaterArrays(terrain, heightScale)
+      // Vertex for vertex and triangle for triangle, so heightMap and
+      // both light maps index into the water with no remapping.
+      expect(water.positions).toHaveLength(surface.positions.length)
+      expect([...water.indices]).toEqual([...surface.indices])
+    }
+  })
+
+  it('puts every one of its vertices exactly at sea level', () => {
+    const terrain = makeTerrain({ heightMap: new Float64Array(16 * 8).map((_, i) => i / 128) })
+
+    const flat = flatProjection.buildWaterArrays(terrain, 10)
+    const expectedZ = BIOME_THRESHOLDS.oceanMaxHeight * 10
+    for (let i = 2; i < flat.positions.length; i += 3) {
+      expect(flat.positions[i]).toBeCloseTo(expectedZ, 5)
+    }
+
+    // On the globe sea level is a radius, not a height.
+    const heightScale = sphereProjection.heightScale(terrain)
+    const sphere = sphereProjection.buildWaterArrays(terrain, heightScale)
+    const expectedRadius = length(sphereProjection.toLocal(0, 0, BIOME_THRESHOLDS.oceanMaxHeight, terrain, heightScale))
+    for (let i = 0; i < sphere.positions.length; i += 3) {
+      expect(length({ x: sphere.positions[i], y: sphere.positions[i + 1], z: sphere.positions[i + 2] }))
+        .toBeCloseTo(expectedRadius, 5)
+    }
+  })
+
+  it('carries the sea across the antimeridian and not across the flat map\u2019s edge', () => {
+    const terrain = makeTerrain()
+    expect(sphereProjection.buildWaterArrays(terrain, 1).indices)
+      .toHaveLength(terrain.width * (terrain.height - 1) * 6)
+    expect(flatProjection.buildWaterArrays(terrain, 1).indices)
+      .toHaveLength((terrain.width - 1) * (terrain.height - 1) * 6)
+  })
+})
+
 describe('buildSurfaceArrays', () => {
   it('emits one vertex per grid cell in heightMap index order', () => {
     const terrain = makeTerrain()

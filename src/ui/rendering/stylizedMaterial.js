@@ -148,6 +148,19 @@ const SNOW_COLOR = new THREE.Color(
   SNOW_RGB[2] / 255,
 )
 
+/**
+ * A snowline no surface can reach, for a mesh that never takes snow.
+ *
+ * `snowHeight` is a height in [0, 1], so a band starting above 1 can
+ * never open. The sea uses it. It could instead bind no snowHeight at
+ * all and lean on an unbound attribute reading 0, which today happens
+ * to be below the snowline — but that is the same quiet assumption the
+ * occlusion and sunlight defines exist to avoid, and it would make the
+ * sea's dryness a consequence of where the snowline happens to sit
+ * rather than a thing anybody decided.
+ */
+export const NO_SNOWLINE = Object.freeze({ start: 2, full: 3 })
+
 const vertexShader = /* glsl */ `
 #include <common>
 #include <color_pars_vertex>
@@ -311,8 +324,17 @@ varying float vSunlight;
 
 void main() {
   vec3 albedo = vec3(1.0);
+  // Opaque unless a mesh says otherwise, and the sea is the only one
+  // that does. three's vColor is a vec4 in every case — it initialises
+  // to vec4(1.0) and an RGB attribute multiplies only .rgb — so reading
+  // alpha here costs nothing and needs no define of its own. What turns
+  // it into a real per-vertex alpha is an itemSize of 4 on the colour
+  // attribute, which makes three define USE_COLOR_ALPHA and multiply all
+  // four channels. See waterSurface.js.
+  float alpha = 1.0;
   #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA ) || defined( USE_INSTANCING_COLOR )
     albedo = vColor.rgb;
+    alpha = vColor.a;
   #endif
 
   // Snow is cover over the albedo, not a wash over the finished pixel,
@@ -372,7 +394,7 @@ void main() {
   // go pale and the whole world reads overexposed. The intensities in
   // the view configs were tuned against a material that divided, so
   // this is also what keeps them meaning what they meant.
-  gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, 1.0);
+  gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI, alpha);
 
   #include <colorspace_fragment>
 
@@ -418,6 +440,7 @@ void main() {
  *   swayHeight?: number,
  *   occlusion?: boolean,
  *   sunlight?: boolean,
+ *   transparent?: boolean,
  * }} options
  * @returns {THREE.ShaderMaterial}
  */
@@ -430,6 +453,7 @@ export function createStylizedMaterial({
   side = THREE.FrontSide,
   occlusion = false,
   sunlight = false,
+  transparent = false,
 } = {}) {
   return new THREE.ShaderMaterial({
     vertexShader,
@@ -443,6 +467,10 @@ export function createStylizedMaterial({
     // AERIAL_PERSPECTIVE in the component for what drives the range.
     fog: true,
     vertexColors,
+    // The sea, and only the sea. Its opacity arrives per vertex in the
+    // colour's fourth channel, and without this the renderer would draw
+    // it in the opaque pass and throw that channel away.
+    transparent,
     // Unlike flatShading below, `side` IS declared on Material, so
     // setting it here works. It matters for anything built from strips
     // with no thickness — a grass blade is seen from behind half the
