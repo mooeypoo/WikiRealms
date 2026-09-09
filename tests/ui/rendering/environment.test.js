@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CANOPY_ARCHETYPES } from '../../../src/ui/rendering/foliage.js'
-import { WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
+import { SEASON, WIND, createEnvironment, sampleEnvironment, windFrequency } from '../../../src/ui/rendering/environment.js'
 
 const TAU = Math.PI * 2
 
@@ -56,18 +56,20 @@ describe('createEnvironment', () => {
     expect(other.season).not.toBe(a.season)
   })
 
-  it('biases season toward summer rather than centering on mid-winter', () => {
-    // Squared draw: the mean of U² is 1/3, so a typical realm keeps most
-    // of its summer palette. A flat draw would put the shelf average at
-    // 0.5 and quietly cool every curated realm.
+  it('biases season hard toward summer; peak cold is altitude snow', () => {
+    // U^4 * maxBlend: mean ≈ 0.024, never above the cap. The old U²
+    // mean of ~1/3 left woods grey on unlucky seeds (Voyager 1 ≈ 1.0).
     let sum = 0
+    let high = 0
     const n = 200
     for (let seed = 1; seed <= n; seed += 1) {
-      sum += createEnvironment({ seed }).season
+      const season = createEnvironment({ seed }).season
+      sum += season
+      high = Math.max(high, season)
     }
 
-    expect(sum / n).toBeLessThan(0.4)
-    expect(sum / n).toBeGreaterThan(0.2)
+    expect(sum / n).toBeLessThan(0.05)
+    expect(high).toBeLessThanOrEqual(SEASON.maxBlend + 1e-12)
   })
 })
 

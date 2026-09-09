@@ -50,11 +50,12 @@ export const COLOR_LUT_SIZE = 16
  */
 export function winterGrade(r, g, b) {
   const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
-  // A cool grey of the same luminance: the sink greens and warm sands
-  // are pulled toward, at different rates.
-  const coolR = y * 0.9
-  const coolG = y * 0.97
-  const coolB = Math.min(1, y * 1.1)
+  // Soft olive sink — enough that a full-strength blend would read as
+  // cooler leaves, not the concrete grey the first cut painted when
+  // season often sat near 1.
+  const coolR = y * 0.92
+  const coolG = y * 0.98
+  const coolB = Math.min(1, y * 1.06)
 
   // How vegetated this sample is. Pure grey scores 0; a saturated leaf
   // green scores near 1. Snow and rock sit near 0 and are left alone.
@@ -66,26 +67,26 @@ export function winterGrade(r, g, b) {
   let outG = g
   let outB = b
 
-  // Greens go olive-blue and lose saturation — the leaf change that
-  // reads as cold without painting the world grey.
-  const vegMix = vegetated * 0.88
+  // Greens tip olive and lose a little saturation — a hint of cold,
+  // not a climate change. Peak winter on a realm is altitude snow.
+  const vegMix = vegetated * 0.28
   outR = mix(outR, coolR, vegMix)
-  outG = mix(outG, coolG * 0.92, vegMix)
+  outG = mix(outG, coolG * 0.98, vegMix)
   outB = mix(outB, coolB, vegMix)
 
   // Warm ground cools and pales a little. Full desaturation would turn
   // a desert into concrete; a partial pull is enough for the season to
   // show without erasing the band.
-  const warmMix = warm * 0.45
-  outR = mix(outR, y * 1.04, warmMix)
-  outG = mix(outG, y * 0.99, warmMix)
-  outB = mix(outB, Math.min(1, y * 1.06), warmMix)
+  const warmMix = warm * 0.18
+  outR = mix(outR, y * 1.02, warmMix)
+  outG = mix(outG, y * 0.995, warmMix)
+  outB = mix(outB, Math.min(1, y * 1.03), warmMix)
 
   // A light cool cast over everything, including the sea. Near-whites
   // barely move (their channels are already close), which is what keeps
   // snow looking like snow.
-  outR *= 0.97
-  outB = Math.min(1, outB * 1.03)
+  outR *= 0.99
+  outB = Math.min(1, outB * 1.015)
 
   return [clamp01(outR), clamp01(outG), clamp01(outB)]
 }

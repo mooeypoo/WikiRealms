@@ -10,17 +10,19 @@ import {
 
 describe('winterGrade', () => {
   it('cools a saturated green without erasing it', () => {
-    // The leaf change that has to read as cold: less green, more blue,
-    // still recognisably a plant colour rather than a grey.
+    // A hint of cold leaves — still clearly green. The grade used to
+    // pull vegMix hard enough that a high season read as concrete.
     const [r, g, b] = winterGrade(0.2, 0.55, 0.18)
     const [sr, sg, sb] = [0.2, 0.55, 0.18]
 
     expect(g).toBeLessThan(sg)
     expect(b).toBeGreaterThan(sb)
     expect(g).toBeGreaterThan(r)
-    expect(g).toBeGreaterThan(0.25)
-    // And not a no-op: every channel moved.
-    expect(Math.abs(r - sr) + Math.abs(g - sg) + Math.abs(b - sb)).toBeGreaterThan(0.05)
+    expect(g).toBeGreaterThan(0.45)
+    // Moved, but gently: at full blend this is still a plant colour.
+    const delta = Math.abs(r - sr) + Math.abs(g - sg) + Math.abs(b - sb)
+    expect(delta).toBeGreaterThan(0.01)
+    expect(delta).toBeLessThan(0.25)
   })
 
   it('leaves near-white alone, so snow keeps its cap', () => {

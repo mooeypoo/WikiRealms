@@ -30,13 +30,13 @@
  *
  * WHAT IS HERE NOW THAT WAS NOT
  *
- * Season. A realm's place on the summer→winter grade, drawn from the
- * seed the same way the wind bearing is. Geometry does not depend on
- * it — vertex colours stay the summer palette — so moving the blend is
- * a uniform write, which is the whole point of the colour LUT seam
- * (see colorLut.js). The snowline and the sun direction still wait:
- * setSnowline() is ready for the first, and the sun is still a fixed
- * light in the scene for the second.
+ * Season. A realm's place on the summer→winter grade. The colour LUT
+ * seam (see colorLut.js) is ready for a real signal — pageviews or
+ * anything else that should read as "this world is colder" — but until
+ * that arrives the seed only tips a tiny accent toward winter. Peak
+ * cold is altitude snow on the summits, not a planet-wide grey wash;
+ * Voyager-class seeds used to land near full winter and paint every
+ * wood concrete.
  */
 import { createRng } from '../../engine/generation/rng.js'
 
@@ -100,6 +100,24 @@ export const WIND = Object.freeze({
 })
 
 /**
+ * How far a seed-drawn season may lean winter.
+ *
+ * The LUT seam stays so a later, legible signal can drive it. Until then
+ * this is a whisper: most realms read as summer, and snow on high ground
+ * (ALTITUDE.snowStart / frostStart) is what makes peaks feel cold.
+ */
+export const SEASON = Object.freeze({
+  /** Hard cap on the blend uniform — 1 would be full winter grade. */
+  maxBlend: 0.12,
+  /**
+   * Exponent on the unit draw. Mean of U^4 is 0.2, so with maxBlend the
+   * typical realm sits around 0.02 — a tint you would not name, not a
+   * climate.
+   */
+  bias: 4,
+})
+
+/**
  * Creates the environment for one world.
  *
  * @param {{ seed?: number, reducedMotion?: boolean }} options
@@ -111,9 +129,7 @@ export const WIND = Object.freeze({
  *   it into a world direction is the renderer's job, because only the
  *   renderer knows how the world group is turned.
  *   `season` is how far this realm sits toward winter, in [0, 1] — see
- *   the header. Squared so most realms stay near summer and a few lean
- *   cold; a flat draw would put the average world at mid-winter and
- *   quietly cool the whole shelf.
+ *   SEASON. Capped and heavily summer-biased on purpose.
  */
 export function createEnvironment({ seed = 1, reducedMotion = false } = {}) {
   const rng = createRng(Number(seed) || 1)
@@ -122,12 +138,11 @@ export function createEnvironment({ seed = 1, reducedMotion = false } = {}) {
   // whose winds happen to blow the same way are not also gusting in
   // step with each other.
   const gustPhase = rng() * TAU
-  // A third draw, and squared: the mean of U² on [0, 1] is 1/3, so a
-  // typical realm keeps most of its summer palette and the ones that
-  // lean winter do so because of their seed, not because the shelf
-  // average drifted.
+  // A third draw, raised and capped: the old U² mean of 1/3 left almost
+  // a third of realms past half-winter, and Voyager 1 hit ~1.0 — woods
+  // the colour of wet concrete. Peak cold belongs on the summits.
   const seasonRoll = rng()
-  const season = seasonRoll * seasonRoll
+  const season = Math.pow(seasonRoll, SEASON.bias) * SEASON.maxBlend
 
   return {
     windDirection: { x: Math.cos(bearing), y: Math.sin(bearing) },
