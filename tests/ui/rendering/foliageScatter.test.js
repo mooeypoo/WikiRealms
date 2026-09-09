@@ -49,6 +49,28 @@ describe('scatterUnderstory', () => {
     }
   })
 
+  it('scatters a few non-green accents without adding layers', () => {
+    // Accents rewrite instance colours inside existing variant meshes —
+    // layer count must stay the band's length, or we paid a draw call.
+    const layers = scatterUnderstory(uniformTerrain(BIOME.MEADOW), 42, FLAT)
+    expect(layers).toHaveLength(UNDERSTORY_BY_BAND[BIOME.MEADOW].length)
+
+    let warmish = 0
+    let total = 0
+    for (const layer of layers) {
+      if (layer.variant.kind === 'scrub') continue
+      for (let i = 0; i < layer.count; i += 1) {
+        const r = layer.colors[i * 3]
+        const g = layer.colors[i * 3 + 1]
+        total += 1
+        if (r > g * 0.85) warmish += 1
+      }
+    }
+    expect(total).toBeGreaterThan(50)
+    expect(warmish).toBeGreaterThan(0)
+    expect(warmish / total).toBeLessThan(0.25)
+  })
+
   it('emits three position floats per sprite', () => {
     for (const layer of scatterUnderstory(uniformTerrain(BIOME.JUNGLE), 7, FLAT)) {
       expect(layer.positions).toBeInstanceOf(Float32Array)

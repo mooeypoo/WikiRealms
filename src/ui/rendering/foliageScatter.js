@@ -32,12 +32,12 @@
 import {
   CANOPY_ARCHETYPES,
   FOLIAGE_SAMPLING,
-  UNDERSTORY_JITTER,
   canopyInstanceTransform,
   cellFoliageRolls,
   FOLIAGE_DENSITY,
   computeFoliageDensityScale,
   foliageTintColor,
+  understoryAccentColor,
   pickCanopyVariant,
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
@@ -227,7 +227,7 @@ export function scatterUnderstory(terrain, seed, { projection, heightScale, skyV
       yaws[instance] = transform.yaw
       scales[instance] = transform.scale
 
-      const { r, g, b } = foliageTintColor(variant.color, tintRoll, UNDERSTORY_JITTER)
+      const { r, g, b } = understoryAccentColor(variant.color, variant.kind, tintRoll)
       colors[instance * 3] = r
       colors[instance * 3 + 1] = g
       colors[instance * 3 + 2] = b

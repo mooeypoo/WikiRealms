@@ -227,6 +227,27 @@ export const UNDERSTORY_JITTER = Object.freeze({
 })
 
 /**
+ * Rare per-instance hue accents for ground cover.
+ *
+ * WHY NOT MORE UNDERSTORY_BY_BAND ROWS
+ *
+ * Each distinct variant object becomes another InstancedMesh — another
+ * draw call. Accents reuse the existing grass/fern layers and only rewrite
+ * a few instance colours, so meadows sparkle without paying for mesh count.
+ *
+ * `chance` is the fraction of eligible clumps that get an accent. The
+ * tint roll already drives brightness; the high end of that same roll
+ * picks the accent so placement stays one salt.
+ */
+export const UNDERSTORY_ACCENTS = Object.freeze({
+  chance: 0.08,
+  // Warm flower, soft blossom, cooler lime — packed 0xRRGGBB.
+  flower: 0xd66b6b,
+  blossom: 0xe8b4c8,
+  lime: 0x6bbf5a,
+})
+
+/**
  * Tree shapes, in grid cells. Proportions rather than meshes: the
  * component builds geometry from these, so the shapes stay tunable and
  * testable without a renderer.
@@ -545,6 +566,42 @@ export function foliageTintColor(baseColor, tintRoll, jitter = CANOPY_JITTER) {
   const brightness = mix(jitter.minTint, jitter.maxTint, clamp01(tintRoll))
   const channel = (shift) => clamp01((((baseColor >> shift) & 0xff) / 255) * brightness)
   return { r: channel(16), g: channel(8), b: channel(0) }
+}
+
+/**
+ * Brightness-tint a clump, then rarely swap in a flower/lime accent.
+ *
+ * Steppe and scrub stay dull — only grass (meadows, light veg, woodland
+ * floor) and ferns get accents. The same tintRoll that sets brightness
+ * also decides whether an accent fires, so one salt stays enough.
+ *
+ * @param {number} baseColor packed 0xRRGGBB from the variant table
+ * @param {string} kind 'grass' | 'scrub' | 'fern'
+ * @param {number} tintRoll [0, 1)
+ * @returns {{ r: number, g: number, b: number }}
+ */
+export function understoryAccentColor(baseColor, kind, tintRoll) {
+  const tinted = foliageTintColor(baseColor, tintRoll, UNDERSTORY_JITTER)
+  if (kind === 'scrub' || kind === 'steppe') return tinted
+  if (kind !== 'grass' && kind !== 'fern') return tinted
+  // Accents live in the top `chance` of the roll so most clumps keep the
+  // band colour and only a scatter of them bloom.
+  if (tintRoll < 1 - UNDERSTORY_ACCENTS.chance) return tinted
+
+  const accent =
+    kind === 'fern'
+      ? UNDERSTORY_ACCENTS.lime
+      : tintRoll > 1 - UNDERSTORY_ACCENTS.chance * 0.45
+        ? UNDERSTORY_ACCENTS.blossom
+        : UNDERSTORY_ACCENTS.flower
+  // Mix rather than replace: a full swap reads as confetti; a lean keeps
+  // the clump in the meadow while the eye catches a petal.
+  const accented = foliageTintColor(accent, tintRoll, UNDERSTORY_JITTER)
+  return {
+    r: mix(tinted.r, accented.r, 0.72),
+    g: mix(tinted.g, accented.g, 0.72),
+    b: mix(tinted.b, accented.b, 0.72),
+  }
 }
 
 /**

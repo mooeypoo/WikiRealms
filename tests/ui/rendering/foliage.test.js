@@ -6,10 +6,13 @@ import {
   FOLIAGE_DENSITY,
   FOLIAGE_SAMPLING,
   UNDERSTORY_BY_BAND,
+  UNDERSTORY_JITTER,
   canopyInstanceTransform,
   cellFoliageRolls,
   computeFoliageDensityScale,
   foliageInstanceColor,
+  foliageTintColor,
+  understoryAccentColor,
   pickCanopyVariant,
   pickUnderstoryVariant,
   resolveArchetypeForAltitude,
@@ -272,6 +275,31 @@ describe('foliageInstanceColor', () => {
     expect(high.r).toBeGreaterThan(low.r)
     expect(summit.r).toBeCloseTo(1)
     expect(summit.g).toBeCloseTo(1)
+  })
+})
+
+describe('understoryAccentColor', () => {
+  it('matches brightness tint when the roll is below the accent band', () => {
+    const roll = 0.5
+    const plain = foliageTintColor(0x75ba55, roll, UNDERSTORY_JITTER)
+    const accented = understoryAccentColor(0x75ba55, 'grass', roll)
+
+    expect(accented).toEqual(plain)
+  })
+
+  it('shifts grass toward a warmer petal in the accent band', () => {
+    const roll = 0.99
+    const plain = foliageTintColor(0x75ba55, roll, UNDERSTORY_JITTER)
+    const accented = understoryAccentColor(0x75ba55, 'grass', roll)
+
+    // More red relative to green than the meadow leaf it started as.
+    expect(accented.r / accented.g).toBeGreaterThan(plain.r / plain.g)
+  })
+
+  it('leaves scrub dull even at a high roll', () => {
+    const roll = 0.99
+    const plain = foliageTintColor(0x9a7d42, roll, UNDERSTORY_JITTER)
+    expect(understoryAccentColor(0x9a7d42, 'scrub', roll)).toEqual(plain)
   })
 })
 
