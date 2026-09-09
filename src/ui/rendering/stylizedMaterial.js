@@ -5,8 +5,9 @@
  *
  * It was doing physically based rendering for a scene with nothing
  * physical in it. There are two lights — one ambient, one directional —
- * no shadow maps, no environment map, no tone mapping, and roughness was
- * pinned at 0.85/0.95 with metalness at 0. So every fragment ran a
+ * no shadow maps, no environment map, and roughness was pinned at
+ * 0.85/0.95 with metalness at 0 (tone mapping arrived later as a
+ * renderer setting, not as a reason to keep PBR). So every fragment ran a
  * Cook-Torrance BRDF, sampled an IBL path that resolves to nothing, and
  * arrived at an answer a diffuse term could have given.
  *

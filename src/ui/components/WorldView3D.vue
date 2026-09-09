@@ -1614,6 +1614,13 @@ onMounted(() => {
   // what reads as "far away".
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setClearColor(0x000000, 0)
+  // Soft filmic curve over the stylized half-Lambert look. The canvas
+  // stays transparent so the CSS starfield is untouched; only the lit
+  // world goes through ACES. Exposure 1.0 is the starting point — drop
+  // toward 0.9 if highlights wash after a look pass.
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = 1.0
+  renderer.outputColorSpace = THREE.SRGBColorSpace
 
   // Nothing set this before, and three defaults it to 1 — which means
   // the drawing buffer was sized in CSS pixels and the browser upscaled
