@@ -1,0 +1,18 @@
+---
+description: Run CI-equivalent checks before creating git commits
+alwaysApply: true
+---
+
+# Pre-commit checks
+
+Before creating a git commit in this repo, run the same checks CI runs:
+
+```bash
+npm run check
+```
+
+That is `npm test && npm run build` (see `.github/workflows/ci.yml`).
+
+Do not commit if `npm run check` fails. Fix the failures first.
+
+A Cursor `beforeShellExecution` hook also gates `git commit` on `npm run check`. Bypass only with `SKIP_CHECKS=1` when the user explicitly asks.

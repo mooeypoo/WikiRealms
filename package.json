@@ -10,6 +10,7 @@
     "og:render": "node scripts/og/render.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "npm test && npm run build",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

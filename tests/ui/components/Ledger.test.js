@@ -299,7 +299,7 @@ describe('Ledger', () => {
         'How well sections cite — trees and green',
         'Outbound links you can travel through',
         'Article length — sets the waterline',
-        '30-day pageviews — denser fish in the seas',
+        '30-day pageviews — fish in the seas track how busy this page is',
       ])
     })
 
