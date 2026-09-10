@@ -28,6 +28,7 @@ import {
   formatWords,
 } from '../rendering/sectionStats.js'
 import WikipediaCtaLink from './WikipediaCtaLink.vue'
+import WikipediaFieldTask from './WikipediaFieldTask.vue'
 
 /**
  * What this place is.
@@ -611,17 +612,13 @@ watch(
                   Read {{ row.title }}
                   <Icon name="external" :size="12" />
                 </a>
-                <aside
+                <WikipediaFieldTask
                   v-if="selectedDetailCta?.href && selectedDetailCta?.label"
-                  class="ledger__cta-callout"
-                  aria-label="Contribute to Wikipedia"
-                >
-                  <WikipediaCtaLink
-                    class="ledger__cta"
-                    :href="selectedDetailCta.href"
-                    :label="selectedDetailCta.label"
-                  />
-                </aside>
+                  :eyebrow="selectedDetailCta.eyebrow ?? ''"
+                  :notice="selectedDetailCta.notice ?? ''"
+                  :href="selectedDetailCta.href"
+                  :label="selectedDetailCta.label"
+                />
               </div>
             </li>
           </ul>
@@ -636,17 +633,21 @@ watch(
     <template #footer>
       <div class="ledger__footer">
         <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
-          <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
-            View on Wikipedia
-            <Icon name="external" :size="12" />
-          </a>
-          <button class="ledger__link" type="button" @click="$emit('share')">
-            <Icon name="share" :size="13" />
-            Share
-          </button>
-          <WikipediaCtaLink
+          <div class="ledger__footer-links">
+            <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
+              View on Wikipedia
+              <Icon name="external" :size="12" />
+            </a>
+            <button class="ledger__link" type="button" @click="$emit('share')">
+              <Icon name="share" :size="13" />
+              Share
+            </button>
+          </div>
+          <WikipediaFieldTask
             v-if="footerCta?.href && footerCta?.label"
-            class="ledger__cta"
+            class="ledger__footer-task"
+            :eyebrow="footerCta.eyebrow ?? ''"
+            :notice="footerCta.notice ?? ''"
             :href="footerCta.href"
             :label="footerCta.label"
           />
@@ -1079,31 +1080,21 @@ button.ledger__cells:hover .ledger__row-title {
   margin-top: var(--spacing-sm);
 }
 
-/**
- * Citation invite — brighter than the selected-row wash so it reads as a
- * callout rather than another line of metadata (same idea as the Field
- * Guide contribute footer).
- */
-.ledger__cta-callout {
-  margin-top: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
-  background: rgba(var(--accent-rgb), 0.22);
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
+/* Field tasks sit under the Wikipedia / Share row — sentence case, full width. */
+.ledger__footer-task {
+  margin-top: 0;
 }
 
-.ledger__detail .ledger__cta {
+.ledger__footer-actions {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.ledger__footer-links {
   display: flex;
-  max-width: 100%;
-  line-height: 1.4;
-  white-space: normal;
-  font-size: var(--text-sm);
-}
-
-.ledger__footer-actions .ledger__cta {
-  /* Footer actions are uppercase mono; keep CTA readable as a sentence. */
-  text-transform: none;
-  letter-spacing: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 /* Narrow: the band name goes and the meter carries the ground alone.
@@ -1127,13 +1118,6 @@ button.ledger__cells:hover .ledger__row-title {
 .ledger__footer {
   display: grid;
   gap: var(--spacing-sm);
-}
-
-.ledger__footer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
 }
 
 .ledger__legend {

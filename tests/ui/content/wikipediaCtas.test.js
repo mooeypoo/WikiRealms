@@ -132,6 +132,9 @@ describe('resolveWikipediaCta', () => {
       sectionCount: 3,
     })
     expect(small?.id).toBe('grow-small-realm')
+    expect(small?.eyebrow).toBe('Field task')
+    expect(small?.notice).toMatch(/flooding/)
+    expect(small?.label).toMatch(/Enlarge the map/)
     expect(small?.href).toContain('action=edit')
 
     expect(
@@ -149,6 +152,31 @@ describe('resolveWikipediaCta', () => {
         sectionCount: 2,
       }),
     ).toBeNull()
+  })
+
+  it('frames cite CTAs on the Ledger as field tasks', () => {
+    const resolved = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_DETAIL, {
+      densityBand: BIOME.DUNES,
+      anchor: 'Early_life',
+      sectionTitle: 'Early life',
+      articleUrl: ARTICLE,
+    })
+    expect(resolved?.eyebrow).toBe('Field task')
+    expect(resolved?.notice).toMatch(/no references/)
+    expect(resolved?.label).toMatch(/seed/)
+  })
+
+  it('waits for real portal hops before inviting stewardship on the Trail', () => {
+    expect(
+      resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.TRAIL_FOOTER, { portalHops: 2 }),
+    ).toBeNull()
+
+    const ready = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.TRAIL_FOOTER, {
+      portalHops: WIKIPEDIA_CTA_CONFIG.stewardship.minPortalHops,
+    })
+    expect(ready?.id).toBe('trail-stewardship')
+    expect(ready?.prose).toContain('donate.wikimedia.org')
+    expect(ready?.prose).toContain('Help:Introduction')
   })
 
   it('resolves stale-realm-nudge only when stale', () => {
@@ -199,5 +227,6 @@ describe('fieldGuideCtaProse', () => {
     expect(footer).toContain('donate.wikimedia.org')
     expect(footer).toContain('Become an editor')
     expect(footer).toContain('Donate')
+    expect(footer).toMatch(/Barren slopes|citations/i)
   })
 })

@@ -55,6 +55,19 @@ describe('shareTarget', () => {
     expect(await shareLink(LINK)).toBe('copied')
   })
 
+  it('copies the postcard letter when clipboardText is provided', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    withClipboard(writeText)
+
+    expect(
+      await shareLink({
+        ...LINK,
+        clipboardText: 'Expedition…\nhttps://wikirealms.test/?realm=Titan',
+      }),
+    ).toBe('copied')
+    expect(writeText).toHaveBeenCalledWith('Expedition…\nhttps://wikirealms.test/?realm=Titan')
+  })
+
   it('reports failure rather than pretending', async () => {
     withClipboard(vi.fn().mockRejectedValue(new Error('denied')))
     document.execCommand = vi.fn(() => {

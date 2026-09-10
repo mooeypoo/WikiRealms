@@ -40,7 +40,8 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
 
         <!-- Always, once there is a realm: the trail panel is where the
              journey actions live now, so it cannot be a control that only
-             appears after the second stop. -->
+             appears after the second stop. A bare icon+count reads as a
+             badge; the word names the map of where you have walked. -->
         <button
           class="scrim__trail"
           type="button"
@@ -48,7 +49,8 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
           @click="$emit('trail')"
         >
           <Icon name="trail" :size="13" />
-          <span class="tabular">{{ trailLength }}</span>
+          <span class="scrim__trail-label">Your trail</span>
+          <span class="scrim__trail-count tabular">{{ trailLength }}</span>
         </button>
       </template>
     </div>
@@ -184,19 +186,36 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
   display: flex;
   flex: none;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   height: 26px;
   padding: 0 var(--spacing-sm);
   border: 1px solid rgba(var(--trail-rgb), 0.35);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--trail);
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .scrim__trail:hover {
   background: var(--trail-wash);
+}
+
+.scrim__trail-label {
+  line-height: 1;
+}
+
+.scrim__trail-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35em;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--trail-rgb), 0.18);
+  letter-spacing: 0;
 }
 
 .scrim__travel,

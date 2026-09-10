@@ -42,3 +42,14 @@
 - How should article features be weighted into terrain generation?
 - Which state belongs in memory, which belongs in snapshots, and which can be regenerated?
 - What is the right threshold for introducing a backend service?
+
+## Back burner
+
+### Article evolution / revision timeline
+
+Opt-in “watch this realm evolve” scrub across monthly Wikipedia revisions
+(generate + rebuild one live world at a time; do **not** keep N concurrent
+3D scenes). Feasible as sequential scrubbing with historical HTML fetch;
+parked after stewardship field tasks + trail postcards. Revisit when sharing
+and contribution CTAs have room to breathe — needs adapter work
+(`revision/{id}/with_html`, date→revid) and mobile quality caps.

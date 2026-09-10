@@ -9,10 +9,13 @@
  */
 
 /**
+ * @param {{ title: string, text: string, url: string, clipboardText?: string }} payload
  * @returns {Promise<'shared'|'copied'|'failed'>} what actually happened, so
  *   the caller can say so — a native share needs no toast, a copy does.
+ *   `clipboardText` is used when falling back to copy (postcards want the
+ *   whole letter, not only the URL).
  */
-export async function shareLink({ title, text, url }) {
+export async function shareLink({ title, text, url, clipboardText }) {
   if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
     try {
       await navigator.share({ title, text, url })
@@ -24,7 +27,7 @@ export async function shareLink({ title, text, url }) {
     }
   }
 
-  return (await copyText(url)) ? 'copied' : 'failed'
+  return (await copyText(clipboardText ?? url)) ? 'copied' : 'failed'
 }
 
 export async function copyText(text) {

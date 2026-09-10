@@ -7,9 +7,10 @@ import { realmUrl } from '../../adapters/urlState.js'
  *
  * The platform work — navigator.share, the clipboard, the legacy fallback —
  * moved to adapters/shareTarget.js, and the link itself now comes from
- * adapters/urlState.js, which is also what READS it on arrival. That is the
- * actual fix here: the link this produces has never worked, because nothing
- * in the app ever looked at the parameter it wrote.
+ * adapters/urlState.js, which is also what READS it on arrival.
+ *
+ * Graphic trail postcards live in TrailPostcard.vue (SVG preview + image
+ * copy); this composable keeps the simple realm-link path and the toast.
  */
 export function useShare() {
   const toastMessage = ref('')

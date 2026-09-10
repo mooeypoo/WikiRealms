@@ -25,6 +25,14 @@ export const WIKIPEDIA_CTA_CONFIG = Object.freeze({
     maxWords: 800,
     maxSections: 4,
   }),
+  /**
+   * Stewardship asks that wait for a real walk. Donate / become-editor
+   * on the Trail only after this many portal hops — enough for the
+   * landscape metaphor to land before we ask for support.
+   */
+  stewardship: Object.freeze({
+    minPortalHops: 3,
+  }),
   urls: Object.freeze({
     introduction: 'https://en.wikipedia.org/wiki/Help:Introduction',
     donate: 'https://donate.wikimedia.org/',
@@ -38,7 +46,11 @@ export const WIKIPEDIA_CTA_SURFACES = Object.freeze({
   LEDGER_FOOTER: 'ledger.footer',
   LEDGER_HEADER: 'ledger.header',
   FIELD_GUIDE_FOOTER: 'field-guide.footer',
+  TRAIL_FOOTER: 'trail.footer',
 })
+
+/** Shared eyebrow for diegetic contribution invites (Ledger callouts). */
+export const FIELD_TASK_EYEBROW = 'Field task'
 
 /**
  * Bands below this article's citation average (same vocabulary as the
@@ -104,6 +116,19 @@ function citeNotice(ctx) {
 }
 
 /**
+ * Ledger field-task body: what the slope means, then where to act.
+ * @param {WikipediaCtaContext} ctx
+ */
+function citeFieldNotice(ctx) {
+  const copy = LUSHNESS_BAND_COPY[ctx.densityBand]
+  if (!copy) return null
+  if (ctx.densityBand === BIOME.DUNES) {
+    return `${copy.name} ground — no references yet. Open the section on Wikipedia and see what still needs a source.`
+  }
+  return `${copy.name} ground — ${copy.comparison}. Citations grow the forest; open the section on Wikipedia to help.`
+}
+
+/**
  * Ledger action label for a below-average section.
  * @param {WikipediaCtaContext} ctx
  */
@@ -126,6 +151,7 @@ function citeLabel(ctx) {
  * @property {number} [wordCount]
  * @property {number} [sectionCount]
  * @property {boolean} [stale]
+ * @property {number} [portalHops] portal edges walked this session (Trail)
  */
 
 /**
@@ -135,10 +161,11 @@ function citeLabel(ctx) {
  * @property {readonly string[]} surfaces
  * @property {number} priority lower wins when several match
  * @property {(ctx: WikipediaCtaContext) => boolean} match
+ * @property {(ctx: WikipediaCtaContext) => string | null} [eyebrow]
  * @property {(ctx: WikipediaCtaContext) => string | null} [notice]
  * @property {(ctx: WikipediaCtaContext) => string | null} [label]
  * @property {(ctx: WikipediaCtaContext) => string | null} [href]
- * @property {(ctx: WikipediaCtaContext) => string | null} [prose] HTML for Field Guide tabs
+ * @property {(ctx: WikipediaCtaContext) => string | null} [prose] HTML for Field Guide / Trail strips
  */
 
 /** @type {readonly WikipediaCtaDef[]} */
@@ -153,7 +180,10 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     priority: 10,
     // Tooltip needs only the band; Ledger also needs an anchor to deep-link.
     match: (ctx) => isCiteCtaBand(ctx.densityBand) && !ctx.isAggregate,
-    notice: citeNotice,
+    eyebrow: (ctx) =>
+      // Field-task framing only where there is room for notice + action.
+      ctx.anchor ? FIELD_TASK_EYEBROW : null,
+    notice: (ctx) => (ctx.anchor ? citeFieldNotice(ctx) : citeNotice(ctx)),
     label: citeLabel,
     href: (ctx) =>
       ctx.anchor ? buildSectionViewUrl(ctx.articleUrl ?? '', ctx.anchor) : null,
@@ -170,7 +200,10 @@ export const WIKIPEDIA_CTAS = Object.freeze([
       const sections = ctx.sectionCount ?? Infinity
       return Boolean(ctx.articleUrl) && words <= maxWords && sections <= maxSections
     },
-    label: () => 'A small realm — enlarge the map on Wikipedia',
+    eyebrow: () => FIELD_TASK_EYEBROW,
+    notice: () =>
+      'This map is still flooding — short articles leave little land above the water. Enlarge the article on Wikipedia and the realm grows with it.',
+    label: () => 'Enlarge the map on Wikipedia',
     href: (ctx) => buildArticleEditUrl(ctx.articleUrl ?? ''),
   }),
 
@@ -185,13 +218,32 @@ export const WIKIPEDIA_CTAS = Object.freeze([
   }),
 
   Object.freeze({
+    id: 'trail-stewardship',
+    enabled: true,
+    surfaces: Object.freeze([WIKIPEDIA_CTA_SURFACES.TRAIL_FOOTER]),
+    priority: 35,
+    match: (ctx) => {
+      const min = WIKIPEDIA_CTA_CONFIG.stewardship.minPortalHops
+      return (ctx.portalHops ?? 0) >= min
+    },
+    prose: () => `
+      <p class="trail-cta__lead">You have walked the network — Wikipedia stays free because people fund and edit it.</p>
+      <p class="trail-cta__actions">
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">Become an editor</a>
+        <span class="trail-cta__sep" aria-hidden="true">·</span>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">Donate</a>
+      </p>
+    `.trim(),
+  }),
+
+  Object.freeze({
     id: 'field-guide-contribute',
     enabled: true,
     surfaces: Object.freeze([WIKIPEDIA_CTA_SURFACES.FIELD_GUIDE_FOOTER]),
     priority: 40,
     match: () => true,
     prose: () => `
-      <p class="guide-cta__lead">Wikipedia is free because people fund and edit it.</p>
+      <p class="guide-cta__lead">Barren slopes need citations. Flooded maps need prose. Wikipedia is free because people fund and edit it.</p>
       <p class="guide-cta__actions">
         <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">Become an editor</a>
         <span class="guide-cta__sep" aria-hidden="true">·</span>
@@ -207,7 +259,7 @@ export const WIKIPEDIA_CTAS = Object.freeze([
  * @param {string} surfaceId
  * @param {WikipediaCtaContext} [ctx]
  * @param {{ ctas?: readonly WikipediaCtaDef[], config?: typeof WIKIPEDIA_CTA_CONFIG }} [options] test overrides
- * @returns {{ id: string, notice: string | null, label: string | null, href: string | null, prose: string | null } | null}
+ * @returns {{ id: string, eyebrow: string | null, notice: string | null, label: string | null, href: string | null, prose: string | null } | null}
  */
 export function resolveWikipediaCta(surfaceId, ctx = {}, options = {}) {
   const config = options.config ?? WIKIPEDIA_CTA_CONFIG
@@ -226,6 +278,7 @@ export function resolveWikipediaCta(surfaceId, ctx = {}, options = {}) {
   const best = matches[0]
   return {
     id: best.id,
+    eyebrow: best.eyebrow?.(ctx) ?? null,
     notice: best.notice?.(ctx) ?? null,
     label: best.label?.(ctx) ?? null,
     href: best.href?.(ctx) ?? null,

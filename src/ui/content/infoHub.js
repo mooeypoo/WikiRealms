@@ -33,7 +33,7 @@ export const infoHubContent = {
       </ol>
       <h3>Portals and navigation</h3>
       <p>Every distinct outbound link in the article's lead or sections can become a portal. Portals from a section are placed within that section's top-level mountain range; repeated links within one section are combined, while the same destination can appear in different ranges.</p>
-      <p>Choose a portal to travel to its article, then use the back and forward controls or arrow keys to retrace your route.</p>
+      <p>Choose a portal to travel to its article, then use the back and forward controls or arrow keys to retrace your route. Your trail is a map of the part of Wikipedia you have walked — share it as a postcard when you want someone else to start from where you are.</p>
     `,
   },
   about: {
@@ -44,7 +44,7 @@ export const infoHubContent = {
       <h3>Created by Moriel Schottlender</h3>
       <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
       <p>It asks the question: What would a Wikipedia article look like if it were a physical place you could explore? How would an article be represented through geography?</p>
-      <p>Now you can explore Wikipedia articles as landscapes, where each section is a peak and every link is a portal to another world.</p>
+      <p>Now you can explore Wikipedia articles as landscapes, where each section is a peak and every link is a portal to another world. Barren slopes and flooded maps are invitations to grow the public record — citations and prose still live on Wikipedia.</p>
       <ul>
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
         <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>

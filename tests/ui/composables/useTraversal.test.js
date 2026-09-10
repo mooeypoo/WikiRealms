@@ -130,6 +130,20 @@ describe('useTraversal', () => {
     expect(forwardstack.value).toEqual([])
   })
 
+  it('clearTrail() keeps the realm underfoot and drops the rest of the map', () => {
+    const { current, graph, jumpTo, navigateTo, clearTrail } = useTraversal()
+
+    jumpTo('Saturn')
+    navigateTo('Titan')
+    navigateTo('Rings of Saturn')
+    clearTrail()
+
+    expect(current.value).toBe('Rings of Saturn')
+    expect(Object.keys(graph.value.realms)).toEqual(['r:Rings of Saturn'])
+    expect(graph.value.edges).toEqual([])
+    expect(graph.value.history).toEqual(['r:Rings of Saturn'])
+  })
+
   it('restore() hydrates state directly, bypassing navigateTo push semantics', () => {
     const { current, backstack, forwardstack, canGoBack, canGoForward, restore } = useTraversal()
 

@@ -52,6 +52,16 @@ export function useTraversal() {
   }
 
   /**
+   * Drop the map of where you have been, but stay standing where you are.
+   * A full reset would unload the realm underfoot for a tick; this keeps
+   * the current title as a fresh search-jump with no edges behind it.
+   */
+  function clearTrail() {
+    const title = current.value
+    graph.value = title ? trail.jump(trail.createVisitGraph(), title) : trail.createVisitGraph()
+  }
+
+  /**
    * Hydrates from a restored session. Accepts either a graph or the flat
    * history older snapshots stored.
    */
@@ -75,6 +85,7 @@ export function useTraversal() {
     goBack,
     goForward,
     reset,
+    clearTrail,
     restore,
   }
 }

@@ -3,6 +3,10 @@ import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import { NODE_HEIGHT, NODE_WIDTH, layoutJourney } from '../rendering/trailLayout.js'
+import {
+  WIKIPEDIA_CTA_SURFACES,
+  resolveWikipediaCta,
+} from '../content/wikipediaCtas.js'
 
 /**
  * The map of where you have been.
@@ -25,7 +29,7 @@ const props = defineProps({
   canShare: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'home', 'share', 'export', 'import', 'close'])
+const emit = defineEmits(['select', 'home', 'share', 'clear', 'export', 'import', 'close'])
 
 function onFile(event) {
   const file = event.target.files?.[0]
@@ -38,6 +42,21 @@ const layout = computed(() => layoutJourney(props.graph))
 const viewBox = computed(() => `0 0 ${layout.value.width} ${layout.value.height}`)
 
 const nodeById = computed(() => new Map(layout.value.nodes.map((node) => [node.id, node])))
+
+/** More than the realm underfoot — otherwise Clear would be a no-op. */
+const canClear = computed(() => {
+  const realms = layout.value.nodes.length
+  const portals = props.graph?.edges?.length ?? 0
+  const steps = props.graph?.history?.length ?? 0
+  return realms > 1 || portals > 0 || steps > 1
+})
+
+/** Stewardship invite after a real walk — copy lives in wikipediaCtas. */
+const stewardshipCta = computed(() =>
+  resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.TRAIL_FOOTER, {
+    portalHops: props.graph?.edges?.length ?? 0,
+  }),
+)
 
 /**
  * A curve rather than a line, and a wide detour for an edge that runs back
@@ -167,6 +186,11 @@ function pathFor(link) {
          the top bar, which put two things called the journey one click
          apart and spent a primary control on end-of-session actions. -->
     <template #footer>
+      <div
+        v-if="stewardshipCta?.prose"
+        class="trail__stewardship"
+        v-html="stewardshipCta.prose"
+      />
       <div class="trail__actions">
         <button type="button" @click="$emit('home')">
           <Icon name="mark" :size="15" />
@@ -174,7 +198,11 @@ function pathFor(link) {
         </button>
         <button type="button" :disabled="!canShare" @click="$emit('share')">
           <Icon name="share" :size="15" />
-          <span>Share</span>
+          <span>Postcard</span>
+        </button>
+        <button type="button" :disabled="!canClear" @click="$emit('clear')">
+          <Icon name="renew" :size="15" />
+          <span>Clear trail</span>
         </button>
         <button type="button" @click="$emit('export')">
           <Icon name="download" :size="15" />
@@ -402,6 +430,41 @@ function pathFor(link) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: var(--spacing-xs);
+}
+
+.trail__stewardship {
+  margin: 0 0 var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: rgba(var(--accent-rgb), 0.14);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.trail__stewardship :deep(.trail-cta__lead) {
+  margin: 0 0 var(--spacing-xs);
+}
+
+.trail__stewardship :deep(.trail-cta__actions) {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.trail__stewardship :deep(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.trail__stewardship :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.trail__stewardship :deep(.trail-cta__sep) {
+  margin: 0 0.35em;
+  color: var(--ink-3);
 }
 
 .trail__actions button,

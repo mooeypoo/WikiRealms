@@ -202,7 +202,7 @@ describe('the journey actions', () => {
     const actions = document.querySelector('.trail__actions')
 
     expect(actions).not.toBeNull()
-    for (const label of ['Somewhere new', 'Share', 'Save', 'Load']) {
+    for (const label of ['Somewhere new', 'Postcard', 'Clear trail', 'Save', 'Load']) {
       expect(actions.textContent).toContain(label)
     }
   })
@@ -215,12 +215,14 @@ describe('the journey actions', () => {
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     click('Somewhere new')
-    click('Share')
+    click('Postcard')
+    click('Clear trail')
     click('Save')
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('home')).toHaveLength(1)
     expect(wrapper.emitted('share')).toHaveLength(1)
+    expect(wrapper.emitted('clear')).toHaveLength(1)
     expect(wrapper.emitted('export')).toHaveLength(1)
   })
 
@@ -230,9 +232,31 @@ describe('the journey actions', () => {
     mount(TrailMenu, { props: { show: true, graph: createVisitGraph(), canShare: false }, attachTo: document.body })
 
     const share = [...document.querySelectorAll('.trail__actions button')].find((button) =>
-      button.textContent.includes('Share'),
+      button.textContent.includes('Postcard'),
     )
     expect(share.disabled).toBe(true)
     expect(document.querySelector('.trail__actions').textContent).toContain('Load')
+  })
+
+  it('cannot clear a trail that is already only where you are', () => {
+    mount(TrailMenu, {
+      props: { show: true, graph: jump(createVisitGraph(), 'Saturn'), canShare: true },
+      attachTo: document.body,
+    })
+
+    const clear = [...document.querySelectorAll('.trail__actions button')].find((button) =>
+      button.textContent.includes('Clear trail'),
+    )
+    expect(clear.disabled).toBe(true)
+  })
+
+  it('invites stewardship only after a real walk', () => {
+    mountTrail(visit(jump(createVisitGraph(), 'Saturn'), 'Titan'))
+    expect(document.querySelector('.trail__stewardship')).toBeNull()
+
+    mountTrail()
+    const strip = document.querySelector('.trail__stewardship')
+    expect(strip).not.toBeNull()
+    expect(strip.textContent).toMatch(/Donate|editor/i)
   })
 })

@@ -10,6 +10,7 @@ import Icon from './ui/design/Icon.vue'
 import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
 import TrailMenu from './ui/components/TrailMenu.vue'
+import TrailPostcard from './ui/components/TrailPostcard.vue'
 import ToolsMenu from './ui/components/ToolsMenu.vue'
 import Ledger from './ui/components/Ledger.vue'
 import { clearsLedger, ledgerClearance } from './ui/components/ledgerStates.js'
@@ -53,10 +54,11 @@ const {
   goBack,
   goForward,
   restore,
+  clearTrail,
 } = useTraversal()
 const { errorMessage: snapshotErrorMessage, exportSnapshot, importSnapshot, persist, loadPersisted } = useSnapshot()
 const { showInfoHub, showSettings, currentInfoTab, setInfoTab, preferences, updatePreferences } = useUIState()
-const { shareArticle, toastMessage, toastVisible } = useShare()
+const { shareArticle, toastMessage, toastVisible, showToast } = useShare()
 const viewport = useViewport()
 const travel = useTravel({
   prefersReducedMotion: () =>
@@ -71,6 +73,7 @@ const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showTrail = ref(false)
+const showTrailPostcard = ref(false)
 const showTools = ref(false)
 const showLaunch = ref(false)
 const showLegend = ref(false)
@@ -290,6 +293,30 @@ function onShareClick() {
   if (article.value?.title) {
     shareArticle(article.value.title)
   }
+}
+
+function onTrailPostcard() {
+  showTrail.value = false
+  showTrailPostcard.value = true
+}
+
+/**
+ * Start the map over from where you are standing. Keeps the current realm
+ * so the world does not unload; drops every other stop, edge, and cached
+ * article that was only there for the old walk.
+ */
+function onTrailClear() {
+  const title = current.value
+  clearTrail()
+  if (title && articleCache.value[title]) {
+    articleCache.value = { [title]: articleCache.value[title] }
+  } else {
+    articleCache.value = {}
+  }
+  // Replace the address-bar entry so Back does not try to replay a graph
+  // we just erased (unknown node ids already fall through to jumpTo).
+  pushRealm(current.value, currentNodeId.value, { replace: true })
+  showToast('Trail cleared')
 }
 
 // Every shortcut in the app is declared here, in one registry. The Field
@@ -562,10 +589,18 @@ watch([graph, articleCache], () => {
       :can-share="Boolean(article)"
       @select="onTrailSelect"
       @home="onHomeClick"
-      @share="onShareClick"
+      @share="onTrailPostcard"
+      @clear="onTrailClear"
       @export="onExportClick"
       @import="onImportFile"
       @close="showTrail = false"
+    />
+
+    <TrailPostcard
+      :show="showTrailPostcard"
+      :graph="graph"
+      @toast="showToast"
+      @close="showTrailPostcard = false"
     />
 
 

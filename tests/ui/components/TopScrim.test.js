@@ -31,6 +31,14 @@ describe('TopScrim', () => {
     expect(mountScrim({ realm: null, trailLength: 0 }).find('.scrim__trail').exists()).toBe(false)
   })
 
+  it('names the trail rather than leaving the icon to be guessed', () => {
+    const trail = mountScrim({ trailLength: 3 }).find('.scrim__trail')
+    expect(trail.find('.scrim__trail-label').text()).toBe('Your trail')
+    expect(trail.find('.scrim__trail-count').text()).toBe('3')
+    // WCAG 2.5.3: the visible words sit inside the accessible name.
+    expect(trail.attributes('aria-label').toLowerCase()).toContain('your trail')
+  })
+
   it('disables travel it cannot do', () => {
     const wrapper = mountScrim({ canGoBack: false, canGoForward: true })
 
