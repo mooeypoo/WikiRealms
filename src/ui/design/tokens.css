@@ -65,14 +65,18 @@
   --edge-accent: rgba(116, 214, 232, 0.55);
 
   /* ── ACCENT ────────────────────────────────────────────────────────
-     Two accents, each with one meaning. Cyan is interactive: controls,
-     links, portals. Gold is YOUR TRAIL — history, breadcrumbs, visited
-     realms — and is used for nothing else, so a glance reads as "me". */
+     Three accents, each with one meaning. Cyan is interactive: controls,
+     links, portals, section titles. Gold is YOUR TRAIL — history,
+     breadcrumbs, visited realms. Sea is PAGEVIEWS — the fish that fill
+     the oceans — cooler than cyan so a glance does not confuse it with
+     a portal. */
   --accent: #74d6e8;                        /* 9.3:1 worst case */
   --accent-ink: #cff2fa;                    /* text on an accent fill */
   --accent-wash: rgba(116, 214, 232, 0.14);
   --trail: #e0b878;                         /* 8.4:1 worst case */
   --trail-wash: rgba(224, 184, 120, 0.14);
+  --sea: #98b4e6;                           /* pageviews / fish */
+  --sea-wash: rgba(152, 180, 230, 0.16);
 
   /* ── STATE ─────────────────────────────────────────────────────────── */
   --danger: #ff9a9a;
@@ -83,6 +87,7 @@
      For rgba() composition where a token alone will not do. */
   --accent-rgb: 116, 214, 232;
   --trail-rgb: 224, 184, 120;
+  --sea-rgb: 152, 180, 230;
   --ink-1-rgb: 233, 237, 243;
   --edge-rgb: 163, 184, 205;
   --surface-1-rgb: 10, 13, 20;
@@ -130,6 +135,7 @@
   --shadow-float: 0 10px 28px rgba(0, 0, 0, 0.5);
   --glow-accent: drop-shadow(0 0 8px rgba(116, 214, 232, 0.55));
   --glow-trail: drop-shadow(0 0 8px rgba(224, 184, 120, 0.45));
+  --glow-sea: drop-shadow(0 0 8px rgba(152, 180, 230, 0.45));
   --glow-subtle: drop-shadow(0 0 4px rgba(116, 214, 232, 0.3));
 
   /* ── MOTION ────────────────────────────────────────────────────────── */

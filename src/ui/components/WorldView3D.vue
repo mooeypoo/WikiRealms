@@ -2070,6 +2070,7 @@ watch(
     <div
       v-if="hoveredMarker"
       class="world-view-3d__tooltip"
+      :class="{ 'world-view-3d__tooltip--creature': hoveredMarker.type === 'creature' }"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
       <template v-if="hoveredMarker.type === 'portal'">
@@ -2123,6 +2124,18 @@ watch(
   color: var(--ink-1);
   pointer-events: none;
   white-space: nowrap;
+}
+
+/* Pageviews / fish — sea accent, so this popup is not the same cyan as
+   portals and section titles. */
+.world-view-3d__tooltip--creature {
+  border-color: rgba(var(--sea-rgb), 0.45);
+  background: color-mix(in srgb, var(--surface-1-solid) 88%, var(--sea) 12%);
+  box-shadow: 0 0 0 1px var(--sea-wash);
+}
+
+.world-view-3d__tooltip--creature strong {
+  color: var(--sea);
 }
 
 .world-view-3d__tooltip strong,

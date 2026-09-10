@@ -74,6 +74,7 @@ describe('design tokens', () => {
       { name: 'ink-3', floor: 3, role: 'labels only, never body text' },
       { name: 'accent', floor: 4.5, role: 'link and control text' },
       { name: 'trail', floor: 4.5, role: 'history and breadcrumb text' },
+      { name: 'sea', floor: 4.5, role: 'pageviews / fish signal text' },
       { name: 'danger', floor: 4.5, role: 'error text' },
     ]
 
