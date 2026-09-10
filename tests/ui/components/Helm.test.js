@@ -61,8 +61,10 @@ describe('Helm', () => {
     // It sits here rather than in the scrim because it explains the WORLD,
     // which is what the rest of this cluster is about.
     const wrapper = mountHelm()
+    const legend = wrapper.find('[aria-label="What am I looking at?"]')
 
-    await wrapper.find('[aria-label="What am I looking at?"]').trigger('click')
+    expect(legend.text()).toContain('Legend')
+    await legend.trigger('click')
 
     expect(wrapper.emitted('legend')).toHaveLength(1)
   })

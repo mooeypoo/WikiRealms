@@ -106,6 +106,22 @@ describe('Legend', () => {
     )
   })
 
+  it('explains foliage as citation-driven growth', () => {
+    mountLegend()
+    const text = document.querySelector('.legend__features').textContent
+    expect(text).toContain('Trees and grass')
+    expect(text).toContain('treeline')
+  })
+
+  it('explains fish as categories and pageviews', () => {
+    mountLegend()
+    const text = document.querySelector('.legend__features').textContent
+    expect(text).toContain('Fish in the seas')
+    expect(text).toContain('pageviews')
+    expect(text).toContain('categories')
+    expect(text).toContain('Land stays clear')
+  })
+
   it('points at features that are actually on screen', () => {
     mountLegend({
       anchors: {

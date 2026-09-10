@@ -125,12 +125,19 @@ describe('layer boundaries', () => {
    * packs the winter grade that stylizedMaterial samples — the grade
    * function itself is pure, the DataTexture is just how it ships;
    * limbGlow.js draws the atmosphere shell around the globe;
-   * polarMedallion.js draws the faceted ice plates at the poles.
+   * polarMedallion.js draws the faceted ice plates at the poles;
+   * creatureMaterial.js / creatureMotion.js draw and pose the blobs for
+   * creatureScatter.js's buffers; creatureAssets.js / fountainAssets.js
+   * load GLTF meshes that those materials instance.
    */
   const MAY_IMPORT_THREE = [
     'bladeGeometry.js',
     'canopyGeometry.js',
     'colorLut.js',
+    'creatureAssets.js',
+    'creatureMaterial.js',
+    'creatureMotion.js',
+    'fountainAssets.js',
     'limbGlow.js',
     'polarMedallion.js',
     'portalForms.js',

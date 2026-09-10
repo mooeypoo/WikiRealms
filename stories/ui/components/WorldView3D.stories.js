@@ -1,5 +1,5 @@
 import WorldView3D from '../../../src/ui/components/WorldView3D.vue'
-import { cassiniDivisionWorld } from '../../fixtures/cassiniDivision.js'
+import { cassiniDivisionArticle, cassiniDivisionWorld } from '../../fixtures/cassiniDivision.js'
 
 /**
  * The stage. Both stories render the identical generated world — `worldShape`
@@ -11,6 +11,8 @@ export default {
   component: WorldView3D,
   args: {
     world: cassiniDivisionWorld,
+    categories: cassiniDivisionArticle.categories,
+    pageviews: cassiniDivisionArticle.pageviews,
     showSections: true,
     showPortals: true,
     showFoliage: true,
@@ -18,6 +20,7 @@ export default {
   argTypes: {
     worldShape: { control: 'inline-radio', options: ['sphere', 'flat'] },
     world: { control: false },
+    categories: { control: false },
     onPortalClick: { action: 'portal-click' },
     onSectionClick: { action: 'section-click' },
   },
@@ -45,3 +48,22 @@ export const BareTerrain = {
     showFoliage: false,
   },
 }
+
+/**
+ * Close-up fauna: science-heavy categories (Cassini is astronomy) so blue
+ * hoppers dominate, foliage on so blobs are visible in the living world.
+ */
+export const WithBlobs = {
+  args: {
+    worldShape: 'sphere',
+    categories: [
+      'Astronomy',
+      'Planetary science',
+      'Rings of Saturn',
+      'Mammals of fiction',
+      'Olympic sports',
+    ],
+    pageviews: 250_000,
+  },
+}
+

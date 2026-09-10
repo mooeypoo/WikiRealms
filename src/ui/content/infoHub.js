@@ -12,8 +12,9 @@ export const infoHubContent = {
         <div class="info-hub__feature"><strong>Portals:</strong> each distinct outbound Wikipedia link becomes a route to another article's world.</div>
       </div>
       <p>Search for any English Wikipedia article to generate its world.</p>
-      <p>To see what the colours and markers of a world mean, open the legend from the
-      key icon beside the view controls, or press <kbd>L</kbd>.</p>
+      <p>To see what the colours and markers of a world mean, open the legend from
+      <em>Legend</em> beside the view controls, from <em>What am I looking at?</em>
+      in the Ledger, or press <kbd>L</kbd>.</p>
     `,
   },
   howItWorks: {
@@ -48,6 +49,16 @@ export const infoHubContent = {
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
         <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>
       </ul>
+      <h3>Credits</h3>
+      <p>
+        Fish models are from the
+        <a href="https://quaternius.com" target="_blank" rel="noopener noreferrer">Cute Fish Pack</a>
+        by <a href="https://www.patreon.com/quaternius" target="_blank" rel="noopener noreferrer">Quaternius</a>
+        (Creative Commons CC0). Portal fountains use pieces from
+        <a href="https://kenney.nl/assets/fantasy-town-kit" target="_blank" rel="noopener noreferrer">Fantasy Town Kit</a>
+        by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
+        (also CC0).
+      </p>
     `,
   },
   shortcuts: {

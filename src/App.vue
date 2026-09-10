@@ -452,6 +452,8 @@ watch([graph, articleCache], () => {
         v-if="worldStatus === 'success' && world && rendersInWebGL"
         ref="worldViewRef"
         :world="world"
+        :categories="article?.categories ?? []"
+        :pageviews="article?.pageviews ?? null"
         :show-portals="preferences.showPortals"
         :show-sections="preferences.showSections"
         :show-foliage="preferences.showFoliage"
@@ -508,6 +510,7 @@ watch([graph, articleCache], () => {
       @update:state="setLedgerState"
       @select="selectedPeak = $event"
       @share="onShareClick"
+      @legend="toggleLegend"
     />
 
     <PortalPreview

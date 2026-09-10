@@ -17,13 +17,14 @@
  * `normal` is the field that exists for the shape that has not been
  * built yet. The sprite ignores it — a billboard has no orientation to
  * set — but anything with geometry has to stand up out of the ground it
- * is on, which on the flat map is +Z everywhere and on the planet is the
- * surface radial. That is the same problem the canopy already solved, and
- * emitting the normal here means a future form inherits the solution
- * rather than rediscovering it.
+ * is on, which on the flat map follows the heightfield slope and on the
+ * planet is the surface radial. That is the same problem the canopy
+ * already solved, and emitting the normal here means a future form
+ * inherits the solution rather than rediscovering it.
  *
  * Free of three.js, so the arithmetic is unit-testable without a context.
  */
+import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 import { SPHERE_VIEW } from './projection.js'
 import { PORTAL_MARKERS } from './portalMarkers.js'
 import { computePortalLocalPosition } from './terrainMesh.js'
@@ -65,6 +66,60 @@ function clampY(y, height) {
 }
 
 /**
+ * Terrain height floored at sea level — same surface portals stand on.
+ *
+ * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
+ * @param {number} gridX
+ * @param {number} gridY
+ */
+function sampleSurfaceH01(terrain, gridX, gridY) {
+  const { width, height, heightMap } = terrain
+  const x = ((Math.round(gridX) % width) + width) % width
+  const y = Math.min(Math.max(Math.round(gridY), 0), height - 1)
+  return Math.max(heightMap[y * width + x] ?? 0, BIOME_THRESHOLDS.oceanMaxHeight)
+}
+
+/**
+ * Flat-map surface normal from the heightfield, so ground props follow
+ * the slope instead of always standing in world +Z.
+ *
+ * World +y is −gridY (see flatProjection.toLocal), so the finite
+ * difference along +world-y samples the previous grid row.
+ *
+ * @param {number} gridX
+ * @param {number} gridY
+ * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
+ * @param {number} heightScale
+ * @returns {{ x: number, y: number, z: number }}
+ */
+export function flatTerrainNormal(gridX, gridY, terrain, heightScale) {
+  const hx =
+    (sampleSurfaceH01(terrain, gridX + 1, gridY) - sampleSurfaceH01(terrain, gridX - 1, gridY)) *
+    heightScale *
+    0.5
+  const hy =
+    (sampleSurfaceH01(terrain, gridX, gridY - 1) - sampleSurfaceH01(terrain, gridX, gridY + 1)) *
+    heightScale *
+    0.5
+  const len = Math.hypot(hx, hy, 1) || 1
+  return { x: -hx / len, y: -hy / len, z: 1 / len }
+}
+
+/**
+ * Up-direction a geometry portal should stand along.
+ *
+ * @param {number} gridX
+ * @param {number} gridY
+ * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
+ * @param {number} heightScale
+ * @param {object} projection
+ */
+export function portalSurfaceNormal(gridX, gridY, terrain, heightScale, projection) {
+  if (projection.isSpherical) return projection.normalAt(gridX, gridY, terrain)
+  return flatTerrainNormal(gridX, gridY, terrain, heightScale)
+}
+
+/**
  * Grid distance between two cells, wrapping longitude.
  *
  * @param {number} ax
@@ -80,35 +135,42 @@ export function portalGridDistance(ax, ay, bx, by, width) {
 /**
  * Push portal cells apart until each pair clears `minSeparation` cells.
  *
- * Used only for the planet view: the same authored cells can sit closer
- * than a marker's pick radius, and on the globe that turns two links into
- * one target. Flat mode leaves the sunflower layout alone.
- *
- * Longitude wraps; latitude clamps. Coincident cells get a deterministic
+ * Used on both flat and planet views so a link-heavy section stays
+ * pickable after sunflower placement. Longitude wraps on the planet
+ * only; flat maps clamp both axes. Coincident cells get a deterministic
  * shove so the loop does not stall on a zero-length vector.
  *
  * @param {Array<{ gridX: number, gridY: number }>} portals
  * @param {{ width: number, height: number }} terrain
- * @param {{ minSeparation?: number, iterations?: number }} [options]
+ * @param {{ minSeparation?: number, iterations?: number, wrapLongitude?: boolean }} [options]
  * @returns {Array<{ gridX: number, gridY: number }>}
  */
 export function spreadPortalGridCells(portals, terrain, options = {}) {
   const { width, height } = terrain
-  const minSeparation = options.minSeparation ?? SPHERE_VIEW.portalMinSeparationCells
+  const minSeparation = options.minSeparation ?? PORTAL_MARKERS.minSeparationCells
   const iterations = options.iterations ?? SPHERE_VIEW.portalSpreadIterations
+  const wrapLongitude = options.wrapLongitude ?? true
+  const fitX = (x) => (wrapLongitude ? wrapX(x, width) : Math.min(width - 1, Math.max(0, x)))
   const cells = portals.map((portal) => ({
-    gridX: wrapX(portal.gridX, width),
+    gridX: fitX(portal.gridX),
     gridY: clampY(portal.gridY, height),
   }))
 
-  if (cells.length < 2 || minSeparation <= 0) return cells
+  if (cells.length < 2 || minSeparation <= 0) {
+    return cells.map((cell) => ({
+      gridX: Math.round(fitX(cell.gridX)),
+      gridY: Math.round(clampY(cell.gridY, height)),
+    }))
+  }
 
   for (let iter = 0; iter < iterations; iter += 1) {
     for (let i = 0; i < cells.length; i += 1) {
       for (let j = i + 1; j < cells.length; j += 1) {
         const a = cells[i]
         const b = cells[j]
-        let dx = wrappedDeltaX(a.gridX, b.gridX, width)
+        let dx = wrapLongitude
+          ? wrappedDeltaX(a.gridX, b.gridX, width)
+          : b.gridX - a.gridX
         let dy = b.gridY - a.gridY
         let dist = Math.hypot(dx, dy)
 
@@ -124,16 +186,16 @@ export function spreadPortalGridCells(portals, terrain, options = {}) {
         const push = (minSeparation - dist) / 2
         const ux = dx / dist
         const uy = dy / dist
-        a.gridX = wrapX(a.gridX - ux * push, width)
+        a.gridX = fitX(a.gridX - ux * push)
         a.gridY = clampY(a.gridY - uy * push, height)
-        b.gridX = wrapX(b.gridX + ux * push, width)
+        b.gridX = fitX(b.gridX + ux * push)
         b.gridY = clampY(b.gridY + uy * push, height)
       }
     }
   }
 
   return cells.map((cell) => ({
-    gridX: Math.round(wrapX(cell.gridX, width)),
+    gridX: Math.round(fitX(cell.gridX)),
     gridY: Math.round(clampY(cell.gridY, height)),
   }))
 }
@@ -147,9 +209,8 @@ export function spreadPortalGridCells(portals, terrain, options = {}) {
  * placement in the same order so an object can be found again by its
  * position in the layer.
  *
- * On the planet, nearby portals are nudged apart in grid space first so
- * their pick volumes do not swallow each other. Flat mode uses the
- * authored cells as-is.
+ * Nearby portals are nudged apart in grid space first so their pick
+ * volumes do not swallow each other — on both flat and planet views.
  *
  * @param {Array<object>} portals world.portals
  * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
@@ -162,28 +223,35 @@ export function spreadPortalGridCells(portals, terrain, options = {}) {
  */
 export function placePortals(portals, terrain, heightScale, projection) {
   const list = portals ?? []
-  const cells = projection.isSpherical
-    ? spreadPortalGridCells(list, terrain)
-    : list.map((portal) => ({ gridX: portal.gridX, gridY: portal.gridY }))
+  const minSeparation = projection.isSpherical
+    ? SPHERE_VIEW.portalMinSeparationCells
+    : PORTAL_MARKERS.minSeparationCells
+  const cells = spreadPortalGridCells(list, terrain, {
+    minSeparation,
+    wrapLongitude: Boolean(projection.isSpherical),
+  })
 
   return list.map((portal, index) => {
     const cell = cells[index]
-    // Submerged cells are lifted to sea level first, so a portal over
-    // deep ocean floats above the water rather than drowning under it.
+    // Seat on the neighbourhood-max surface (offset 0), then lift along
+    // the same normal the form will stand on. Lifting along flat +Z and
+    // then undoing along a tilted slope normal was burying fountains on
+    // steep mid-slopes (Halley's Comet → Renaissance).
     const local = computePortalLocalPosition(
       { ...portal, gridX: cell.gridX, gridY: cell.gridY },
       terrain,
       heightScale,
-      PORTAL_MARKERS.hoverOffset,
+      0,
       projection,
     )
-    const normal = projection.normalAt(local.gridX, local.gridY, terrain)
+    const normal = portalSurfaceNormal(local.gridX, local.gridY, terrain, heightScale, projection)
+    const lift = PORTAL_MARKERS.hoverOffset
 
     return {
       portal,
-      x: local.x,
-      y: local.y,
-      z: local.z,
+      x: local.x + normal.x * lift,
+      y: local.y + normal.y * lift,
+      z: local.z + normal.z * lift,
       gridX: local.gridX,
       gridY: local.gridY,
       surfaceH01: local.surfaceH01,

@@ -83,10 +83,29 @@ export const FEATURE_LEGEND = [
       `damp, mossy stone where a barren one's is dry scree, and its trees climb higher before ` +
       `giving out. The polar ice is the exception — every world has it.`,
   },
+  {
+    id: 'foliage',
+    label: 'Trees and grass grow from how well a section cites',
+    detail:
+      'Greener ground hosts denser understory and canopy. Altitude thins them toward the treeline; ' +
+      'barren bands stay bare. The same lushness that paints the ground is what decides how much grows on it.',
+  },
+  {
+    id: 'creatures',
+    label: 'Fish in the seas show how many people read the article',
+    detail:
+      'Thirty-day pageviews fill the oceans with fish: quieter pages stay sparse, ' +
+      'busier ones host denser schools. Wikipedia categories tint which species appear ' +
+      '(reef fish nearer the shelf, larger ones in deeper water). Land stays clear of animals.',
+  },
 ]
 
 export const WATER_SWATCH = biomeColor(BIOME.OCEAN, 0.5)
 export const SNOW_SWATCH = biomeColor(BIOME.SNOW, 0.95)
+/** Canopy green — matches woodland foliage rather than inventing a third green. */
+export const FOLIAGE_SWATCH = biomeColor(BIOME.WOODLAND, 0.55)
+/** Soft cyan — reads as water fauna on the legend swatch. */
+export const CREATURE_SWATCH = '#5a9ec4'
 
 function percent(fraction) {
   return `${Math.round(fraction * 100)}%`

@@ -9,11 +9,19 @@
  */
 export const LEDGER_STATES = Object.freeze(['collapsed', 'peek', 'open', 'full'])
 
-/** peek / open / full as fractions of the viewport. Collapsed sizes itself. */
-export const LEDGER_SNAP_POINTS = Object.freeze([0.16, 0.42, 0.88])
+/** peek / open / full as fractions of the viewport. Collapsed sizes itself.
+ *  Peek renders compact (height: auto); this fraction is only the drag
+ *  settle target / clearance estimate for that rung. */
+export const LEDGER_SNAP_POINTS = Object.freeze([0.28, 0.42, 0.88])
 
-/** Roughly what the collapsed bar occupies, including its safe-area padding. */
-export const LEDGER_COLLAPSED_HEIGHT = 60
+/** Roughly what the collapsed bar + legend footer occupy, including padding. */
+export const LEDGER_COLLAPSED_HEIGHT = 108
+
+/**
+ * Peek is content-sized (header + legend). A viewport fraction overstated
+ * the lift once the hollow body went away.
+ */
+export const LEDGER_PEEK_HEIGHT = 240
 
 /**
  * How far something in the bottom-right must rise to clear the sheet.
@@ -26,7 +34,7 @@ export const LEDGER_COLLAPSED_HEIGHT = 60
  */
 export function ledgerClearance(state) {
   if (state === 'collapsed') return `${LEDGER_COLLAPSED_HEIGHT}px`
-  if (state === 'peek') return `calc(${LEDGER_SNAP_POINTS[0] * 100}dvh + 8px)`
+  if (state === 'peek') return `${LEDGER_PEEK_HEIGHT}px`
   return '0px'
 }
 

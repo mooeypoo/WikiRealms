@@ -15,5 +15,17 @@ const config = {
     options: { docgen: false },
   },
   core: { disableTelemetry: true },
+  async viteFinal(config) {
+    config.server ??= {}
+    config.server.proxy = {
+      ...config.server.proxy,
+      '/api/aqs': {
+        target: 'https://wikimedia.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/aqs/, '/api/rest_v1'),
+      },
+    }
+    return config
+  },
 }
 export default config

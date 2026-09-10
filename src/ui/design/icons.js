@@ -51,6 +51,12 @@ export const ICONS = {
   // The wordmark's glyph. A portal seen edge-on: the app's one piece of
   // identity, so it lives with the icons rather than as a stray asset.
   mark: '<path d="M12 2.5L20 12l-8 9.5L4 12z" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />',
+  // Ledger readouts: map vocabulary, not generic chrome.
+  peaks: '<path d="M2.5 19.5L8.5 7l3.2 5.2L15 5.5l6.5 14z" /><path d="M2.5 19.5h19" />',
+  tree: '<path d="M12 21v-6" /><path d="M12 15c-3.2 0-5.5-2-5.5-4.6C6.5 7.8 9 5.5 12 3.5c3 2 5.5 4.3 5.5 6.9C17.5 13 15.2 15 12 15z" /><path d="M8.2 12.2c-1.4.6-2.2 1.6-2.2 2.9 0 1.7 1.8 3 4 3h4c2.2 0 4-1.3 4-3 0-1.3-.8-2.3-2.2-2.9" />',
+  prose: '<path d="M5 7h14" /><path d="M5 12h11" /><path d="M5 17h8" />',
+  // Ocean fauna / pageviews — a simple side-on fish, not the old land blob.
+  fish: '<path d="M3.5 12c2.2-4.2 5.6-6.2 9.2-6.2 4.6 0 6.6 2.6 8.8 6.2-2.2 3.6-4.2 6.2-8.8 6.2-3.6 0-7-2-9.2-6.2z" /><circle cx="8.2" cy="11.2" r="0.85" fill="currentColor" stroke="none" /><path d="M16.8 12l3.7-3.2v6.4z" />',
 }
 
 export const ICON_NAMES = Object.keys(ICONS)

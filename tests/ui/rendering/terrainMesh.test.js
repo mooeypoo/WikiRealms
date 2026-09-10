@@ -4,6 +4,7 @@ import {
   computeGroundAttributes,
   computePeakFlagPosition,
   computePortalLocalPosition,
+  samplePortalSurfaceH01,
 } from '../../../src/ui/rendering/terrainMesh.js'
 import { SNOW_RGB, biomeGroundRgb, groundRgbAt } from '../../../src/ui/rendering/biomeColor.js'
 import { BIOME, lushnessBand, snowCover } from '../../../src/engine/generation/terrain.js'
@@ -233,8 +234,7 @@ describe('computePortalLocalPosition', () => {
   })
 
   it('floats above the terrain surface height at that cell', () => {
-    const terrain = makeTerrain()
-    terrain.heightMap[0] = 0.8 // gridX=0, gridY=0 -> index 0
+    const terrain = makeTerrain({ heightMap: new Float64Array(16).fill(0.8) })
 
     const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10, 1.5)
 
@@ -242,8 +242,7 @@ describe('computePortalLocalPosition', () => {
   })
 
   it('uses a default hover offset when not specified', () => {
-    const terrain = makeTerrain()
-    terrain.heightMap[0] = 0
+    const terrain = makeTerrain({ heightMap: new Float64Array(16).fill(0) })
 
     const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10)
 
@@ -251,12 +250,22 @@ describe('computePortalLocalPosition', () => {
   })
 
   it('keeps a portal above the water surface when its cell is submerged', () => {
-    const terrain = makeTerrain()
-    terrain.heightMap[0] = 0.1
+    const terrain = makeTerrain({ heightMap: new Float64Array(16).fill(0.1) })
 
     const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10, 3)
 
     expect(position.z).toBeCloseTo(0.32 * 10 + 3)
+  })
+
+  it('seats on the tallest cell under the portal footprint', () => {
+    const terrain = makeTerrain({ heightMap: new Float64Array(16).fill(0.3) })
+    terrain.heightMap[1] = 0.9 // (1,0) — inside radius 3
+
+    expect(samplePortalSurfaceH01(terrain, 0, 0)).toBeCloseTo(0.9, 5)
+
+    const position = computePortalLocalPosition({ gridX: 0, gridY: 0 }, terrain, 10, 0)
+    expect(position.surfaceH01).toBeCloseTo(0.9, 5)
+    expect(position.z).toBeCloseTo(0.9 * 10, 5)
   })
 })
 

@@ -136,12 +136,14 @@ describe('accessibility', () => {
 
   it('never marks a control with a glyph that means something else', async () => {
     // "?" opens About. An icon that looks like it and does not is a trap,
-    // which is exactly what the legend's first icon was.
+    // which is exactly what the legend's first icon was. A short text
+    // label is fine; a bare question-mark affordance is not.
     await inAWorld()
 
     const legend = document.querySelector('[aria-label="What am I looking at?"]')
-    expect(legend.textContent.trim()).toBe('')
-    expect(legend.innerHTML).not.toContain('?')
+    expect(legend.querySelector('svg.icon')).not.toBeNull()
+    expect(legend.textContent).toMatch(/Legend/)
+    expect(legend.textContent.trim()).not.toBe('?')
   })
 
   it('keeps chrome free of emoji, whatever the content does', async () => {

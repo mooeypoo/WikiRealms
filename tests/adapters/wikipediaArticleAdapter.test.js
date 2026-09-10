@@ -35,9 +35,21 @@ function makeSectionsHtml() {
   return '<html><body><section data-mw-section-id="0"><p>Lead text.</p></section></body></html>'
 }
 
-/** A fetchImpl that routes based on URL: action API vs REST with_html. */
-function makeCombinedFetchImpl({ queryResponse = makeRawResponse(), sectionsHtml = makeSectionsHtml() } = {}) {
+/** A fetchImpl that routes based on URL: action API vs REST with_html vs AQS. */
+function makeCombinedFetchImpl({
+  queryResponse = makeRawResponse(),
+  sectionsHtml = makeSectionsHtml(),
+  pageviews = { items: [{ views: 1000 }, { views: 2000 }] },
+  pageviewsOk = true,
+} = {}) {
   return vi.fn().mockImplementation((url) => {
+    if (url.includes('pageviews')) {
+      return Promise.resolve({
+        ok: pageviewsOk,
+        status: pageviewsOk ? 200 : 404,
+        json: () => Promise.resolve(pageviews),
+      })
+    }
     if (url.includes('with_html')) {
       return Promise.resolve(makeFetchResponse({ html: sectionsHtml }))
     }
@@ -60,15 +72,27 @@ describe('fetchWikipediaArticle', () => {
 
     expect(article.title).toBe('Albert Einstein')
     expect(article.latestRevisionId).toBe(1234)
+    expect(article.pageviews).toBe(3000)
     expect(article.sections).toBeDefined()
     expect(article.sections.lead.ownSize).toBeGreaterThan(0)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-    const [firstUrl, firstOptions] = fetchImpl.mock.calls[0]
-    const [secondUrl, secondOptions] = fetchImpl.mock.calls[1]
-    expect(firstUrl).toContain('titles=Albert+Einstein')
-    expect(secondUrl).toContain('with_html')
-    expect(firstOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
-    expect(secondOptions.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    const urls = fetchImpl.mock.calls.map(([url]) => url)
+    expect(urls[0]).toContain('titles=Albert+Einstein')
+    expect(urls.some((url) => url.includes('with_html'))).toBe(true)
+    expect(urls.some((url) => url.includes('pageviews'))).toBe(true)
+    for (const [, options] of fetchImpl.mock.calls) {
+      expect(options.headers['Api-User-Agent']).toBe(WIKIMEDIA_USER_AGENT)
+    }
+  })
+
+  it('soft-fails pageviews to null when the metrics request fails', async () => {
+    const fetchImpl = makeCombinedFetchImpl({ pageviewsOk: false })
+
+    const article = await fetchWikipediaArticle('Albert Einstein', { fetchImpl })
+
+    expect(article.title).toBe('Albert Einstein')
+    expect(article.pageviews).toBeNull()
+    expect(article.sections).toBeDefined()
   })
 
   it('throws ArticleNotFoundError when the page is missing', async () => {

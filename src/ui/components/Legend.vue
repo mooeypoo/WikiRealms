@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import { useOverlays } from '../design/useOverlays.js'
 import {
+  CREATURE_SWATCH,
   FEATURE_LEGEND,
+  FOLIAGE_SWATCH,
   GROUND_LEGEND,
   LUSHNESS_CEILING_NOTE,
   SNOW_SWATCH,
@@ -57,6 +59,14 @@ const annotations = computed(() =>
 )
 
 const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[entry.id]))
+
+function featureSwatch(id) {
+  if (id === 'water') return WATER_SWATCH
+  if (id === 'snow') return SNOW_SWATCH
+  if (id === 'foliage') return FOLIAGE_SWATCH
+  if (id === 'creatures') return CREATURE_SWATCH
+  return 'var(--accent)'
+}
 </script>
 
 <template>
@@ -107,13 +117,7 @@ const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[ent
             <h3>And the rest</h3>
             <ul class="legend__features">
               <li v-for="entry in keyed" :key="entry.id">
-                <span
-                  class="legend__swatch"
-                  :style="{
-                    background:
-                      entry.id === 'water' ? WATER_SWATCH : entry.id === 'snow' ? SNOW_SWATCH : 'var(--accent)',
-                  }"
-                />
+                <span class="legend__swatch" :style="{ background: featureSwatch(entry.id) }" />
                 <span class="legend__text">
                   <strong>{{ entry.label }}</strong>
                   <span>{{ entry.detail }}</span>

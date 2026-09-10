@@ -65,7 +65,8 @@ export function normalizeArticleResponse(raw, { language = 'en' } = {}) {
     categories: (page.categories ?? []).map((category) => stripCategoryPrefix(category.title)),
     links: (page.links ?? []).map((link) => link.title),
     images: (page.images ?? []).map((image) => image.title),
-    // Not fetched in MVP v1; left as explicit placeholders for future milestones.
+    // Filled by the article adapter from AQS (30-day user views); null
+    // until then or when the metrics request soft-fails.
     pageviews: null,
     sectionCount: null,
   }

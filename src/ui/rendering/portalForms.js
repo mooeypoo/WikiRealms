@@ -2,9 +2,9 @@
  * WHAT a portal looks like — one implementation per shape, behind one
  * contract, so the shape can be replaced without touching the renderer.
  *
- * Two shapes ship: `vortex` (the default — a pink/cyan swirl that reads
- * as a destination, deliberately unlike section halos) and `aperture`
- * (the older additive billboard, kept so a preference can still ask).
+ * Three shapes ship: `fountain` (Kenney Fantasy Town round fountain —
+ * the spike default), `vortex` (pink/cyan swirl), and `aperture` (the
+ * older additive billboard, kept so a preference can still ask).
  *
  * THE CONTRACT
  *
@@ -33,6 +33,12 @@
  */
 import * as THREE from 'three'
 import { PORTAL_MARKERS } from './portalMarkers.js'
+import {
+  FOUNTAIN_BEAM,
+  FOUNTAIN_GROUND_CLEARANCE,
+  FOUNTAIN_SCALE_MUL,
+  getFountainAsset,
+} from './fountainAssets.js'
 
 /**
  * The aperture texture: a soft aura, two rings, four cardinal ticks and a
@@ -258,14 +264,238 @@ const vortexForm = {
   },
 }
 
+/**
+ * Soft vertical falloff for the fountain beacon — brighter at the base,
+ * fading upward, with a radial soft edge. DataTexture so jsdom tests
+ * do not need a canvas 2D context.
+ *
+ * @returns {THREE.DataTexture}
+ */
+export function createFountainBeamTexture() {
+  const width = 32
+  const height = 64
+  const data = new Uint8Array(width * height * 4)
+  for (let y = 0; y < height; y += 1) {
+    const along = y / (height - 1)
+    // Bottom of the texture is the base of the beam (brighter).
+    const vertical = Math.pow(1 - along, 1.15)
+    for (let x = 0; x < width; x += 1) {
+      const nx = ((x + 0.5) / width) * 2 - 1
+      const radial = Math.pow(Math.max(0, 1 - Math.abs(nx)), 2.1)
+      const alpha = Math.round(255 * vertical * radial)
+      const i = (y * width + x) * 4
+      // Cyan-tinted white; material colour multiplies this.
+      data[i] = 200
+      data[i + 1] = 240
+      data[i + 2] = 255
+      data[i + 3] = alpha
+    }
+  }
+  const texture = new THREE.DataTexture(data, width, height)
+  texture.needsUpdate = true
+  texture.wrapS = THREE.ClampToEdgeWrapping
+  texture.wrapT = THREE.ClampToEdgeWrapping
+  return texture
+}
+
+/**
+ * 0 at rest → 1 at full hover grow, matching the lerped hoverScale the
+ * render loop already carries on each portal object.
+ *
+ * @param {number} hoverScale
+ */
+export function fountainHoverAmount(hoverScale) {
+  const max = PORTAL_MARKERS.hover.scale
+  if (!(max > 1)) return 0
+  return Math.min(1, Math.max(0, (hoverScale - 1) / (max - 1)))
+}
+
+/**
+ * Kenney Fantasy Town round fountain — a place you walk to, not a VFX orb.
+ *
+ * Sits lightly above the ground (undoes the vortex hoverOffset), tilts
+ * with the surface normal, and raises a soft vertical beacon so it stays
+ * findable through vegetation without carpeting the section.
+ */
+const fountainForm = {
+  id: 'fountain',
+
+  create() {
+    const up = new THREE.Vector3(0, 0, 1)
+    const normal = new THREE.Vector3()
+    const rimGeometry = new THREE.TorusGeometry(0.48, 0.028, 6, 24)
+    rimGeometry.rotateX(Math.PI / 2)
+    const glowGeometry = new THREE.SphereGeometry(0.85, 12, 10)
+    const beamTexture = createFountainBeamTexture()
+    const beamGeometry = new THREE.PlaneGeometry(FOUNTAIN_BEAM.width, FOUNTAIN_BEAM.height)
+    // Plane was XY; tip it so height runs along local +Z (surface up).
+    beamGeometry.rotateX(Math.PI / 2)
+    const sharedMaterials = []
+    const beamMaterials = []
+
+    const makeGlowMaterial = (opacity) => {
+      const material = new THREE.MeshBasicMaterial({
+        color: PORTAL_MARKERS.vortex.cyan,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+        opacity,
+      })
+      sharedMaterials.push(material)
+      return material
+    }
+
+    const makeBeamMaterial = () => {
+      const material = new THREE.MeshBasicMaterial({
+        map: beamTexture,
+        color: PORTAL_MARKERS.vortex.cyan,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+        side: THREE.DoubleSide,
+        opacity: FOUNTAIN_BEAM.idleOpacity,
+      })
+      beamMaterials.push(material)
+      return material
+    }
+
+    /** Skip picking — the stone prop is the hit target, not the VFX. */
+    const unpickable = (mesh) => {
+      mesh.raycast = () => {}
+      return mesh
+    }
+
+    return {
+      id: 'fountain',
+
+      build(placement) {
+        const asset = getFountainAsset()
+        const group = new THREE.Group()
+
+        if (asset?.template) {
+          const prop = asset.template.clone(true)
+          const opacities = new Map()
+          prop.traverse((child) => {
+            if (!child.isMesh || !child.material) return
+            if (Array.isArray(child.material)) {
+              child.material = child.material.map((material) => {
+                const own = material.clone()
+                opacities.set(own, material.opacity ?? 1)
+                return own
+              })
+            } else {
+              const own = child.material.clone()
+              opacities.set(own, child.material.opacity ?? 1)
+              child.material = own
+            }
+          })
+          group.add(prop)
+          group.userData.baseOpacities = opacities
+        } else {
+          // Asset still loading — a quiet placeholder so the layer is not empty.
+          const stub = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.28, 0.32, 0.45, 10),
+            makeGlowMaterial(0.4),
+          )
+          stub.rotation.x = Math.PI / 2
+          group.add(stub)
+          group.userData.baseOpacities = new Map()
+        }
+
+        // Soft aura first so the stone reads on top of the glow.
+        const glow = unpickable(new THREE.Mesh(glowGeometry, makeGlowMaterial(FOUNTAIN_BEAM.glowIdle)))
+        glow.position.z = 0.35
+        group.add(glow)
+        group.userData.glow = glow
+
+        const rim = unpickable(new THREE.Mesh(rimGeometry, makeGlowMaterial(FOUNTAIN_BEAM.rimIdle)))
+        rim.position.z = 0.03
+        group.add(rim)
+        group.userData.rim = rim
+
+        // Crossed sheets: a soft column that reads from most angles without
+        // a heavy solid volume. Own materials so hover can brighten each.
+        const beamA = unpickable(new THREE.Mesh(beamGeometry, makeBeamMaterial()))
+        const beamB = unpickable(new THREE.Mesh(beamGeometry, makeBeamMaterial()))
+        beamB.rotation.z = Math.PI / 2
+        // Base of the texture sits just above the basin.
+        const beamLift = FOUNTAIN_BEAM.height * 0.5 + 0.35
+        beamA.position.z = beamLift
+        beamB.position.z = beamLift
+        group.add(beamA, beamB)
+        group.userData.beams = [beamA, beamB]
+
+        normal.set(placement.normal.x, placement.normal.y, placement.normal.z)
+        if (normal.lengthSq() > 0) normal.normalize()
+        else normal.set(0, 0, 1)
+
+        group.position.set(placement.x, placement.y, placement.z)
+        // Placement still uses the vortex hoverOffset; a ground prop sits
+        // back down with a light clearance so it rides the contour.
+        group.position.addScaledVector(normal, -(PORTAL_MARKERS.hoverOffset - FOUNTAIN_GROUND_CLEARANCE))
+        group.quaternion.setFromUnitVectors(up, normal)
+        group.scale.setScalar(placement.baseScale * FOUNTAIN_SCALE_MUL)
+        return tagPortalObject(group, placement)
+      },
+
+      apply(object, { scale, opacity, hoverScale = object.userData.hoverScale ?? 1 }) {
+        object.scale.setScalar(scale * FOUNTAIN_SCALE_MUL)
+        const hover = fountainHoverAmount(hoverScale)
+        const glowOpacity =
+          opacity * (FOUNTAIN_BEAM.glowIdle + (FOUNTAIN_BEAM.glowHover - FOUNTAIN_BEAM.glowIdle) * hover)
+        const rimOpacity =
+          opacity * (FOUNTAIN_BEAM.rimIdle + (FOUNTAIN_BEAM.rimHover - FOUNTAIN_BEAM.rimIdle) * hover)
+        const beamOpacity =
+          opacity * (FOUNTAIN_BEAM.idleOpacity + (FOUNTAIN_BEAM.hoverOpacity - FOUNTAIN_BEAM.idleOpacity) * hover)
+
+        const opacities = object.userData.baseOpacities
+        object.traverse((child) => {
+          if (!child.isMesh || !child.material) return
+          if (child === object.userData.glow) {
+            child.material.opacity = glowOpacity
+            return
+          }
+          if (child === object.userData.rim) {
+            child.material.opacity = rimOpacity
+            return
+          }
+          if (object.userData.beams?.includes(child)) {
+            child.material.opacity = beamOpacity
+            return
+          }
+          const materials = Array.isArray(child.material) ? child.material : [child.material]
+          for (const material of materials) {
+            const base = opacities?.get(material) ?? 1
+            material.opacity = base * opacity
+          }
+        })
+      },
+
+      dispose() {
+        for (const material of sharedMaterials) material.dispose()
+        for (const material of beamMaterials) material.dispose()
+        sharedMaterials.length = 0
+        beamMaterials.length = 0
+        rimGeometry.dispose()
+        glowGeometry.dispose()
+        beamGeometry.dispose()
+        beamTexture.dispose()
+      },
+    }
+  },
+}
+
 /** Every shape a portal can take, by id. */
 export const PORTAL_FORMS = Object.freeze({
+  [fountainForm.id]: fountainForm,
   [vortexForm.id]: vortexForm,
   [apertureForm.id]: apertureForm,
 })
 
 /** The shape the map uses when nothing says otherwise. */
-export const DEFAULT_PORTAL_FORM = vortexForm.id
+export const DEFAULT_PORTAL_FORM = fountainForm.id
 
 /**
  * Which form an id names, falling back to the default for an

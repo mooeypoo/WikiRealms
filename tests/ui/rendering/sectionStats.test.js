@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   estimateWordCount,
+  formatPageviews,
   formatSources,
   formatSubsections,
   formatWords,
@@ -66,5 +67,19 @@ describe('formatSubsections', () => {
     expect(formatSubsections(3)).toBe('3 subsections')
     expect(formatSubsections(1)).toBe('1 subsection')
     expect(formatSubsections(0)).toBe('')
+  })
+})
+
+describe('formatPageviews', () => {
+  it('compacts thousands and millions for the Ledger tile', () => {
+    expect(formatPageviews(0)).toBe('0')
+    expect(formatPageviews(999)).toBe('999')
+    expect(formatPageviews(28400)).toBe('28.4k')
+    expect(formatPageviews(1_250_000)).toBe('1.3M')
+  })
+
+  it('uses an em dash when views are unknown', () => {
+    expect(formatPageviews(null)).toBe('—')
+    expect(formatPageviews(undefined)).toBe('—')
   })
 })

@@ -86,10 +86,13 @@ needs to be used now, but it's worth capturing so nothing is forgotten.
 - centrality / prominence — *not fetched*
 
 ### Popularity features
-- pageviews — *not fetched today (needs a separate Wikimedia REST API,
-  `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/...`);
-  explicitly deferred — earmarked for a later "settlement/landmark density"
-  feature, not core to the section/peak terrain model*
+- pageviews — *fetched* via Wikimedia AQS
+  (`…/metrics/pageviews/per-article/...`, last 30 complete UTC days of
+  user views). Soft-fails to `null` so a metrics outage never blocks a
+  realm. Used for creature density (how many blobs), not terrain.
+  Browser requests go through the same-origin `/api/aqs` proxy (Vite /
+  Netlify) so we can send the shared `Api-User-Agent` — AQS rejects CORS
+  preflight when that header is sent cross-origin.
 - relative attention or traffic signals — *not fetched*
 
 ### Fetching notes

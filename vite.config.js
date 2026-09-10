@@ -47,10 +47,22 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_SITE_ORIGIN': JSON.stringify(origin),
     },
+    server: {
+      // AQS rejects CORS preflight (OPTIONS → 405) when we send
+      // Api-User-Agent. Same-origin proxy keeps the shared UA and works.
+      proxy: {
+        '/api/aqs': {
+          target: 'https://wikimedia.org',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/aqs/, '/api/rest_v1'),
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       globals: true,
       include: ['tests/**/*.test.js'],
+      setupFiles: ['tests/vitest.setup.js'],
     },
   }
 })

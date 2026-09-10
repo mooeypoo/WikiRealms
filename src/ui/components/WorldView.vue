@@ -34,7 +34,13 @@ const canvasHeight = computed(() => props.world.terrain.height * CELL_SIZE)
 
 function draw() {
   const canvas = canvasRef.value
-  const ctx = canvas?.getContext('2d')
+  // Some environments throw rather than return null (or emit and return null).
+  let ctx = null
+  try {
+    ctx = canvas?.getContext('2d') ?? null
+  } catch {
+    return
+  }
   if (!ctx) return // no 2D context available (e.g. non-browser test environment)
 
   const { width, height, heightMap, biomeMap } = props.world.terrain
