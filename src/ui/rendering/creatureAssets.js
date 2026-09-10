@@ -109,6 +109,13 @@ export function preparePetScene(scene) {
   const material = sourceMaterial ? sourceMaterial.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff })
   material.side = THREE.DoubleSide
   material.transparent = false
+  // Cube Pets colour comes from the shared colormap atlas (UV per mesh).
+  // Without it every animal is untextured white and looks identical.
+  if (material.map) {
+    material.map.colorSpace = THREE.SRGBColorSpace
+    material.map.needsUpdate = true
+    material.needsUpdate = true
+  }
 
   return { geometry: merged, material }
 }

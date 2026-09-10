@@ -57,6 +57,9 @@ export const SEA_PET_IDS = Object.freeze(KENNEY_PET_IDS.filter((id) => KENNEY_PE
  * Motion / size profile for a pet. Models are normalised to unit height;
  * `scale` is in grid cells (then multiplied by the projection's foliageScale).
  *
+ * Sized to read from default orbit — small enough to stay accents, large
+ * enough not to vanish into fleas again.
+ *
  * @param {KenneyPet} pet
  */
 export function petArchetype(pet) {
@@ -73,35 +76,43 @@ export function petArchetype(pet) {
     gait: sea ? 'breach' : 'hop',
     hopHeight: sea ? 0.55 : 0.45,
     gaitSpeed: sea ? 0.85 : 1,
-    scale: sea ? 1.9 : 1.65,
+    scale: sea ? 5.2 : 4.8,
   })
 }
 
 /**
- * Pets available for a topic family in a habitat. Falls back to every pet
- * in that habitat so a sparse mix never fails to place.
+ * Soft family preference over the full habitat pool.
  *
- * @param {string} family
- * @param {string} habitat
- * @returns {string[]}
- */
-export function petsForFamily(family, habitat) {
-  const pool = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
-  const preferred = pool.filter((id) => KENNEY_PETS[id].families.includes(family))
-  return preferred.length > 0 ? preferred : [...pool]
-}
-
-/**
- * Deterministic pick from a family's habitat pool.
+ * Preferred pets get half the roll space so a physics article still leans
+ * science-ish, but the other half draws from every land (or sea) pet —
+ * otherwise Einstein is almost only polar / bee / caterpillar.
  *
  * @param {string} family
  * @param {string} habitat
  * @param {number} roll 0..1
  */
 export function pickPetForFamily(family, habitat, roll) {
-  const pool = petsForFamily(family, habitat)
+  const all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
+  const preferred = all.filter((id) => KENNEY_PETS[id].families.includes(family))
   const t = Math.min(0.999999, Math.max(0, roll))
-  return pool[Math.floor(t * pool.length)]
+
+  if (preferred.length > 0 && t < 0.5) {
+    return preferred[Math.floor(t * 2 * preferred.length)]
+  }
+
+  const u = preferred.length > 0 ? (t - 0.5) * 2 : t
+  return all[Math.floor(u * all.length)]
+}
+
+/**
+ * @param {string} family
+ * @param {string} habitat
+ * @returns {string[]}
+ */
+export function petsForFamily(family, habitat) {
+  const all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
+  const preferred = all.filter((id) => KENNEY_PETS[id].families.includes(family))
+  return preferred.length > 0 ? preferred : [...all]
 }
 
 function pet(id, habitat, families) {

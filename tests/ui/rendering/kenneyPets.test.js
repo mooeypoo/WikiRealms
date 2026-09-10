@@ -30,4 +30,15 @@ describe('kenneyPets', () => {
     )
     expect(SEA_PET_IDS).toContain(pickPetForFamily(CREATURE_FAMILY.wanderer, CREATURE_HABITAT.sea, 0.5))
   })
+
+  it('still draws from the full land pool half the time for sparse families', () => {
+    const seen = new Set()
+    for (let i = 0; i < 40; i += 1) {
+      seen.add(pickPetForFamily(CREATURE_FAMILY.science, CREATURE_HABITAT.land, (i + 0.5) / 40))
+    }
+    // Science preferred set is tiny (bee/caterpillar/polar); the soft
+    // mix must surface other land pets or every physics world looks identical.
+    expect(seen.size).toBeGreaterThan(5)
+    expect([...seen].some((id) => !['bee', 'caterpillar', 'polar'].includes(id))).toBe(true)
+  })
 })
