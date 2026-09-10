@@ -19,6 +19,11 @@ export const PORTAL_MARKERS = Object.freeze({
   // Sized with baseScale: the vortex extends about half its scale below
   // its centre, so too small a lift buries it in the ground.
   hoverOffset: 3.2,
+  // How far out (in grid cells) to sample terrain height when seating a
+  // portal. The fountain's footprint is ~3 cells across; using only the
+  // centre cell buries the prop on steep mid-slopes where neighbours
+  // rise into the basin.
+  surfaceSampleRadiusCells: 3,
   texture: Object.freeze({
     size: 128, // px; the aura needs room around the glyph to fade out
     coreRatio: 0.06, // solid-white core radius, fraction of the canvas

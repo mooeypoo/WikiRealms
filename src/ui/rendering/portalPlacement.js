@@ -233,22 +233,25 @@ export function placePortals(portals, terrain, heightScale, projection) {
 
   return list.map((portal, index) => {
     const cell = cells[index]
-    // Submerged cells are lifted to sea level first, so a portal over
-    // deep ocean floats above the water rather than drowning under it.
+    // Seat on the neighbourhood-max surface (offset 0), then lift along
+    // the same normal the form will stand on. Lifting along flat +Z and
+    // then undoing along a tilted slope normal was burying fountains on
+    // steep mid-slopes (Halley's Comet → Renaissance).
     const local = computePortalLocalPosition(
       { ...portal, gridX: cell.gridX, gridY: cell.gridY },
       terrain,
       heightScale,
-      PORTAL_MARKERS.hoverOffset,
+      0,
       projection,
     )
     const normal = portalSurfaceNormal(local.gridX, local.gridY, terrain, heightScale, projection)
+    const lift = PORTAL_MARKERS.hoverOffset
 
     return {
       portal,
-      x: local.x,
-      y: local.y,
-      z: local.z,
+      x: local.x + normal.x * lift,
+      y: local.y + normal.y * lift,
+      z: local.z + normal.z * lift,
       gridX: local.gridX,
       gridY: local.gridY,
       surfaceH01: local.surfaceH01,

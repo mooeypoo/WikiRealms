@@ -1,5 +1,6 @@
 import { biomeSnowCover, groundRgbAt } from './biomeColor.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { PORTAL_MARKERS } from './portalMarkers.js'
 import { flatProjection } from './projection.js'
 
 /**
@@ -61,24 +62,87 @@ export function computeGroundAttributes(terrain) {
 }
 
 /**
+ * Terrain height a portal should sit on: the highest cell under its
+ * footprint, floored at sea level.
+ *
+ * Sampling only the centre cell seats a wide prop on a mid-slope face
+ * while uphill neighbours rise through the basin. The radius matches
+ * PORTAL_MARKERS.surfaceSampleRadiusCells (~fountain footprint).
+ *
+ * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
+ * @param {number} gridX
+ * @param {number} gridY
+ * @param {{ radiusCells?: number, wrapLongitude?: boolean }} [options]
+ */
+export function samplePortalSurfaceH01(terrain, gridX, gridY, options = {}) {
+  const { width, height, heightMap } = terrain
+  const radius = options.radiusCells ?? PORTAL_MARKERS.surfaceSampleRadiusCells
+  const wrapLongitude = Boolean(options.wrapLongitude)
+  const cx = Math.round(clamp(gridX, 0, width - 1))
+  const cy = Math.round(clamp(gridY, 0, height - 1))
+  const r = Math.max(0, Math.ceil(radius))
+  let maxH01 = BIOME_THRESHOLDS.oceanMaxHeight
+
+  for (let dy = -r; dy <= r; dy += 1) {
+    for (let dx = -r; dx <= r; dx += 1) {
+      if (dx * dx + dy * dy > r * r) continue
+      let x = cx + dx
+      let y = cy + dy
+      if (wrapLongitude) x = ((x % width) + width) % width
+      else if (x < 0 || x >= width) continue
+      if (y < 0 || y >= height) continue
+      maxH01 = Math.max(maxH01, heightMap[y * width + x] ?? 0)
+    }
+  }
+
+  return maxH01
+}
+
+/**
  * Computes a portal's position in the terrain mesh's local (pre-rotation)
  * coordinate space, floating just above the terrain surface at that cell.
  *
  * Submerged cells are lifted to sea level first so a portal over deep
- * ocean floats above the water rather than drowning under it.
+ * ocean floats above the water rather than drowning under it. Height is
+ * the neighbourhood max under the portal footprint — see
+ * samplePortalSurfaceH01 — so a steep face cannot bury a wide prop.
+ *
+ * The hover offset is applied along the projection's "up" (flat +Z,
+ * sphere radial). placePortals re-applies it along the slope normal so
+ * ground forms and the placement share one axis.
  *
  * @param {{ gridX: number, gridY: number }} portal
  * @param {{ width: number, height: number, heightMap: Float64Array }} terrain
  * @param {number} heightScale
  * @param {number} [hoverOffset] how far above the surface the marker floats
  * @param {object} [projection] see projection.js; defaults to the flat map
- * @returns {{ x: number, y: number, z: number }}
+ * @returns {{ x: number, y: number, z: number, gridX: number, gridY: number, surfaceH01: number }}
  */
 export function computePortalLocalPosition(portal, terrain, heightScale, hoverOffset = 6, projection = flatProjection) {
   const gridX = Math.round(clamp(portal.gridX, 0, terrain.width - 1))
   const gridY = Math.round(clamp(portal.gridY, 0, terrain.height - 1))
-  const surfaceH01 = Math.max(terrain.heightMap[gridY * terrain.width + gridX] ?? 0, BIOME_THRESHOLDS.oceanMaxHeight)
-  return { ...projection.toLocal(gridX, gridY, surfaceH01, terrain, heightScale, hoverOffset), gridX, gridY, surfaceH01 }
+  const surfaceH01 = samplePortalSurfaceH01(terrain, gridX, gridY, {
+    wrapLongitude: Boolean(projection.isSpherical),
+  })
+  const surface = projection.toLocal(gridX, gridY, surfaceH01, terrain, heightScale, 0)
+
+  if (!hoverOffset) {
+    return { ...surface, gridX, gridY, surfaceH01 }
+  }
+
+  if (projection.isSpherical) {
+    const normal = projection.normalAt(gridX, gridY, terrain)
+    return {
+      x: surface.x + normal.x * hoverOffset,
+      y: surface.y + normal.y * hoverOffset,
+      z: surface.z + normal.z * hoverOffset,
+      gridX,
+      gridY,
+      surfaceH01,
+    }
+  }
+
+  return { x: surface.x, y: surface.y, z: surface.z + hoverOffset, gridX, gridY, surfaceH01 }
 }
 
 /**

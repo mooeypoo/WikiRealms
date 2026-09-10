@@ -73,6 +73,41 @@ describe('placePortals', () => {
     expect(placement.z).toBeCloseTo(BIOME_THRESHOLDS.oceanMaxHeight * 10 + PORTAL_MARKERS.hoverOffset, 5)
   })
 
+  it('seats on the highest neighbour under its footprint, not a buried mid-slope cell', () => {
+    // Halley's Comet → Renaissance: centre cell mid-face, uphill rim
+    // several cells higher. Sampling only the centre put the fountain
+    // under the mesh; neighbourhood max lifts it clear.
+    const terrain = plateau({ width: 16, height: 16, h01: 0.2 })
+    const cx = 8
+    const cy = 8
+    terrain.heightMap[cy * 16 + cx] = 0.4
+    terrain.heightMap[(cy - 2) * 16 + (cx - 2)] = 0.7
+    const [placement] = placePortals([portalAt(cx, cy)], terrain, 10, flatProjection)
+
+    expect(placement.surfaceH01).toBeCloseTo(0.7, 5)
+    expect(placement.z).toBeGreaterThan(0.4 * 10 + PORTAL_MARKERS.hoverOffset)
+  })
+
+  it('lifts along the slope normal so undoing hoverOffset cannot bury a fountain', () => {
+    // Placement used to add hoverOffset on +Z then the fountain subtracted
+    // it along a tilted normal, walking the prop into the hillside.
+    const terrain = plateau({ width: 8, height: 8, h01: 0.2 })
+    for (let x = 0; x < 8; x += 1) {
+      terrain.heightMap[4 * 8 + x] = 0.1 + x * 0.1
+    }
+    const [placement] = placePortals([portalAt(4, 4)], terrain, 10, flatProjection)
+    const surface = placement.surfaceH01 * 10
+    const expectedX = 4 - 8 / 2
+    const expectedY = 8 / 2 - 4
+
+    expect(placement.x).toBeCloseTo(expectedX + placement.normal.x * PORTAL_MARKERS.hoverOffset, 5)
+    expect(placement.y).toBeCloseTo(expectedY + placement.normal.y * PORTAL_MARKERS.hoverOffset, 5)
+    expect(placement.z).toBeCloseTo(surface + placement.normal.z * PORTAL_MARKERS.hoverOffset, 5)
+    expect(
+      Math.hypot(placement.x - expectedX, placement.y - expectedY, placement.z - surface),
+    ).toBeCloseTo(PORTAL_MARKERS.hoverOffset, 5)
+  })
+
   it('clamps a portal outside the grid onto it', () => {
     const [placement] = placePortals([portalAt(-5, 999)], plateau({ width: 8, height: 8 }), 10, flatProjection)
 
