@@ -70,6 +70,7 @@ describe('InfoHub', () => {
     const about = [...document.querySelectorAll('.guide__prose')].find((el) => el.textContent.includes('Credits'))
     expect(about?.textContent).toContain('Kenney')
     expect(about?.innerHTML).toContain('https://kenney.nl/assets/cube-pets')
+    expect(about?.innerHTML).toContain('https://kenney.nl/assets/fantasy-town-kit')
     wrapper.unmount()
   })
 

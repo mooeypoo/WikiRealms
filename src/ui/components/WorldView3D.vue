@@ -70,6 +70,7 @@ import { QUALITY_TIERS, detectQualityTier, readDeviceProfile, resolvePixelRatio 
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { scatterCreatures } from '../rendering/creatureScatter.js'
 import { getCreatureAsset, preloadCreatureAssets } from '../rendering/creatureAssets.js'
+import { preloadFountainAsset } from '../rendering/fountainAssets.js'
 import { updateCreatureLayer } from '../rendering/creatureMotion.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -1752,6 +1753,7 @@ function animate() {
       portalForm.apply(object, {
         scale: computePortalScale(state.baseScale, computePortalPulse(nowSec, state.pulsePhase), state.hoverScale),
         opacity: state.opacity,
+        hoverScale: state.hoverScale,
         time: nowSec,
       })
     }
@@ -1855,8 +1857,8 @@ onMounted(() => {
   pointer = new THREE.Vector2()
 
   resizeToContainer()
-  // Pets are GLBs; first paint may be empty until they land, then we rebuild.
-  preloadCreatureAssets().then(() => {
+  // Pets and fountain portals are GLBs; first paint may stub them, then rebuild.
+  Promise.all([preloadCreatureAssets(), preloadFountainAsset()]).then(() => {
     if (scene) rebuildScene()
   })
   rebuildScene()

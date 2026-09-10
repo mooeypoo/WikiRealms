@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  flatTerrainNormal,
   placePortals,
   portalGridDistance,
   portalPulsePhase,
@@ -92,11 +93,28 @@ describe('placePortals', () => {
   })
 
   it('carries the surface normal a geometry form would need', () => {
-    // The sprite ignores it. Anything with geometry has to stand up out
-    // of the ground it is on, and on the flat map that is +Z everywhere.
+    // On a plateau the heightfield normal is +Z, matching the old flat
+    // projection constant — and that is what ground props stand along.
     const [placement] = placePortals([portalAt(4, 4)], plateau(), 10, flatProjection)
 
-    expect(placement.normal).toEqual({ x: 0, y: 0, z: 1 })
+    expect(placement.normal.x).toBeCloseTo(0, 5)
+    expect(placement.normal.y).toBeCloseTo(0, 5)
+    expect(placement.normal.z).toBeCloseTo(1, 5)
+  })
+
+  it('tilts flat portals to follow a heightfield slope', () => {
+    const terrain = plateau({ width: 8, height: 8, h01: 0.2 })
+    // Rising ridge along +gridX around the portal cell.
+    for (let x = 0; x < 8; x += 1) {
+      terrain.heightMap[4 * 8 + x] = 0.1 + x * 0.1
+    }
+    const [placement] = placePortals([portalAt(4, 4)], terrain, 10, flatProjection)
+    const expected = flatTerrainNormal(4, 4, terrain, 10)
+
+    expect(placement.normal.x).toBeCloseTo(expected.x, 5)
+    expect(placement.normal.y).toBeCloseTo(expected.y, 5)
+    expect(placement.normal.z).toBeCloseTo(expected.z, 5)
+    expect(placement.normal.x).toBeLessThan(0)
   })
 
   it('gives each portal on a planet its own upward direction', () => {
@@ -119,21 +137,25 @@ describe('placePortals', () => {
     }
   })
 
-  it('leaves flat-mode cells alone even when they sit on top of each other', () => {
-    // Spreading is a planet fix: the flat map already reads pairs as
-    // separate, and moving them would fight the sunflower layout.
-    const portals = [portalAt(4, 4), portalAt(4, 5)]
-    const placements = placePortals(portals, plateau(), 10, flatProjection)
+  it('pushes overlapping flat portals apart so a crowded section stays pickable', () => {
+    // Sunflower can still land neighbours closer than a fountain's pick
+    // radius; flat mode now spreads too (not only the planet).
+    const portals = [portalAt(4, 4), portalAt(4, 5), portalAt(5, 4)]
+    const placements = placePortals(portals, plateau({ width: 32, height: 32 }), 10, flatProjection)
+    const dist = portalGridDistance(
+      placements[0].gridX,
+      placements[0].gridY,
+      placements[1].gridX,
+      placements[1].gridY,
+      32,
+    )
 
-    expect(placements[0].gridX).toBe(4)
-    expect(placements[0].gridY).toBe(4)
-    expect(placements[1].gridX).toBe(4)
-    expect(placements[1].gridY).toBe(5)
+    expect(dist).toBeGreaterThanOrEqual(PORTAL_MARKERS.minSeparationCells - 0.5)
   })
 
   it('pushes overlapping planet portals far enough apart to pick separately', () => {
     // The Everest case: two section links land a cell or two apart and
-    // become one vortex under the cursor. The globe nudges them in grid
+    // become one marker under the cursor. The globe nudges them in grid
     // space before projecting.
     const terrain = plateau({ width: 64, height: 64 })
     const heightScale = sphereProjection.heightScale(terrain)

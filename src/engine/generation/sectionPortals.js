@@ -76,6 +76,21 @@ function interleaveBySection(pairs) {
 }
 
 /**
+ * How far past maxFootprintFraction a crowded region may spill.
+ * Sparse sections stay inside the peak; dense ones fan a little past
+ * the rim so markers remain reachable.
+ *
+ * @param {number} count portals sharing this region
+ */
+export function regionOverflowFraction(count) {
+  const extras = Math.max(0, count - PORTAL_LIMITS.overflowStartCount)
+  return Math.min(
+    PORTAL_LIMITS.maxOverflowFraction,
+    extras * PORTAL_LIMITS.overflowPerExtraPortal,
+  )
+}
+
+/**
  * Places one portal inside a circular region using sunflower spacing:
  * the i-th of n portals sits at radius ∝ √((i + ½)/n), which spreads
  * them evenly by AREA rather than by radius (a uniform random radius
@@ -83,13 +98,19 @@ function interleaveBySection(pairs) {
  * jitter keep it organic rather than visibly geometric.
  *
  * Every portal lands between minFootprintFraction and
- * maxFootprintFraction of the region radius — off the summit marker it
- * would otherwise sit under, and inside the section's own land.
+ * (maxFootprintFraction + density overflow) of the region radius —
+ * off the summit marker, mostly inside the section's land, with a
+ * slight spill when the region is crowded.
  */
 function placeInRegion(region, index, count, rng) {
   const spread = count > 1 ? Math.sqrt((index + 0.5) / count) : 0.62
   const { minFootprintFraction: min, maxFootprintFraction: max } = PORTAL_LIMITS
-  const fraction = clamp((min + (max - min) * spread) * (1 + (rng() - 0.5) * 0.14), min, max)
+  const outer = max + regionOverflowFraction(count)
+  const fraction = clamp(
+    (min + (outer - min) * spread) * (1 + (rng() - 0.5) * 0.14),
+    min,
+    outer,
+  )
   const angle = region.rotation + index * GOLDEN_ANGLE + (rng() - 0.5) * 0.35
   const distance = region.radius * fraction
 

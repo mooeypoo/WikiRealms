@@ -53,7 +53,9 @@ export const infoHubContent = {
         Animal models are
         <a href="https://kenney.nl/assets/cube-pets" target="_blank" rel="noopener noreferrer">Cube Pets</a>
         by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
-        (Creative Commons CC0).
+        (Creative Commons CC0). Portal fountains use pieces from
+        <a href="https://kenney.nl/assets/fantasy-town-kit" target="_blank" rel="noopener noreferrer">Fantasy Town Kit</a>
+        (also CC0).
       </p>
     `,
   },

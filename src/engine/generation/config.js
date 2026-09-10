@@ -211,8 +211,14 @@ export const PORTAL_LIMITS = Object.freeze({
   // Portals sit between these fractions of their region's footprint
   // radius: far enough out to clear the section's summit marker, far
   // enough in to still read as "inside this section's land".
-  minFootprintFraction: 0.18,
-  maxFootprintFraction: 0.92,
+  minFootprintFraction: 0.22,
+  maxFootprintFraction: 0.95,
+  // Link-heavy sections may spill slightly past the peak rim so portals
+  // stay pickable and leave summit / subsection markers clear. Outer
+  // fraction = maxFootprintFraction + overflow, capped by maxOverflowFraction.
+  overflowStartCount: 4,
+  overflowPerExtraPortal: 0.05,
+  maxOverflowFraction: 0.4,
   // Lead-section links belong to the article as a whole rather than to
   // any one mountain, so they get a central region sized to this
   // fraction of the smaller grid axis.

@@ -4,8 +4,10 @@ import {
   DEFAULT_PORTAL_FORM,
   PORTAL_FORMS,
   createApertureTexture,
+  fountainHoverAmount,
   resolvePortalForm,
 } from '../../../src/ui/rendering/portalForms.js'
+import { FOUNTAIN_BEAM, FOUNTAIN_GROUND_CLEARANCE } from '../../../src/ui/rendering/fountainAssets.js'
 import { placePortals } from '../../../src/ui/rendering/portalPlacement.js'
 import { PORTAL_MARKERS } from '../../../src/ui/rendering/portalMarkers.js'
 import { flatProjection } from '../../../src/ui/rendering/projection.js'
@@ -36,9 +38,10 @@ describe('createApertureTexture', () => {
 })
 
 describe('PORTAL_FORMS', () => {
-  it('registers the vortex as the default', () => {
-    expect(DEFAULT_PORTAL_FORM).toBe('vortex')
+  it('registers the fountain as the default spike shape', () => {
+    expect(DEFAULT_PORTAL_FORM).toBe('fountain')
     expect(PORTAL_FORMS[DEFAULT_PORTAL_FORM]).toBeDefined()
+    expect(PORTAL_FORMS.vortex).toBeDefined()
     expect(PORTAL_FORMS.aperture).toBeDefined()
   })
 
@@ -61,6 +64,39 @@ describe('resolvePortalForm', () => {
   it('returns the form an id names', () => {
     expect(resolvePortalForm('aperture').id).toBe('aperture')
     expect(resolvePortalForm('vortex').id).toBe('vortex')
+    expect(resolvePortalForm('fountain').id).toBe('fountain')
+  })
+})
+
+describe('fountain form', () => {
+  it('raises a soft upward beam that brightens on hover', () => {
+    const form = PORTAL_FORMS.fountain.create({ accentColor: ACCENT })
+    const place = placement()
+    const object = form.build(place)
+
+    expect(object.userData.markerType).toBe('portal')
+    expect(object.userData.rim).toBeTruthy()
+    expect(object.userData.glow).toBeTruthy()
+    expect(object.userData.beams).toHaveLength(2)
+    // Placement includes vortex hoverOffset; fountain undoes most of it.
+    const expectedZ = place.z - (PORTAL_MARKERS.hoverOffset - FOUNTAIN_GROUND_CLEARANCE) * place.normal.z
+    expect(object.position.z).toBeCloseTo(expectedZ, 5)
+    const localUp = new THREE.Vector3(0, 0, 1).applyQuaternion(object.quaternion)
+    expect(localUp.z).toBeCloseTo(place.normal.z, 5)
+
+    form.apply(object, { scale: place.baseScale, opacity: 1, hoverScale: 1 })
+    expect(object.userData.beams[0].material.opacity).toBeCloseTo(FOUNTAIN_BEAM.idleOpacity, 5)
+    expect(object.userData.rim.material.opacity).toBeCloseTo(FOUNTAIN_BEAM.rimIdle, 5)
+
+    form.apply(object, {
+      scale: place.baseScale,
+      opacity: 1,
+      hoverScale: PORTAL_MARKERS.hover.scale,
+    })
+    expect(fountainHoverAmount(PORTAL_MARKERS.hover.scale)).toBeCloseTo(1, 5)
+    expect(object.userData.beams[0].material.opacity).toBeCloseTo(FOUNTAIN_BEAM.hoverOpacity, 5)
+    expect(object.userData.glow.material.opacity).toBeCloseTo(FOUNTAIN_BEAM.glowHover, 5)
+    form.dispose()
   })
 })
 

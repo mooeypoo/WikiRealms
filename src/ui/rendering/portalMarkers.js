@@ -40,11 +40,18 @@ export const PORTAL_MARKERS = Object.freeze({
   // back into step with each other at regular intervals along the list.
   pulsePhaseStep: 0.7,
   // Growth under the cursor — clear without swallowing neighbours.
-  hover: Object.freeze({ scale: 1.35 }),
+  hover: Object.freeze({ scale: 1.22 }),
   opacity: Object.freeze({
     related: 1, // nothing hovered, or this portal's section is hovered
     unrelated: 0.2, // another section is hovered — recede
   }),
+  /**
+   * Grid cells to keep between portals after sunflower placement.
+   * Fountain props are small; a few cells is enough to stay pickable
+   * without dragging markers out of their section. Planet view uses a
+   * slightly larger floor (see SPHERE_VIEW.portalMinSeparationCells).
+   */
+  minSeparationCells: 5,
   // Exponential lerp factor for scale/opacity transitions, per frame.
   lerpAlpha: 0.18,
   /**
