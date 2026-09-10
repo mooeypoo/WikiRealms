@@ -377,10 +377,18 @@ function scrollSelectionIntoView(peakIndex) {
   const item = body.value?.querySelector(`[data-peak="${peakIndex}"]`)
   if (!item) return
 
-  const scroller = nearestVerticalScroller(item)
-  if (!scroller) return
-
   const head = item.querySelector('.ledger__row') ?? item
+  const behavior = prefersReducedMotion() ? 'auto' : 'smooth'
+  // Prefer the real scrollport; fall back to Sheet's body class when
+  // getComputedStyle does not surface overflow (jsdom / some WebViews).
+  const scroller =
+    nearestVerticalScroller(item) ?? item.closest('.sheet__body')
+
+  if (!scroller) {
+    head.scrollIntoView({ behavior, block: 'nearest' })
+    return
+  }
+
   // Selection from the map promotes peek/collapsed → open; the emit may
   // not have landed on props yet, so pad for the rung we are opening to.
   const scrollState =
@@ -397,10 +405,7 @@ function scrollSelectionIntoView(peakIndex) {
     maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
   })
 
-  scroller.scrollTo({
-    top,
-    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-  })
+  scroller.scrollTo({ top, behavior })
 }
 
 watch(
