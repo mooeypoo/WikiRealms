@@ -43,8 +43,9 @@ export const CREATURE_SAMPLING = Object.freeze({
   /** Wander radius in grid cells around the home cell. */
   wanderRadius: 1.35,
   seaWanderRadius: 5.5,
-  /** Seconds for one gait cycle at gaitSpeed 1. */
+  /** Seconds for one land stride cycle at gaitSpeed 1. */
   hopPeriod: 1.15,
+  /** Seconds for one sea cruise / crest cycle at gaitSpeed 1. */
   breachPeriod: 2.8,
 })
 
@@ -52,7 +53,8 @@ export const CREATURE_SAMPLING = Object.freeze({
  * Land puddings. `scale` is in grid cells — accents from orbit, not mascots.
  *
  * `elongate` stretches the body along forward (1 = sphere).
- * `gait`: hop | waddle | breach
+ * `gait`: hop (grounded scoot) | waddle | breach
+ * `hopHeight`: squish amplitude for land strides (not jump height).
  */
 export const CREATURE_ARCHETYPES = Object.freeze({
   [CREATURE_FAMILY.nature]: Object.freeze({
@@ -419,15 +421,16 @@ export function gaitFromCode(code) {
 /**
  * Hop / waddle / breach pose for one creature at a clock time.
  *
+ * Land gaits stay on the ground: `hopHeight` is how hard the body squishes
+ * each stride, not how high it jumps. Leaving the surface is what made
+ * orbit views read as fleas. Sea breach still arcs a little, but most of
+ * the read is stretch and pitch.
+ *
  * @returns {{ lift: number, squashX: number, squashY: number, squashZ: number, lean: number, pitch: number }}
  */
 export function creaturePose(timeSec, creature) {
   const body = creature.scale
   const baseSquat = creature.squat
-  const period =
-    creature.gait === 'breach'
-      ? CREATURE_SAMPLING.breachPeriod / Math.max(0.2, creature.gaitSpeed)
-      : CREATURE_SAMPLING.hopPeriod / Math.max(0.2, creature.gaitSpeed)
   const cycle =
     ((timeSec * creature.gaitSpeed) /
       (creature.gait === 'breach' ? CREATURE_SAMPLING.breachPeriod : CREATURE_SAMPLING.hopPeriod) +
@@ -436,52 +439,47 @@ export function creaturePose(timeSec, creature) {
 
   if (creature.gait === 'waddle') {
     const sway = Math.sin(cycle * Math.PI * 2)
-    const bob = Math.abs(sway) * body * creature.hopHeight * 0.25
+    const weight = Math.abs(sway)
     return {
-      lift: bob,
-      squashX: body * (1 + Math.abs(sway) * 0.08),
-      squashY: body * baseSquat * (1 - Math.abs(sway) * 0.06),
-      squashZ: body * (1 - Math.abs(sway) * 0.04),
-      lean: sway * 0.22,
+      lift: 0,
+      squashX: body * (1 + weight * 0.12),
+      squashY: body * baseSquat * (1 - weight * 0.14),
+      squashZ: body * (1 - weight * 0.05),
+      lean: sway * 0.28,
       pitch: 0,
     }
   }
 
   if (creature.gait === 'breach') {
-    // Long surface cruise, then a whale-ish leap.
-    const bob = Math.sin(cycle * Math.PI * 2) * body * 0.12
-    const breaching = cycle > 0.68 && cycle < 0.92
-    const t = breaching ? (cycle - 0.68) / 0.24 : 0
-    const lift = breaching ? Math.sin(t * Math.PI) * body * creature.hopHeight + bob : bob
-    const stretch = breaching ? 1 + Math.sin(t * Math.PI) * 0.12 : 1
+    // Mostly a surface cruise with body stretch; a soft crest instead of a leap.
+    const roll = Math.sin(cycle * Math.PI * 2)
+    const cresting = cycle > 0.68 && cycle < 0.92
+    const t = cresting ? (cycle - 0.68) / 0.24 : 0
+    const crest = cresting ? Math.sin(t * Math.PI) : 0
+    const amp = 0.12 + Math.min(0.2, creature.hopHeight * 0.06)
     return {
-      lift,
-      squashX: body * (0.95 + (breaching ? 0.08 : 0)),
-      squashY: body * baseSquat * (breaching ? 0.9 : 1),
-      squashZ: body * stretch,
+      lift: crest * body * 0.22,
+      squashX: body * (0.96 + crest * 0.1),
+      squashY: body * baseSquat * (1 - crest * amp * 0.8 + Math.abs(roll) * 0.04),
+      squashZ: body * (1 + crest * 0.18 + Math.abs(roll) * 0.03),
       lean: 0,
-      pitch: breaching ? Math.sin(t * Math.PI) * 0.45 : Math.sin(cycle * Math.PI * 2) * 0.06,
+      pitch: crest * 0.35 + roll * 0.05,
     }
   }
 
-  // Hop: airborne parabola in the middle of the cycle, squash on landing.
-  const airborne = cycle > 0.15 && cycle < 0.55
-  const t = airborne ? (cycle - 0.15) / 0.4 : 0
-  const lift = airborne ? Math.sin(t * Math.PI) * body * creature.hopHeight : 0
-  const landSquash =
-    !airborne && cycle > 0.55 && cycle < 0.75
-      ? Math.sin(((cycle - 0.55) / 0.2) * Math.PI) * 0.22
-      : cycle < 0.15
-        ? Math.sin((cycle / 0.15) * Math.PI) * 0.12
-        : 0
+  // Grounded scoot: compress into the stride, spring back — never leave the ground.
+  const stride = Math.sin(cycle * Math.PI * 2)
+  const compress = Math.max(0, -stride)
+  const spring = Math.max(0, stride)
+  const amp = 0.12 + Math.min(0.2, creature.hopHeight * 0.07)
 
   return {
-    lift,
-    squashX: body * (1 + landSquash),
-    squashY: body * baseSquat * (1 - landSquash * 1.4) * (airborne ? 1.12 : 1),
-    squashZ: body * (1 + landSquash),
-    lean: 0,
-    pitch: 0,
+    lift: 0,
+    squashX: body * (1 + compress * amp * 1.15),
+    squashY: body * baseSquat * (1 - compress * amp * 1.7 + spring * amp * 0.45),
+    squashZ: body * (1 + compress * amp * 0.95 - spring * amp * 0.2),
+    lean: stride * 0.05,
+    pitch: compress * 0.1 - spring * 0.06,
   }
 }
 

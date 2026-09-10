@@ -168,8 +168,8 @@ describe('scatterCreatures', () => {
 })
 
 describe('creaturePose', () => {
-  it('returns finite squash values for hop', () => {
-    const pose = creaturePose(1.25, {
+  it('keeps hop strides on the ground and squishes instead', () => {
+    const grounded = creaturePose(1.25, {
       phase: 0.3,
       gaitSpeed: 1,
       hopHeight: 1,
@@ -177,12 +177,45 @@ describe('creaturePose', () => {
       scale: 0.5,
       squat: 0.8,
     })
-    expect(pose.lift).toBeGreaterThanOrEqual(0)
-    expect(Number.isFinite(pose.squashX)).toBe(true)
-    expect(Number.isFinite(pose.squashY)).toBe(true)
+    expect(grounded.lift).toBe(0)
+    expect(Number.isFinite(grounded.squashX)).toBe(true)
+    expect(Number.isFinite(grounded.squashY)).toBe(true)
+
+    const mid = creaturePose(0, {
+      phase: 0.75,
+      gaitSpeed: 1,
+      hopHeight: 1.2,
+      gait: 'hop',
+      scale: 1,
+      squat: 0.8,
+    })
+    const tall = creaturePose(0, {
+      phase: 0.25,
+      gaitSpeed: 1,
+      hopHeight: 1.2,
+      gait: 'hop',
+      scale: 1,
+      squat: 0.8,
+    })
+    // Compress half of the stride is shorter than the spring half.
+    expect(mid.squashY).toBeLessThan(tall.squashY)
+    expect(mid.squashX).toBeGreaterThan(tall.squashX)
   })
 
-  it('breaches above the surface for part of the cycle', () => {
+  it('waddles with lean and no vertical bob', () => {
+    const pose = creaturePose(0.4, {
+      phase: 0,
+      gaitSpeed: 1,
+      hopHeight: 0.5,
+      gait: 'waddle',
+      scale: 1,
+      squat: 0.75,
+    })
+    expect(pose.lift).toBe(0)
+    expect(Math.abs(pose.lean)).toBeGreaterThan(0)
+  })
+
+  it('crests above the surface gently for breach, with pitch', () => {
     const low = creaturePose(0.1, {
       phase: 0,
       gaitSpeed: 1,
@@ -200,6 +233,7 @@ describe('creaturePose', () => {
       squat: 0.5,
     })
     expect(high.lift).toBeGreaterThan(low.lift)
+    expect(high.lift).toBeLessThan(1) // no flea-sized leaps
     expect(high.pitch).toBeGreaterThan(0)
   })
 })

@@ -1,6 +1,6 @@
 /**
- * Per-frame pose for instanced blobs: wander, hop / waddle / breach,
- * stick to the heightfield or the sea surface.
+ * Per-frame pose for instanced blobs: wander along the heightfield or
+ * sea surface, with gait as body squash rather than vertical bounce.
  */
 import * as THREE from 'three'
 import {
