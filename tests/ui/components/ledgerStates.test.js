@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   LEDGER_COLLAPSED_HEIGHT,
-  LEDGER_SNAP_POINTS,
+  LEDGER_PEEK_HEIGHT,
   LEDGER_STATES,
   clearsLedger,
   ledgerClearance,
@@ -16,7 +16,7 @@ describe('ledger states', () => {
     // The helm sat behind the sheet at every state, including collapsed:
     // the two share the bottom-right of a phone and neither knew it.
     expect(ledgerClearance('collapsed')).toBe(`${LEDGER_COLLAPSED_HEIGHT}px`)
-    expect(ledgerClearance('peek')).toContain(`${LEDGER_SNAP_POINTS[0] * 100}dvh`)
+    expect(ledgerClearance('peek')).toBe(`${LEDGER_PEEK_HEIGHT}px`)
   })
 
   it('stops offering room once the sheet is most of the screen', () => {

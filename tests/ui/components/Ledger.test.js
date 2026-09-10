@@ -189,23 +189,41 @@ describe('Ledger', () => {
       expect(document.querySelector('.ledger__summary')).toBeNull()
     })
 
-    it('offers no actions at peek, having no room to put them', () => {
-      // They used to render below the fold: visible enough to look like
-      // controls, clipped enough to be unclickable, which is the worst of
-      // both. The panel is 16dvh and the header is most of it.
+    it('keeps the legend at peek, and holds back the rest of the actions', () => {
+      // Peek is where you are and four readouts — Wikipedia / Share wait
+      // for open. The legend stays: it answers what the world means, which
+      // is the question peek is for. Compact sizing keeps it under the
+      // stats instead of across a hollow gap.
       mountLedger({ state: 'peek' })
 
-      expect(document.querySelector('.ledger__footer')).toBeNull()
-      expect(document.querySelector('.sheet__footer')).toBeNull()
+      const footer = document.querySelector('.ledger__footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).not.toContain('View on Wikipedia')
+      expect(footer.textContent).not.toContain('Share')
+      expect(document.querySelector('.sheet--compact')).not.toBeNull()
     })
 
-    it('offers them from open onwards, where they fit', () => {
+    it('offers Wikipedia and Share from open onwards, under the legend', () => {
       mountLedger({ state: 'open' })
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
+      expect(footer.textContent).toContain('What am I looking at?')
       expect(footer.textContent).toContain('View on Wikipedia')
       expect(footer.textContent).toContain('Share')
+      const legend = footer.querySelector('.ledger__legend')
+      const actions = footer.querySelector('.ledger__footer-actions')
+      expect(legend.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    })
+
+    it('keeps the legend on the collapsed bar', () => {
+      mountLedger({ state: 'collapsed' })
+
+      const footer = document.querySelector('.ledger__footer')
+      expect(footer).not.toBeNull()
+      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).not.toContain('Share')
     })
 
     it('shows the summary and sections from open onwards', () => {
@@ -257,6 +275,31 @@ describe('Ledger', () => {
 
       // sections, citations, portals, words, 30-day views
       expect(values).toEqual(['4', '24', '3', '164', '28.4k'])
+    })
+
+    it('pairs each readout with a map-vocabulary mark', () => {
+      // The numbers alone do not say what the world does with them; the
+      // glyph under each tile is the same vocabulary as peaks, trees,
+      // portals and creatures on the map.
+      mountLedger()
+      const tiles = [...document.querySelectorAll('.ledger__stats > div')]
+      const marks = tiles.map((tile) => tile.querySelector('.ledger__stat-mark'))
+      const icons = marks.map((mark) => mark?.querySelector('svg.icon')?.innerHTML ?? '')
+
+      expect(marks).toHaveLength(5)
+      expect(marks.every(Boolean)).toBe(true)
+      expect(icons[0]).toContain('M2.5 19.5') // peaks
+      expect(icons[1]).toContain('M12 21v-6') // tree
+      expect(icons[2]).toContain('M12 2.5L20 12') // portal mark
+      expect(icons[3]).toContain('M5 7h14') // prose
+      expect(icons[4]).toContain('M6.5 10.5') // creature
+      expect(tiles.map((tile) => tile.getAttribute('title'))).toEqual([
+        'Mountain ranges on the map',
+        'How well sections cite — trees and green',
+        'Outbound links you can travel through',
+        'Article length — sets the waterline',
+        'Pageviews — how many animals roam',
+      ])
     })
 
     it('counts words rather than links', () => {
@@ -675,5 +718,18 @@ describe('Ledger', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('share')).toHaveLength(1)
+  })
+
+  it('asks its owner to open the legend rather than knowing how', async () => {
+    // Same surface as the Helm control: the Ledger is where people read
+    // the numbers, so it needs its own way into "what does this mean".
+    const wrapper = mountLedger()
+
+    ;[...document.querySelectorAll('button')]
+      .find((button) => button.textContent.includes('What am I looking at?'))
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('legend')).toHaveLength(1)
   })
 })

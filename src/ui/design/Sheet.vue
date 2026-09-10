@@ -54,6 +54,12 @@ const props = defineProps({
    * state and the way out of it.
    */
   collapsed: { type: Boolean, default: false },
+  /**
+   * Size to the header + footer and collapse the empty body. Used by the
+   * Ledger at peek: a fixed snap fraction left a tall hollow gap between
+   * the stats and the always-on legend.
+   */
+  compact: { type: Boolean, default: false },
   /** Which edge a drawer or panel is docked to. */
   side: { type: String, default: 'left', validator: (value) => ['left', 'right'].includes(value) },
   /** Dragging a sheet below its lowest snap dismisses it. */
@@ -88,9 +94,14 @@ const snapFraction = computed(() => {
 })
 
 const surfaceStyle = computed(() => {
-  // Collapsed takes its height from the bar it is showing, so a consumer
-  // can put whatever it likes in there without picking a number here.
-  if (props.collapsed || !isSized.value) return {}
+  // Collapsed / compact take height from what they contain — a fixed snap
+  // fraction would leave an empty band between header and footer.
+  if (props.collapsed || props.compact || !isSized.value) {
+    return {
+      transform: dragOffset.value ? `translateY(${dragOffset.value}px)` : undefined,
+      transition: dragging.value ? 'none' : undefined,
+    }
+  }
   return {
     height: `${snapFraction.value * 100}dvh`,
     transform: dragOffset.value ? `translateY(${dragOffset.value}px)` : undefined,
@@ -319,7 +330,7 @@ function onScrimDismiss() {
           :class="[
             `sheet--${resolvedPresentation}`,
             `sheet--${side}`,
-            { 'sheet--dragging': dragging, 'sheet--collapsed': collapsed },
+            { 'sheet--dragging': dragging, 'sheet--collapsed': collapsed, 'sheet--compact': compact },
           ]"
           :style="surfaceStyle"
           :role="modal ? 'dialog' : undefined"
@@ -331,6 +342,12 @@ function onScrimDismiss() {
         >
           <template v-if="collapsed">
             <slot name="collapsed" />
+            <!-- Persistent footers (e.g. Ledger legend) stay reachable when
+                 the bar is the only chrome left — collapsing must not hide
+                 the only way back into a summoned surface. -->
+            <footer v-if="$slots.footer" class="sheet__footer sheet__footer--collapsed">
+              <slot name="footer" />
+            </footer>
           </template>
 
           <template v-else>
@@ -399,6 +416,7 @@ function onScrimDismiss() {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   box-sizing: border-box;
   color: var(--ink-1);
   background: var(--surface-1);
@@ -475,6 +493,18 @@ function onScrimDismiss() {
   max-height: none;
 }
 
+.sheet--compact {
+  height: auto;
+}
+
+.sheet--compact .sheet__body {
+  flex: none;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .sheet--dragging {
   transition: none;
   user-select: none;
@@ -521,6 +551,10 @@ function onScrimDismiss() {
   flex: none;
   padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
   border-top: 1px solid var(--edge-hair);
+}
+
+.sheet__footer--collapsed {
+  padding-top: var(--spacing-sm);
 }
 
 .scrim-enter-active,

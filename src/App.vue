@@ -510,6 +510,7 @@ watch([graph, articleCache], () => {
       @update:state="setLedgerState"
       @select="selectedPeak = $event"
       @share="onShareClick"
+      @legend="toggleLegend"
     />
 
     <PortalPreview

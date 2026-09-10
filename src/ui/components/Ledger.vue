@@ -47,7 +47,7 @@ const props = defineProps({
   selectedPeak: { type: Number, default: null },
 })
 
-const emit = defineEmits(['update:state', 'share', 'select'])
+const emit = defineEmits(['update:state', 'share', 'select', 'legend'])
 
 /**
  * Below this many rows the whole tree is shown expanded, above it every
@@ -75,9 +75,25 @@ const model = computed(() => buildSectionRows(props.article, props.world))
 const rows = computed(() => model.value.rows)
 
 const stats = computed(() => [
-  { label: 'Sections', value: countSections(props.article.sections) },
-  { label: 'Citations', value: props.article.sections?.citationCount ?? 0 },
-  { label: 'Portals', value: props.world?.portals?.length ?? 0, accent: true },
+  {
+    label: 'Sections',
+    value: countSections(props.article.sections),
+    icon: 'peaks',
+    hint: 'Mountain ranges on the map',
+  },
+  {
+    label: 'Citations',
+    value: props.article.sections?.citationCount ?? 0,
+    icon: 'tree',
+    hint: 'How well sections cite — trees and green',
+  },
+  {
+    label: 'Portals',
+    value: props.world?.portals?.length ?? 0,
+    accent: true,
+    icon: 'mark',
+    hint: 'Outbound links you can travel through',
+  },
   // Was "Links", which read 500 for almost every article — that being the
   // API's page limit for an anonymous request, which nothing here follows
   // past. A number that describes our query rather than the article has no
@@ -86,10 +102,20 @@ const stats = computed(() => [
   //
   // Words is uncapped, is a fact about the article, and is the one the
   // world visibly answers to: length is what sets the waterline.
-  { label: 'Words', value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)) },
+  {
+    label: 'Words',
+    value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)),
+    icon: 'prose',
+    hint: 'Article length — sets the waterline',
+  },
   // 30-day user pageviews from AQS — how busy the article is. Drives how
   // many creatures roam the realm; shown here so that signal is readable.
-  { label: 'Views', value: formatPageviews(props.article.pageviews) },
+  {
+    label: 'Views',
+    value: formatPageviews(props.article.pageviews),
+    icon: 'creature',
+    hint: 'Pageviews — how many animals roam',
+  },
 ])
 
 /**
@@ -304,6 +330,7 @@ watch(
     :modal="false"
     :dismissible="false"
     :collapsed="state === 'collapsed'"
+    :compact="state === 'peek'"
     :snap-points="SNAP_POINTS"
     :snap="snap"
     :label="`About ${article.title}`"
@@ -355,9 +382,12 @@ watch(
       </p>
 
       <dl class="ledger__stats">
-        <div v-for="stat in stats" :key="stat.label">
+        <div v-for="stat in stats" :key="stat.label" :title="stat.hint">
           <dt>{{ stat.label }}</dt>
           <dd class="tabular" :class="{ 'is-accent': stat.accent }">{{ stat.value }}</dd>
+          <span class="ledger__stat-mark" :class="{ 'is-accent': stat.accent }" aria-hidden="true">
+            <Icon :name="stat.icon" :size="17" />
+          </span>
         </div>
       </dl>
     </template>
@@ -481,20 +511,25 @@ watch(
       </template>
     </div>
 
-    <!-- Not at peek. That state is 16dvh, the header alone is most of it,
-         and the footer was rendering below the fold — visible enough to
-         look like a control and clipped enough to be unclickable, which is
-         the worst of both. Peek is where you are and four readouts;
-         actions belong with the content they act on. -->
-    <template v-if="state !== 'peek'" #footer>
+    <!-- Legend stays on every state — including peek and collapsed — so
+         "what does this mean" is never only a keyboard secret or a
+         deep-open action. Wikipedia / Share still wait for open+: peek
+         has no room for a row of actions above the legend. -->
+    <template #footer>
       <div class="ledger__footer">
-        <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
-          View on Wikipedia
-          <Icon name="external" :size="12" />
-        </a>
-        <button class="ledger__link" type="button" @click="$emit('share')">
-          <Icon name="share" :size="13" />
-          Share
+        <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
+          <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
+            View on Wikipedia
+            <Icon name="external" :size="12" />
+          </a>
+          <button class="ledger__link" type="button" @click="$emit('share')">
+            <Icon name="share" :size="13" />
+            Share
+          </button>
+        </div>
+        <button class="ledger__legend" type="button" @click="$emit('legend')">
+          <Icon name="legend" :size="13" />
+          What am I looking at?
         </button>
       </div>
     </template>
@@ -620,6 +655,7 @@ watch(
 .ledger__stats div {
   display: grid;
   gap: 2px;
+  justify-items: start;
 }
 
 .ledger__stats dt {
@@ -638,6 +674,19 @@ watch(
 
 .ledger__stats dd.is-accent {
   color: var(--accent);
+}
+
+.ledger__stat-mark {
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  color: var(--ink-3);
+  opacity: 0.9;
+}
+
+.ledger__stat-mark.is-accent {
+  color: var(--accent);
+  opacity: 0.9;
 }
 
 .ledger__body {
@@ -913,9 +962,37 @@ button.ledger__cells:hover .ledger__row-title {
 }
 
 .ledger__footer {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.ledger__footer-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
+}
+
+.ledger__legend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 var(--spacing-md);
+  border: 1px solid var(--edge-hair);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ledger__legend:hover {
+  border-color: var(--edge-accent);
+  background: var(--accent-wash);
 }
 </style>

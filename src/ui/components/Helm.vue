@@ -57,7 +57,7 @@ const SHAPES = [
 
     <button
       v-if="canRecenter"
-      class="helm__recenter"
+      class="helm__action"
       type="button"
       aria-label="Recentre the view"
       title="Recentre the view"
@@ -74,9 +74,10 @@ const SHAPES = [
 
          Its icon is a map key rather than a question mark: "?" already
          opens the About dialog, and two different things behind the same
-         glyph is worse than a shortcut nobody finds. -->
+         glyph is worse than a shortcut nobody finds. On wide screens the
+         Legend label makes the control scannable; phones stay icon-only. -->
     <button
-      class="helm__recenter"
+      class="helm__action helm__legend"
       type="button"
       aria-label="What am I looking at?"
       title="What am I looking at?"
@@ -84,6 +85,7 @@ const SHAPES = [
       @click="$emit('legend')"
     >
       <Icon name="legend" :size="18" />
+      <span class="helm__label">Legend</span>
     </button>
   </div>
 </template>
@@ -138,16 +140,19 @@ const SHAPES = [
 }
 
 .helm__shape:disabled,
-.helm__recenter:disabled {
+.helm__action:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.helm__recenter {
-  display: grid;
-  place-items: center;
-  width: var(--hit);
+.helm__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  min-width: var(--hit);
   height: var(--hit);
+  padding: 0;
   border: 1px solid var(--edge-hair);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
@@ -156,7 +161,19 @@ const SHAPES = [
   color: var(--ink-2);
 }
 
-.helm__recenter:hover:not(:disabled) {
+.helm__legend {
+  padding: 0 var(--spacing-md);
+}
+
+.helm__legend .helm__label {
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.helm__action:hover:not(:disabled) {
   border-color: var(--edge-accent);
   color: var(--accent);
 }
@@ -174,6 +191,10 @@ const SHAPES = [
     min-height: var(--hit);
     padding: 0;
     justify-content: center;
+  }
+
+  .helm__legend {
+    padding: 0;
   }
 }
 
