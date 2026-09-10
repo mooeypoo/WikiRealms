@@ -134,8 +134,9 @@ const rowFor = (title) => rows().find((row) => row.querySelector('.ledger__row-t
 const clickRow = (title) => rowFor(title).querySelector('.ledger__cells').dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
 beforeEach(() => {
-  // jsdom does no layout and so has no scrollIntoView at all.
+  // jsdom does no layout and so has no scroll APIs worth using.
   Element.prototype.scrollIntoView = vi.fn()
+  Element.prototype.scrollTo = vi.fn()
   document.body.innerHTML = ''
   window.innerWidth = 1280
   window.innerHeight = 900
@@ -549,13 +550,20 @@ describe('Ledger', () => {
   })
 
   describe('a section clicked on the map', () => {
+    /** Selection scroll waits on rAF after the panel lays out. */
+    async function afterSelectionScroll() {
+      await flushPromises()
+      await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+      await flushPromises()
+    }
+
     it('scrolls the matching row into view', async () => {
       const wrapper = mountLedger()
 
       await wrapper.setProps({ selectedPeak: 0 })
-      await flushPromises()
+      await afterSelectionScroll()
 
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+      expect(Element.prototype.scrollTo).toHaveBeenCalled()
       expect(rowFor('Structure').classList.contains('is-selected')).toBe(true)
     })
 
@@ -622,9 +630,9 @@ describe('Ledger', () => {
       const wrapper = mountLedger()
 
       await wrapper.setProps({ selectedPeak: 0 })
-      await flushPromises()
+      await afterSelectionScroll()
 
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      expect(Element.prototype.scrollTo).toHaveBeenCalledWith(
         expect.objectContaining({ behavior: 'auto' }),
       )
       delete globalThis.matchMedia

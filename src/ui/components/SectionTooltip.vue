@@ -1,6 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { describeBand } from '../content/lushnessBands.js'
+import {
+  WIKIPEDIA_CTA_SURFACES,
+  resolveWikipediaCta,
+} from '../content/wikipediaCtas.js'
 
 const props = defineProps({
   /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null, sourcesLabel: string } | null} */
@@ -17,6 +21,14 @@ const props = defineProps({
  * renderer's own, and this component is the layer allowed to see both.
  */
 const band = computed(() => describeBand(props.model?.densityBand))
+
+/** Diegetic hint only — tooltip stays non-interactive. */
+const ctaNotice = computed(
+  () =>
+    resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.TOOLTIP_HINT, {
+      densityBand: props.model?.densityBand ?? null,
+    })?.notice ?? null,
+)
 </script>
 
 <template>
@@ -27,25 +39,28 @@ const band = computed(() => describeBand(props.model?.densityBand))
     role="tooltip"
     aria-live="polite"
   >
-    <div class="section-tooltip__body">
-      <h3 class="section-tooltip__title">{{ model.title }}</h3>
-      <ul class="section-tooltip__meta">
-        <li v-if="model.subsectionCount > 0" class="section-tooltip__chip">
-          {{ model.subsectionCount }} subsection<span v-if="model.subsectionCount !== 1">s</span>
-        </li>
-        <li class="section-tooltip__chip">{{ model.wordsLabel }}</li>
-        <li v-if="band" class="section-tooltip__chip section-tooltip__chip--density">
-          <!-- Colour comes from the terrain renderer's own biomeColor, so
-               the dot is literally the shade of the ground below. -->
-          <span
-            class="section-tooltip__dot"
-            :style="{ background: band.swatch, color: band.swatch }"
-            aria-hidden="true"
-          ></span>
-          <span class="section-tooltip__density-label">{{ band.name }}</span>
-        </li>
-        <li v-if="model.sourcesLabel" class="section-tooltip__chip">{{ model.sourcesLabel }}</li>
-      </ul>
+    <div class="section-tooltip__body" :class="{ 'has-cta': Boolean(ctaNotice) }">
+      <div class="section-tooltip__main">
+        <h3 class="section-tooltip__title">{{ model.title }}</h3>
+        <ul class="section-tooltip__meta">
+          <li v-if="model.subsectionCount > 0" class="section-tooltip__chip">
+            {{ model.subsectionCount }} subsection<span v-if="model.subsectionCount !== 1">s</span>
+          </li>
+          <li class="section-tooltip__chip">{{ model.wordsLabel }}</li>
+          <li v-if="band" class="section-tooltip__chip section-tooltip__chip--density">
+            <!-- Colour comes from the terrain renderer's own biomeColor, so
+                 the dot is literally the shade of the ground below. -->
+            <span
+              class="section-tooltip__dot"
+              :style="{ background: band.swatch, color: band.swatch }"
+              aria-hidden="true"
+            ></span>
+            <span class="section-tooltip__density-label">{{ band.name }}</span>
+          </li>
+          <li v-if="model.sourcesLabel" class="section-tooltip__chip">{{ model.sourcesLabel }}</li>
+        </ul>
+      </div>
+      <p v-if="ctaNotice" class="section-tooltip__cta">{{ ctaNotice }}</p>
     </div>
   </div>
 </template>
@@ -59,18 +74,24 @@ const band = computed(() => describeBand(props.model?.densityBand))
   left: 0;
   pointer-events: none;
   z-index: var(--z-stage-label);
-  /* Nudge up + center so the summit sits just below the tooltip's bottom edge. */
+  /* Nudge up + center so the summit sits just below the tooltip's bottom edge.
+     Extra height when the citation footer is present. */
   margin-top: -6.5rem;
   margin-left: -8.5rem;
   min-width: 12rem;
   max-width: 18rem;
 }
 
+.section-tooltip:has(.section-tooltip__cta) {
+  margin-top: -8.25rem;
+}
+
 .section-tooltip__body {
   background: var(--surface-1);
   border: 1px solid var(--edge-hair);
   border-radius: 0.65rem;
-  padding: 0.55rem 0.75rem 0.65rem;
+  padding: 0;
+  overflow: hidden;
   backdrop-filter: blur(8px);
   color: var(--ink-1);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
@@ -89,6 +110,17 @@ const band = computed(() => describeBand(props.model?.densityBand))
   background: var(--surface-1);
   border-right: 1px solid var(--edge-hair);
   border-bottom: 1px solid var(--edge-hair);
+}
+
+/* Caret matches the accent footer when the citation strip is showing. */
+.section-tooltip__body.has-cta::after {
+  background: var(--accent-wash);
+  border-right-color: rgba(var(--accent-rgb), 0.28);
+  border-bottom-color: rgba(var(--accent-rgb), 0.28);
+}
+
+.section-tooltip__main {
+  padding: 0.55rem 0.75rem 0.65rem;
 }
 
 .section-tooltip__title {
@@ -133,5 +165,20 @@ const band = computed(() => describeBand(props.model?.densityBand))
   border-radius: 50%;
   display: inline-block;
   box-shadow: 0 0 6px currentColor;
+}
+
+/**
+ * Citation invite — same accent-wash footer grammar as the Field Guide
+ * contribute strip. Still non-interactive (pointer-events stay off).
+ */
+.section-tooltip__cta {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.55rem;
+  background: var(--accent-wash);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.28);
+  color: var(--ink-1);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 </style>

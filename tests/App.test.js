@@ -429,10 +429,11 @@ describe('App section focus', () => {
     },
   }
 
-  // jsdom implements neither scrollIntoView nor layout; the focus path
-  // calls the former, so stub it and assert on the target element instead.
+  // jsdom implements neither scrollIntoView/scrollTo nor layout; the
+  // focus path calls scrollTo on the sheet body, so stub both and assert.
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
+    Element.prototype.scrollTo = vi.fn()
     searchWikipediaTitles.mockResolvedValue([{ title: 'Albert Einstein', description: '', url: '' }])
     fetchWikipediaArticle.mockResolvedValue(articleWithSections)
   })
@@ -463,6 +464,10 @@ describe('App section focus', () => {
     wrapper.findComponent({ name: 'WorldView3D' }).vm.$emit('section-click', target)
     await flushPromises()
     await flushPromises()
+    // Ledger selection scroll waits one animation frame for layout; under
+    // this suite's fake timers that frame only fires when time advances.
+    await vi.advanceTimersByTimeAsync(16)
+    await flushPromises()
   }
 
   // The real engine builds the world, and applyPeakLimits sorts each
@@ -487,7 +492,7 @@ describe('App section focus', () => {
 
     expect(sectionRow('Childhood').classList.contains('is-selected')).toBe(true)
     expect(sectionRow('Early life').classList.contains('is-selected')).toBe(false)
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(Element.prototype.scrollTo).toHaveBeenCalled()
   })
 
   it('expands a collapsed panel before focusing', async () => {
@@ -505,12 +510,13 @@ describe('App section focus', () => {
     const wrapper = await mountWithArticle()
 
     await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
+    Element.prototype.scrollTo.mockClear()
     Element.prototype.scrollIntoView.mockClear()
     // Someone who has scrolled away and clicked the same mountain again
     // wants to be taken back to it, not told they are already there.
     await clickSectionMarker(wrapper, { peakIndex: PEAK.career, anchor: 'Career', depth: 1 })
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+    expect(Element.prototype.scrollTo).toHaveBeenCalled()
     expect(sectionRow('Career').classList.contains('is-selected')).toBe(true)
   })
 
@@ -542,6 +548,7 @@ describe('App section focus', () => {
     await clickSectionMarker(wrapper, { peakIndex: null, anchor: null, depth: 1 })
 
     expect(document.querySelectorAll('.ledger__row.is-selected')).toHaveLength(0)
+    expect(Element.prototype.scrollTo).not.toHaveBeenCalled()
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
   })
 })

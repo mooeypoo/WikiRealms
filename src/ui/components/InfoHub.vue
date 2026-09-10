@@ -3,6 +3,10 @@ import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import { infoTabs } from '../content/infoHub.js'
+import {
+  WIKIPEDIA_CTA_SURFACES,
+  fieldGuideCtaProse,
+} from '../content/wikipediaCtas.js'
 import { useKeymap } from '../design/useKeymap.js'
 
 /**
@@ -19,6 +23,11 @@ defineProps({
 defineEmits(['update:currentTab', 'close'])
 
 const tabs = computed(() => infoTabs)
+
+// Sticky across every tab — copy lives in the Wikipedia CTA registry.
+const contributeFooter = computed(() =>
+  fieldGuideCtaProse(WIKIPEDIA_CTA_SURFACES.FIELD_GUIDE_FOOTER),
+)
 
 // Generated, not written. The old list was typed out by hand and had
 // already drifted — it still advertised keys 1 and 3 for a view toggle
@@ -81,6 +90,10 @@ const { shortcuts } = useKeymap()
         </template>
       </dl>
     </div>
+
+    <template v-if="contributeFooter" #footer>
+      <aside class="guide-cta" aria-label="Contribute to Wikipedia" v-html="contributeFooter"></aside>
+    </template>
   </Sheet>
 </template>
 
@@ -184,6 +197,49 @@ const { shortcuts } = useKeymap()
   color: var(--ink-1);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+/**
+ * Sticky contribution strip — Sheet's footer slot keeps it on every tab.
+ * Brighter than the panel so it reads as a quiet invitation, not chrome.
+ */
+.guide-cta {
+  margin: calc(var(--spacing-sm) * -1) calc(var(--spacing-md) * -1) calc(var(--spacing-md) * -1);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--accent-wash);
+  border-top: 1px solid rgba(var(--accent-rgb), 0.28);
+}
+
+.guide-cta :deep(.guide-cta__lead) {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--ink-1);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.guide-cta :deep(.guide-cta__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+
+.guide-cta :deep(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.guide-cta :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.guide-cta :deep(.guide-cta__sep) {
+  color: var(--ink-3);
 }
 
 /**

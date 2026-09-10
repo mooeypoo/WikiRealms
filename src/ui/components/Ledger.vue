@@ -3,9 +3,20 @@ import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import { prefersReducedMotion } from '../design/prefersReducedMotion.js'
+import { useViewport } from '../design/useViewport.js'
 import { LEDGER_SNAP_POINTS as SNAP_POINTS, LEDGER_STATES as STATES } from './ledgerStates.js'
+import {
+  computeLedgerSelectionScrollTop,
+  ledgerSelectionPadding,
+  nearestVerticalScroller,
+  offsetWithinScroller,
+} from './ledgerScroll.js'
 import { LUSHNESS_BANDS, lushnessBand } from '../../engine/generation/terrain.js'
 import { describeBand } from '../content/lushnessBands.js'
+import {
+  WIKIPEDIA_CTA_SURFACES,
+  resolveWikipediaCta,
+} from '../content/wikipediaCtas.js'
 import { buildSectionRows } from '../rendering/sectionRows.js'
 import {
   estimateWordCount,
@@ -16,6 +27,7 @@ import {
   formatSubsections,
   formatWords,
 } from '../rendering/sectionStats.js'
+import WikipediaCtaLink from './WikipediaCtaLink.vue'
 
 /**
  * What this place is.
@@ -63,6 +75,7 @@ const AUTO_EXPAND_LIMIT = 24
 
 const body = ref(null)
 const summaryExpanded = ref(false)
+const viewport = useViewport()
 
 const snap = computed(() => Math.max(0, STATES.indexOf(props.state) - 1))
 
@@ -259,6 +272,46 @@ function detailFor(row) {
   return facts.filter(Boolean)
 }
 
+/** Contribution CTAs from the ui/content registry — one per surface. */
+function detailCtaFor(row) {
+  return resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_DETAIL, {
+    densityBand: row.hasGround ? lushnessBand(row.lushness) : null,
+    anchor: row.anchor,
+    sectionTitle: row.title,
+    isAggregate: row.isAggregate,
+    articleUrl: props.article.url,
+  })
+}
+
+const selectedDetailCta = computed(() => {
+  if (props.selectedPeak == null) return null
+  const find = (list) => {
+    for (const row of list) {
+      if (row.hasGround && row.peakIndex === props.selectedPeak) return row
+      const nested = find(row.children)
+      if (nested) return nested
+    }
+    return null
+  }
+  const row = find(rows.value)
+  return row ? detailCtaFor(row) : null
+})
+
+const footerCta = computed(() =>
+  resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+    articleUrl: props.article.url,
+    wordCount: estimateWordCount(props.article.sections?.totalSize ?? 0),
+    sectionCount: countSections(props.article.sections),
+  }),
+)
+
+const headerCta = computed(() =>
+  resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_HEADER, {
+    stale: props.stale,
+    articleUrl: props.article.url,
+  }),
+)
+
 /* ── selection ─────────────────────────────────────────────────────────── */
 
 function isSelected(row) {
@@ -307,11 +360,53 @@ watch(
     // either has laid out puts the row somewhere it is about to leave.
     await nextTick()
     await nextTick()
-    body.value
-      ?.querySelector(`[data-peak="${peakIndex}"]`)
-      ?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' })
+    // One more frame so Sheet's height transition / compact→open layout
+    // has a measured scrollport before we pick offsets.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()))
+
+    scrollSelectionIntoView(peakIndex)
   },
 )
+
+/**
+ * Park the selected section head near the top of the Ledger scroller,
+ * with padding tuned for the current rung and viewport. Prefer the row
+ * head over centering the citation callout — that was overshooting.
+ */
+function scrollSelectionIntoView(peakIndex) {
+  const item = body.value?.querySelector(`[data-peak="${peakIndex}"]`)
+  if (!item) return
+
+  const head = item.querySelector('.ledger__row') ?? item
+  const behavior = prefersReducedMotion() ? 'auto' : 'smooth'
+  // Prefer the real scrollport; fall back to Sheet's body class when
+  // getComputedStyle does not surface overflow (jsdom / some WebViews).
+  const scroller =
+    nearestVerticalScroller(item) ?? item.closest('.sheet__body')
+
+  if (!scroller) {
+    head.scrollIntoView({ behavior, block: 'nearest' })
+    return
+  }
+
+  // Selection from the map promotes peek/collapsed → open; the emit may
+  // not have landed on props yet, so pad for the rung we are opening to.
+  const scrollState =
+    props.state === 'collapsed' || props.state === 'peek' ? 'open' : props.state
+  const pad = ledgerSelectionPadding(scrollState, {
+    narrow: !viewport.atLeast('md'),
+    short: viewport.isShort.value,
+  })
+  const headBox = offsetWithinScroller(head, scroller)
+
+  const top = computeLedgerSelectionScrollTop({
+    rangeTop: headBox.top,
+    paddingTop: pad.top,
+    maxScrollTop: Math.max(0, scroller.scrollHeight - scroller.clientHeight),
+  })
+
+  scroller.scrollTo({ top, behavior })
+}
 
 watch(
   () => props.article,
@@ -378,7 +473,15 @@ watch(
 
       <p v-if="stale" class="ledger__stale">
         <Icon name="alert" :size="14" />
-        Updated on Wikipedia since this world was made
+        <span class="ledger__stale-copy">
+          Updated on Wikipedia since this world was made
+          <WikipediaCtaLink
+            v-if="headerCta?.href && headerCta?.label"
+            class="ledger__stale-cta"
+            :href="headerCta.href"
+            :label="headerCta.label"
+          />
+        </span>
       </p>
 
       <dl class="ledger__stats">
@@ -421,7 +524,12 @@ watch(
           </div>
 
           <ul class="ledger__list">
-            <li v-for="row in visibleRows" :key="row.key" class="ledger__item">
+            <li
+              v-for="row in visibleRows"
+              :key="row.key"
+              class="ledger__item"
+              :data-peak="row.hasGround ? row.peakIndex : undefined"
+            >
               <div
                 class="ledger__row"
                 :class="{
@@ -453,7 +561,6 @@ watch(
                   class="ledger__cells"
                   :type="row.hasGround ? 'button' : undefined"
                   :aria-pressed="row.hasGround ? isSelected(row) : undefined"
-                  :data-peak="row.hasGround ? row.peakIndex : undefined"
                   @click="row.hasGround && onRowClick(row)"
                 >
                   <span class="ledger__row-title">{{ row.title }}</span>
@@ -504,6 +611,17 @@ watch(
                   Read {{ row.title }}
                   <Icon name="external" :size="12" />
                 </a>
+                <aside
+                  v-if="selectedDetailCta?.href && selectedDetailCta?.label"
+                  class="ledger__cta-callout"
+                  aria-label="Contribute to Wikipedia"
+                >
+                  <WikipediaCtaLink
+                    class="ledger__cta"
+                    :href="selectedDetailCta.href"
+                    :label="selectedDetailCta.label"
+                  />
+                </aside>
               </div>
             </li>
           </ul>
@@ -526,6 +644,12 @@ watch(
             <Icon name="share" :size="13" />
             Share
           </button>
+          <WikipediaCtaLink
+            v-if="footerCta?.href && footerCta?.label"
+            class="ledger__cta"
+            :href="footerCta.href"
+            :label="footerCta.label"
+          />
         </div>
         <button class="ledger__legend" type="button" @click="$emit('legend')">
           <Icon name="legend" :size="13" />
@@ -636,11 +760,23 @@ watch(
 
 .ledger__stale {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-sm);
   margin: var(--spacing-sm) 0 0;
   color: var(--trail);
   font-size: var(--text-xs);
+}
+
+.ledger__stale-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.ledger__stale-cta {
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .ledger__stats {
@@ -941,6 +1077,33 @@ button.ledger__cells:hover .ledger__row-title {
 
 .ledger__detail .ledger__link {
   margin-top: var(--spacing-sm);
+}
+
+/**
+ * Citation invite — brighter than the selected-row wash so it reads as a
+ * callout rather than another line of metadata (same idea as the Field
+ * Guide contribute footer).
+ */
+.ledger__cta-callout {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: rgba(var(--accent-rgb), 0.22);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+}
+
+.ledger__detail .ledger__cta {
+  display: flex;
+  max-width: 100%;
+  line-height: 1.4;
+  white-space: normal;
+  font-size: var(--text-sm);
+}
+
+.ledger__footer-actions .ledger__cta {
+  /* Footer actions are uppercase mono; keep CTA readable as a sentence. */
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Narrow: the band name goes and the meter carries the ground alone.
