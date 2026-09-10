@@ -8,6 +8,7 @@ function makeWorld() {
   const cellCount = width * height
   return {
     worldId: 'en:1@1:v1',
+    seed: 1,
     terrain: {
       width,
       height,

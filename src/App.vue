@@ -452,6 +452,7 @@ watch([graph, articleCache], () => {
         v-if="worldStatus === 'success' && world && rendersInWebGL"
         ref="worldViewRef"
         :world="world"
+        :categories="article?.categories ?? []"
         :show-portals="preferences.showPortals"
         :show-sections="preferences.showSections"
         :show-foliage="preferences.showFoliage"

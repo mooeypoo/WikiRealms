@@ -68,6 +68,9 @@ import {
 } from '../rendering/foliage.js'
 import { QUALITY_TIERS, detectQualityTier, readDeviceProfile, resolvePixelRatio } from '../rendering/quality.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
+import { scatterCreatures } from '../rendering/creatureScatter.js'
+import { createCreatureGeometry, createCreatureMaterial } from '../rendering/creatureMaterial.js'
+import { updateCreatureLayer } from '../rendering/creatureMotion.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
@@ -81,6 +84,12 @@ const props = defineProps({
   // terrain. Defaults to match useUIState's stored preference, so a
   // mount without the prop shows what the app shows.
   worldShape: { type: String, default: 'flat' },
+  /**
+   * Wikipedia category titles for this article — drive which blob
+   * families inhabit the realm. Presentation-only; changing them rebuilds
+   * the creature layer without regenerating terrain.
+   */
+  categories: { type: Array, default: () => [] },
   /**
    * Peaks-array index selected in the Ledger, or null — the other half of
    * the link `section-click` starts.
@@ -143,6 +152,8 @@ let portalGroup = null
 let haloGroup = null
 let understoryGroup = null
 let canopyGroup = null
+/** Roaming procedural blobs; visibility follows showFoliage for v1. */
+let creatureGroup = null
 let animationFrameId = null
 let raycaster = null
 let pointer = null
@@ -411,8 +422,63 @@ function buildTerrainMesh(world) {
   const halos = buildSectionHalos(world, heightScale)
 
   const { understory, canopy } = buildFoliage(world, heightScale, skyVisibility, sunlightMap)
+  const creatures = buildCreatures(world, heightScale)
 
-  return { mesh, water, portals, halos, understory, canopy, heightScale }
+  return { mesh, water, portals, halos, understory, canopy, creatures, heightScale }
+}
+
+/**
+ * Topic-family blobs scattered like sparse fauna. Placement is
+ * presentation-only (categories + seed); matrices update every frame.
+ *
+ * @param {object} world
+ * @param {number} heightScale
+ * @returns {THREE.Group}
+ */
+function buildCreatures(world, heightScale) {
+  const group = new THREE.Group()
+  const cellScale = projection.foliageScale ?? 1
+  const densityScale = qualityTier?.foliageDensity ?? 1
+  const layers = scatterCreatures(world.terrain, world.seed, props.categories ?? [], {
+    projection,
+    heightScale,
+    densityScale,
+  })
+
+  const weather = sampleEnvironment(environment, performance.now() * 0.001)
+
+  for (const layer of layers) {
+    if (layer.count <= 0) continue
+    const geometry = createCreatureGeometry({ eyeSize: layer.archetype.eyeSize })
+    const material = createCreatureMaterial({ spherical: projection.isSpherical })
+    // Season grade shares the weather list; sway is off so wind is a no-op.
+    windMaterials.push(material)
+    const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    mesh.frustumCulled = false
+    mesh.userData.creatureLayer = layer
+    mesh.userData.fullCount = layer.count
+
+    for (let i = 0; i < layer.count; i += 1) {
+      mesh.setColorAt(
+        i,
+        instanceTint.setRGB(layer.colors[i * 3], layer.colors[i * 3 + 1], layer.colors[i * 3 + 2]),
+      )
+    }
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+
+    updateCreatureLayer(mesh, layer, {
+      timeSec: weather.time,
+      animated: weather.animated,
+      terrain: world.terrain,
+      projection,
+      heightScale,
+      cellScale,
+    })
+    group.add(mesh)
+  }
+
+  return group
 }
 
 /**
@@ -1123,7 +1189,7 @@ function clearScene() {
   // loop would keep writing wind onto a dead program every frame.
   windMaterials = []
 
-  for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup]) {
+  for (const group of [portalGroup, haloGroup, understoryGroup, canopyGroup, creatureGroup]) {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
@@ -1132,6 +1198,7 @@ function clearScene() {
       child.material?.dispose()
     })
   }
+  creatureGroup = null
 }
 
 function rebuildScene() {
@@ -1162,20 +1229,23 @@ function rebuildScene() {
     reducedMotion: prefersReducedMotion(),
   })
 
-  const { mesh, water, portals, halos, understory, canopy, heightScale } = buildTerrainMesh(props.world)
+  const { mesh, water, portals, halos, understory, canopy, creatures, heightScale } = buildTerrainMesh(props.world)
   terrainMesh = mesh
   waterMesh = water
   portalGroup = portals
   haloGroup = halos
   understoryGroup = understory
   canopyGroup = canopy
+  creatureGroup = creatures
   // Apply the current layer toggles so a rebuild respects the user's
   // last on/off state without waiting for the layer-watch to fire.
   portalGroup.visible = props.showPortals
   haloGroup.visible = props.showSections
   understoryGroup.visible = props.showFoliage
   canopyGroup.visible = props.showFoliage
-  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup)
+  // Blobs share the foliage toggle for v1 — living-world chrome.
+  creatureGroup.visible = props.showFoliage
+  worldGroup.add(terrainMesh, waterMesh, portalGroup, haloGroup, understoryGroup, canopyGroup, creatureGroup)
 
   // The air around the planet. Only the globe has a limb to glow; the
   // flat map's edge is a coastline, not a silhouette against the void.
@@ -1688,6 +1758,22 @@ function animate() {
     updateSectionTooltip()
   }
 
+  if (creatureGroup?.visible && props.world) {
+    const cellScale = projection.foliageScale ?? 1
+    for (const mesh of creatureGroup.children) {
+      const layer = mesh.userData.creatureLayer
+      if (!layer) continue
+      updateCreatureLayer(mesh, layer, {
+        timeSec: nowSec,
+        animated: weather.animated,
+        terrain: props.world.terrain,
+        projection,
+        heightScale: currentHeightScale,
+        cellScale,
+      })
+    }
+  }
+
   // Returns true when it actually moved the camera, which covers both a
   // drag and the damping that keeps coasting after one.
   if (controls?.update() === true) markRestless()
@@ -1890,7 +1976,7 @@ function legendAnchors() {
 
 defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
 
-watch(() => [props.world, props.worldShape], rebuildScene)
+watch(() => [props.world, props.worldShape, props.categories], rebuildScene)
 
 watch(
   () => [props.showPortals, props.showSections, props.showFoliage],
@@ -1899,6 +1985,7 @@ watch(
     if (haloGroup) haloGroup.visible = props.showSections
     if (understoryGroup) understoryGroup.visible = props.showFoliage
     if (canopyGroup) canopyGroup.visible = props.showFoliage
+    if (creatureGroup) creatureGroup.visible = props.showFoliage
     markRestless()
   },
   { immediate: false },
