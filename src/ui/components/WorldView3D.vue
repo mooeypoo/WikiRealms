@@ -73,6 +73,7 @@ import { getCreatureAsset, preloadCreatureAssets } from '../rendering/creatureAs
 import { preloadFountainAsset } from '../rendering/fountainAssets.js'
 import { updateCreatureLayer } from '../rendering/creatureMotion.js'
 import { useHoverState } from '../composables/useHoverState.js'
+import { formatPageviews } from '../rendering/sectionStats.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const props = defineProps({
@@ -142,6 +143,12 @@ const sectionTooltipX = ref(0)
 const sectionTooltipY = ref(0)
 const sectionTooltipVisible = ref(false)
 const summitProjectionVec = new THREE.Vector3()
+// Scratch for fish hover picking (instance matrix → screen proximity).
+const creaturePickMatrix = new THREE.Matrix4()
+const creaturePickPos = new THREE.Vector3()
+
+/** How close the cursor must be to a fish centre, in CSS pixels. */
+const CREATURE_PICK_RADIUS_PX = 36
 
 let renderer = null
 let scene = null
@@ -1448,6 +1455,51 @@ function pickHaloClickTarget() {
   }
 }
 
+/**
+ * True when the cursor is near a visible fish on screen.
+ *
+ * Triangle raycasts against small moving InstancedMeshes flicker; a
+ * screen-space radius around each instance centre stays steady while
+ * fish wander, and works at orbit distances where the mesh is a few
+ * pixels wide. Pageviews are article-wide — any fish is the same signal.
+ *
+ * @param {number} clientX
+ * @param {number} clientY
+ * @param {DOMRect} rect
+ * @returns {boolean}
+ */
+function tryHoverCreature(clientX, clientY, rect) {
+  if (!creatureGroup?.visible || !camera) return false
+
+  const maxDist2 = CREATURE_PICK_RADIUS_PX * CREATURE_PICK_RADIUS_PX
+  const pointerX = clientX - rect.left
+  const pointerY = clientY - rect.top
+  let bestDist2 = maxDist2
+
+  for (const mesh of creatureGroup.children) {
+    const count = mesh.count
+    for (let i = 0; i < count; i += 1) {
+      mesh.getMatrixAt(i, creaturePickMatrix)
+      creaturePickPos.setFromMatrixPosition(creaturePickMatrix)
+      // Instance matrices are in mesh/group local (grid) space.
+      if (isOccluded(creaturePickPos)) continue
+
+      worldGroup.localToWorld(creaturePickPos)
+      creaturePickPos.project(camera)
+      if (creaturePickPos.z < -1 || creaturePickPos.z > 1) continue
+
+      const sx = (creaturePickPos.x * 0.5 + 0.5) * rect.width
+      const sy = (-creaturePickPos.y * 0.5 + 0.5) * rect.height
+      const dx = pointerX - sx
+      const dy = pointerY - sy
+      const dist2 = dx * dx + dy * dy
+      if (dist2 < bestDist2) bestDist2 = dist2
+    }
+  }
+
+  return bestDist2 < maxDist2
+}
+
 function onPointerMove(event) {
   if (!raycaster) return
   markRestless()
@@ -1458,8 +1510,19 @@ function onPointerMove(event) {
   const node = resolvePortalObject(hit)
   const portal = node?.userData.portal ?? null
 
-  hoveredMarker.value = portal ? { title: node.userData.destinationTitle, type: 'portal' } : null
-  hoveredPortalId = portal?.portalId ?? null
+  if (portal) {
+    hoveredMarker.value = { title: node.userData.destinationTitle, type: 'portal' }
+    hoveredPortalId = portal.portalId ?? null
+  } else {
+    hoveredPortalId = null
+    hoveredMarker.value = tryHoverCreature(event.clientX, event.clientY, rect)
+      ? {
+          type: 'creature',
+          title: `${formatPageviews(props.pageviews)} views`,
+          detail: 'Last 30 days — fish track how busy this page is',
+        }
+      : null
+  }
   // Portals are the one marker a click navigates through, so say so.
   if (renderer) renderer.domElement.style.cursor = portal ? 'pointer' : ''
 
@@ -2009,8 +2072,14 @@ watch(
       class="world-view-3d__tooltip"
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
-      <strong>Portal to {{ hoveredMarker.title }}</strong>
-      <span>Click to travel</span>
+      <template v-if="hoveredMarker.type === 'portal'">
+        <strong>Portal to {{ hoveredMarker.title }}</strong>
+        <span>Click to travel</span>
+      </template>
+      <template v-else-if="hoveredMarker.type === 'creature'">
+        <strong>{{ hoveredMarker.title }}</strong>
+        <span>{{ hoveredMarker.detail }}</span>
+      </template>
     </div>
     <SectionTooltip
       :model="sectionTooltipModel"

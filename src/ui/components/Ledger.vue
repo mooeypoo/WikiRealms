@@ -127,7 +127,7 @@ const stats = computed(() => [
     label: 'Views',
     value: formatPageviews(props.article.pageviews),
     icon: 'fish',
-    hint: '30-day pageviews — denser fish in the seas',
+    hint: '30-day pageviews — fish in the seas track how busy this page is',
   },
 ])
 
