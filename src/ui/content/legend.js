@@ -92,12 +92,11 @@ export const FEATURE_LEGEND = [
   },
   {
     id: 'creatures',
-    label: 'Animals are the article’s topics — and how many people read it',
+    label: 'Fish in the seas show how many people read the article',
     detail:
-      'Wikipedia categories pick which Kenney Cube Pets roam (foxes, deer, fish, and the rest). ' +
-      'Land animals stay on land; fish keep to deeper water, while crabs and penguins hold the ' +
-      'shallows and may stand on the beach. ' +
-      'Thirty-day pageviews set how many appear: quieter pages stay sparse, busier ones host denser fauna.',
+      'Thirty-day pageviews fill the oceans with fish: quieter pages stay sparse, ' +
+      'busier ones host denser schools. Wikipedia categories tint which species appear ' +
+      '(reef fish nearer the shelf, larger ones in deeper water). Land stays clear of animals.',
   },
 ]
 
@@ -105,8 +104,8 @@ export const WATER_SWATCH = biomeColor(BIOME.OCEAN, 0.5)
 export const SNOW_SWATCH = biomeColor(BIOME.SNOW, 0.95)
 /** Canopy green — matches woodland foliage rather than inventing a third green. */
 export const FOLIAGE_SWATCH = biomeColor(BIOME.WOODLAND, 0.55)
-/** Soft wanderer tint — a readable stand-in for the pudding blobs. */
-export const CREATURE_SWATCH = '#b8a8d0'
+/** Soft cyan — reads as water fauna on the legend swatch. */
+export const CREATURE_SWATCH = '#5a9ec4'
 
 function percent(fraction) {
   return `${Math.round(fraction * 100)}%`

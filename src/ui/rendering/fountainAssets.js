@@ -3,7 +3,7 @@
  *
  * Kept as a Group (stone + translucent water), not a merged mesh — the
  * water material is a separate blend colour and must survive. Orientation
- * matches Cube Pets: Kenney Y-up → WikiRealms Z-up so flat and planet
+ * matches Kenney Y-up → WikiRealms Z-up so flat and planet
  * share one placement path.
  */
 import * as THREE from 'three'

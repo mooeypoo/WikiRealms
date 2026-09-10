@@ -1,106 +1,151 @@
 /**
- * Kenney Cube Pets catalog — which animals exist, where they live, and
+ * Quaternius Cute Fish Pack catalog — which fish swim the oceans, and
  * which topic families prefer them.
  *
- * Assets live in `public/assets/kenney/cube-pets/` (CC0). The raw packs
- * under `models/` are reference only and gitignored.
+ * Runtime GLBs live in `public/assets/quaternius/cute-fish/` (CC0). The
+ * raw pack under `models/` is reference only and gitignored; regenerate
+ * with `node scripts/convertCuteFish.mjs`.
  *
- * Sea vs land is mostly a hard split: fish never leave the ocean, and
- * land pets never spawn in water. Crabs and penguins hold the shelf and
- * may stand on the beach.
+ * Fauna is water-only: pageviews scale how many fish appear. Land stays
+ * clear of animals so the map does not clutter.
  */
 
 import { CREATURE_FAMILY } from './creatureTaxonomy.js'
 import { CREATURE_HABITAT } from './creatures.js'
 
-/** Base URL for curated Cube Pets GLBs (Vite `public/`). */
-export const CUBE_PETS_BASE = '/assets/kenney/cube-pets'
+/** Base URL for curated fish GLBs (Vite `public/`). */
+export const CUTE_FISH_BASE = '/assets/quaternius/cute-fish'
 
 /**
- * @typedef {{ id: string, file: string, habitat: 'land'|'sea',
- *   families: string[] }} KenneyPet
+ * @typedef {{ id: string, file: string, habitat: 'sea',
+ *   families: string[], size: 'small'|'medium'|'large'|'huge' }} FishPet
  */
 
-/** @type {Record<string, KenneyPet>} */
-export const KENNEY_PETS = Object.freeze({
-  beaver: pet('beaver', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places]),
-  bee: pet('bee', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science]),
-  bunny: pet('bunny', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.arts, CREATURE_FAMILY.wanderer]),
-  caterpillar: pet('caterpillar', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science]),
-  cat: pet('cat', 'land', [CREATURE_FAMILY.arts, CREATURE_FAMILY.wanderer, CREATURE_FAMILY.places]),
-  chick: pet('chick', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.sport]),
-  cow: pet('cow', 'land', [CREATURE_FAMILY.places, CREATURE_FAMILY.history]),
-  crab: pet('crab', 'sea', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science, CREATURE_FAMILY.places]),
-  deer: pet('deer', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places, CREATURE_FAMILY.history]),
-  dog: pet('dog', 'land', [CREATURE_FAMILY.sport, CREATURE_FAMILY.wanderer, CREATURE_FAMILY.arts]),
-  elephant: pet('elephant', 'land', [CREATURE_FAMILY.history, CREATURE_FAMILY.places, CREATURE_FAMILY.nature]),
-  fish: pet('fish', 'sea', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science, CREATURE_FAMILY.arts, CREATURE_FAMILY.wanderer]),
-  fox: pet('fox', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places, CREATURE_FAMILY.wanderer]),
-  giraffe: pet('giraffe', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places]),
-  hog: pet('hog', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.sport]),
-  koala: pet('koala', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places]),
-  lion: pet('lion', 'land', [CREATURE_FAMILY.history, CREATURE_FAMILY.arts, CREATURE_FAMILY.sport]),
-  monkey: pet('monkey', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.arts, CREATURE_FAMILY.sport]),
-  panda: pet('panda', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places]),
-  parrot: pet('parrot', 'land', [CREATURE_FAMILY.arts, CREATURE_FAMILY.nature]),
-  penguin: pet('penguin', 'sea', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places, CREATURE_FAMILY.science, CREATURE_FAMILY.wanderer]),
-  pig: pet('pig', 'land', [CREATURE_FAMILY.places, CREATURE_FAMILY.nature]),
-  polar: pet('polar', 'land', [CREATURE_FAMILY.places, CREATURE_FAMILY.science, CREATURE_FAMILY.nature]),
-  tiger: pet('tiger', 'land', [CREATURE_FAMILY.nature, CREATURE_FAMILY.history, CREATURE_FAMILY.sport]),
+/** @type {Record<string, FishPet>} */
+export const FISH_PETS = Object.freeze({
+  anglerfish: fish('anglerfish', 'Anglerfish', [CREATURE_FAMILY.science, CREATURE_FAMILY.wanderer], 'large'),
+  armoredCatfish: fish('armoredCatfish', 'ArmoredCatfish', [CREATURE_FAMILY.science, CREATURE_FAMILY.nature], 'medium'),
+  betta: fish('betta', 'Betta', [CREATURE_FAMILY.arts, CREATURE_FAMILY.nature], 'small'),
+  blackLionFish: fish('blackLionFish', 'BlackLionFish', [CREATURE_FAMILY.history, CREATURE_FAMILY.science], 'medium'),
+  blobfish: fish('blobfish', 'Blobfish', [CREATURE_FAMILY.science, CREATURE_FAMILY.arts], 'medium'),
+  blueGoldfish: fish('blueGoldfish', 'BlueGoldfish', [CREATURE_FAMILY.places, CREATURE_FAMILY.arts], 'small'),
+  blueTang: fish('blueTang', 'BlueTang', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science], 'medium'),
+  butterflyFish: fish('butterflyFish', 'ButterflyFish', [CREATURE_FAMILY.nature, CREATURE_FAMILY.arts], 'small'),
+  cardinalFish: fish('cardinalFish', 'CardinalFish', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places], 'small'),
+  clownfish: fish('clownfish', 'Clownfish', [CREATURE_FAMILY.nature, CREATURE_FAMILY.wanderer, CREATURE_FAMILY.arts], 'small'),
+  coralGrouper: fish('coralGrouper', 'CoralGrouper', [CREATURE_FAMILY.places, CREATURE_FAMILY.nature], 'medium'),
+  cowfish: fish('cowfish', 'Cowfish', [CREATURE_FAMILY.arts, CREATURE_FAMILY.science], 'small'),
+  flatfish: fish('flatfish', 'Flatfish', [CREATURE_FAMILY.places, CREATURE_FAMILY.history], 'medium'),
+  flowerHorn: fish('flowerHorn', 'FlowerHorn', [CREATURE_FAMILY.arts, CREATURE_FAMILY.places], 'medium'),
+  goblinShark: fish('goblinShark', 'GoblinShark', [CREATURE_FAMILY.science, CREATURE_FAMILY.history], 'large'),
+  goldfish: fish('goldfish', 'Goldfish', [CREATURE_FAMILY.places, CREATURE_FAMILY.arts, CREATURE_FAMILY.wanderer], 'small'),
+  humphead: fish('humphead', 'Humphead', [CREATURE_FAMILY.history, CREATURE_FAMILY.places], 'large'),
+  koi: fish('koi', 'Koi', [CREATURE_FAMILY.arts, CREATURE_FAMILY.places, CREATURE_FAMILY.history], 'medium'),
+  lionfish: fish('lionfish', 'Lionfish', [CREATURE_FAMILY.nature, CREATURE_FAMILY.sport], 'medium'),
+  mandarinFish: fish('mandarinFish', 'MandarinFish', [CREATURE_FAMILY.arts, CREATURE_FAMILY.nature], 'small'),
+  moorishIdol: fish('moorishIdol', 'MoorishIdol', [CREATURE_FAMILY.wanderer, CREATURE_FAMILY.arts], 'small'),
+  parrotFish: fish('parrotFish', 'ParrotFish', [CREATURE_FAMILY.nature, CREATURE_FAMILY.places], 'medium'),
+  piranha: fish('piranha', 'Piranha', [CREATURE_FAMILY.sport, CREATURE_FAMILY.history], 'small'),
+  puffer: fish('puffer', 'Puffer', [CREATURE_FAMILY.science, CREATURE_FAMILY.arts], 'medium'),
+  redSnapper: fish('redSnapper', 'RedSnapper', [CREATURE_FAMILY.sport, CREATURE_FAMILY.places], 'medium'),
+  royalGramma: fish('royalGramma', 'RoyalGramma', [CREATURE_FAMILY.arts, CREATURE_FAMILY.nature], 'small'),
+  shark: fish('shark', 'Shark', [CREATURE_FAMILY.history, CREATURE_FAMILY.sport, CREATURE_FAMILY.science], 'huge'),
+  sunfish: fish('sunfish', 'Sunfish', [CREATURE_FAMILY.science, CREATURE_FAMILY.wanderer], 'huge'),
+  swordfish: fish('swordfish', 'Swordfish', [CREATURE_FAMILY.sport, CREATURE_FAMILY.history], 'huge'),
+  tang: fish('tang', 'Tang', [CREATURE_FAMILY.nature, CREATURE_FAMILY.wanderer], 'medium'),
+  tetra: fish('tetra', 'Tetra', [CREATURE_FAMILY.nature, CREATURE_FAMILY.science], 'small'),
+  tuna: fish('tuna', 'Tuna', [CREATURE_FAMILY.sport, CREATURE_FAMILY.places], 'large'),
+  turbot: fish('turbot', 'Turbot', [CREATURE_FAMILY.places, CREATURE_FAMILY.history], 'medium'),
+  yellowTang: fish('yellowTang', 'YellowTang', [CREATURE_FAMILY.nature, CREATURE_FAMILY.arts], 'medium'),
+  zebraClownFish: fish('zebraClownFish', 'ZebraClownFish', [CREATURE_FAMILY.wanderer, CREATURE_FAMILY.nature], 'small'),
 })
 
-export const KENNEY_PET_IDS = Object.freeze(Object.keys(KENNEY_PETS))
+/** @deprecated Alias — scatter / assets still import this name in places. */
+export const KENNEY_PETS = FISH_PETS
 
-export const LAND_PET_IDS = Object.freeze(KENNEY_PET_IDS.filter((id) => KENNEY_PETS[id].habitat === CREATURE_HABITAT.land))
-export const SEA_PET_IDS = Object.freeze(KENNEY_PET_IDS.filter((id) => KENNEY_PETS[id].habitat === CREATURE_HABITAT.sea))
+export const FISH_PET_IDS = Object.freeze(Object.keys(FISH_PETS))
+export const KENNEY_PET_IDS = FISH_PET_IDS
 
-/** Near the waterline / beach — can climb ashore; never fish. */
-export const SEA_SHORE_PET_IDS = Object.freeze(['crab', 'penguin'])
-
-/** Deeper basin — fish belong here; penguins may still cruise. */
-export const SEA_DEEP_PET_IDS = Object.freeze(['fish', 'penguin'])
+/** Every pet is a sea fish; land fauna is gone. */
+export const SEA_PET_IDS = FISH_PET_IDS
+export const LAND_PET_IDS = Object.freeze([])
 
 /**
- * Motion / size profile for a pet. Models are normalised to unit height;
+ * Reef / shelf fish — prefer these in shallows so sharks do not skim the
+ * beach. Still all over-water; nothing stands on sand.
+ */
+export const SEA_SHORE_PET_IDS = Object.freeze(
+  FISH_PET_IDS.filter((id) => FISH_PETS[id].size === 'small' || FISH_PETS[id].size === 'medium'),
+)
+
+/** Open basin — full catalog including the big ones. */
+export const SEA_DEEP_PET_IDS = FISH_PET_IDS
+
+const SIZE_SCALE = Object.freeze({
+  small: 3.4,
+  medium: 4.4,
+  large: 5.8,
+  huge: 7.0,
+})
+
+const SIZE_SUBMERGE = Object.freeze({
+  small: 0.032,
+  medium: 0.04,
+  large: 0.05,
+  huge: 0.058,
+})
+
+/**
+ * Motion / size profile for a fish. Models are normalised to unit height;
  * `scale` is in grid cells (then multiplied by the projection's foliageScale).
  *
- * Sized to read from default orbit — small enough to stay accents, large
- * enough not to vanish into fleas again.
- *
- * @param {KenneyPet} pet
+ * @param {FishPet} pet
  */
 export function petArchetype(pet) {
-  const sea = pet.habitat === CREATURE_HABITAT.sea
+  const size = pet.size ?? 'medium'
   return Object.freeze({
     petId: pet.id,
     family: pet.families[0],
-    habitat: pet.habitat,
+    habitat: CREATURE_HABITAT.sea,
     color: 0xffffff,
     squat: 1,
     eyeSize: 0,
     elongate: 1,
     dorsal: false,
-    gait: sea ? 'breach' : 'hop',
-    hopHeight: sea ? 0.38 : 0.32,
-    gaitSpeed: sea ? 0.7 : 0.85,
-    scale: sea ? 5.2 : 4.8,
+    gait: 'breach',
+    hopHeight: size === 'huge' || size === 'large' ? 0.45 : 0.32,
+    gaitSpeed: size === 'small' ? 0.85 : 0.65,
+    scale: SIZE_SCALE[size] ?? SIZE_SCALE.medium,
   })
 }
 
 /**
- * How far below the waterline (in heightMap units) a sea pet's root sits.
- * Fish hang deeper; shore pets skim just under so they stay visible.
+ * How far below the waterline (in heightMap units) a fish's root sits.
+ * @param {string} petId
  */
 export function seaSubmerge(petId) {
-  return petId === 'fish' ? 0.045 : 0.012
+  const size = FISH_PETS[petId]?.size ?? 'medium'
+  return SIZE_SUBMERGE[size] ?? SIZE_SUBMERGE.medium
 }
 
 /**
- * Shallower than this depth (oceanMaxHeight − floor) is the shelf: crabs
- * and penguins only. Matches WATER.opaqueDepth so fauna and the visible
+ * Shallower than this depth (oceanMaxHeight − floor) is the shelf: prefer
+ * smaller reef fish. Matches WATER.opaqueDepth so fauna and the visible
  * shelf agree.
  */
 export const SEA_FISH_MIN_DEPTH = 0.08
+
+/**
+ * Fish only spawn this deep or deeper — the wet sand / greenwater edge
+ * stays clear so schools read as open-ocean, not shoreline clutter.
+ */
+export const SEA_SPAWN_MIN_DEPTH = 0.11
+
+/**
+ * How many cells of pure ocean must surround a spawn (Chebyshev). Keeps
+ * homes off the coastline even when depth alone would allow them.
+ */
+export const SEA_OFFSHORE_CELLS = 5
 
 /**
  * @param {number} depth from waterDepth(height01)
@@ -111,52 +156,55 @@ export function seaZoneForDepth(depth) {
 }
 
 /**
- * Soft family preference over the habitat pool, optionally narrowed by
- * sea zone so fish stay off the shelf.
+ * Soft family preference over the fish pool, optionally narrowed by sea
+ * zone so huge predators stay off the shelf.
  *
- * Preferred pets get half the roll space so a physics article still leans
- * science-ish, but the other half draws from every land (or sea) pet —
- * otherwise Einstein is almost only polar / bee / caterpillar.
+ * Preferred fish get a quarter of the roll space; the rest draws from the
+ * whole zone pool so seas show many species, not one family's favourites.
  *
  * @param {string} family
- * @param {string} habitat
+ * @param {string} _habitat ignored — fauna is sea-only
  * @param {number} roll 0..1
  * @param {{ seaZone?: 'shore'|'deep' }} [options]
  */
-export function pickPetForFamily(family, habitat, roll, options = {}) {
-  let all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
-  if (habitat === CREATURE_HABITAT.sea && options.seaZone === 'shore') {
-    all = SEA_SHORE_PET_IDS
-  } else if (habitat === CREATURE_HABITAT.sea && options.seaZone === 'deep') {
-    all = SEA_DEEP_PET_IDS
-  }
-  const preferred = all.filter((id) => KENNEY_PETS[id].families.includes(family))
+export function pickPetForFamily(family, _habitat, roll, options = {}) {
+  let all = SEA_PET_IDS
+  if (options.seaZone === 'shore') all = SEA_SHORE_PET_IDS
+  else if (options.seaZone === 'deep') all = SEA_DEEP_PET_IDS
+
+  const preferred = all.filter((id) => FISH_PETS[id].families.includes(family))
   const t = Math.min(0.999999, Math.max(0, roll))
 
-  if (preferred.length > 0 && t < 0.5) {
-    return preferred[Math.floor(t * 2 * preferred.length)]
+  if (preferred.length > 0 && t < 0.25) {
+    return preferred[Math.floor((t / 0.25) * preferred.length)]
   }
 
-  const u = preferred.length > 0 ? (t - 0.5) * 2 : t
+  const u = preferred.length > 0 ? (t - 0.25) / 0.75 : t
   return all[Math.floor(u * all.length)]
 }
 
 /**
  * @param {string} family
- * @param {string} habitat
+ * @param {string} [_habitat]
  * @returns {string[]}
  */
-export function petsForFamily(family, habitat) {
-  const all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
-  const preferred = all.filter((id) => KENNEY_PETS[id].families.includes(family))
-  return preferred.length > 0 ? preferred : [...all]
+export function petsForFamily(family, _habitat) {
+  const preferred = SEA_PET_IDS.filter((id) => FISH_PETS[id].families.includes(family))
+  return preferred.length > 0 ? preferred : [...SEA_PET_IDS]
 }
 
-function pet(id, habitat, families) {
+/**
+ * @param {string} id
+ * @param {string} file basename without extension
+ * @param {string[]} families
+ * @param {'small'|'medium'|'large'|'huge'} size
+ */
+function fish(id, file, families, size) {
   return Object.freeze({
     id,
-    file: `animal-${id}.glb`,
-    habitat,
+    file: `${file}.glb`,
+    habitat: CREATURE_HABITAT.sea,
     families: Object.freeze([...families]),
+    size,
   })
 }

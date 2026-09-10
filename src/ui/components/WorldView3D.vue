@@ -86,13 +86,13 @@ const props = defineProps({
   // mount without the prop shows what the app shows.
   worldShape: { type: String, default: 'flat' },
   /**
-   * Wikipedia category titles for this article — drive which blob
-   * families inhabit the realm. Presentation-only; changing them rebuilds
-   * the creature layer without regenerating terrain.
+   * Wikipedia category titles for this article — tint which fish families
+   * swim the oceans. Presentation-only; changing them rebuilds the creature
+   * layer without regenerating terrain.
    */
   categories: { type: Array, default: () => [] },
   /**
-   * 30-day user pageviews — how many creatures the realm hosts (log-scaled).
+   * 30-day user pageviews — how many fish the oceans host (log-scaled).
    * Null when the metrics request soft-failed or has not been wired yet.
    */
   pageviews: { type: Number, default: null },
@@ -158,7 +158,7 @@ let portalGroup = null
 let haloGroup = null
 let understoryGroup = null
 let canopyGroup = null
-/** Roaming procedural blobs; visibility follows showFoliage for v1. */
+/** Roaming ocean fish; visibility follows showFoliage for v1. */
 let creatureGroup = null
 let animationFrameId = null
 let raycaster = null
@@ -434,10 +434,9 @@ function buildTerrainMesh(world) {
 }
 
 /**
- * Kenney Cube Pets scattered like sparse fauna. Placement is
- * presentation-only (categories + pageviews + seed); matrices update every
- * frame. Geometry is shared from the asset cache — do not dispose it with
- * the scene.
+ * Quaternius fish scattered in the oceans. Placement is presentation-only
+ * (categories + pageviews + seed); matrices update every frame. Geometry is
+ * shared from the asset cache — do not dispose it with the scene.
  *
  * @param {object} world
  * @param {number} heightScale
@@ -1196,7 +1195,7 @@ function clearScene() {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
-      // Kenney pet geometry/materials are shared across rebuilds.
+      // Shared fish geometry/materials are kept across rebuilds.
       if (child.userData?.sharedCreatureAsset) return
       child.geometry?.dispose()
       child.material?.map?.dispose()

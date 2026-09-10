@@ -280,7 +280,7 @@ describe('Ledger', () => {
     it('pairs each readout with a map-vocabulary mark', () => {
       // The numbers alone do not say what the world does with them; the
       // glyph under each tile is the same vocabulary as peaks, trees,
-      // portals and creatures on the map.
+      // portals and fish on the map.
       mountLedger()
       const tiles = [...document.querySelectorAll('.ledger__stats > div')]
       const marks = tiles.map((tile) => tile.querySelector('.ledger__stat-mark'))
@@ -292,13 +292,13 @@ describe('Ledger', () => {
       expect(icons[1]).toContain('M12 21v-6') // tree
       expect(icons[2]).toContain('M12 2.5L20 12') // portal mark
       expect(icons[3]).toContain('M5 7h14') // prose
-      expect(icons[4]).toContain('M6.5 10.5') // creature
+      expect(icons[4]).toContain('M3.5 12c2.2') // fish
       expect(tiles.map((tile) => tile.getAttribute('title'))).toEqual([
         'Mountain ranges on the map',
         'How well sections cite — trees and green',
         'Outbound links you can travel through',
         'Article length — sets the waterline',
-        'Pageviews — how many animals roam',
+        '30-day pageviews — denser fish in the seas',
       ])
     })
 

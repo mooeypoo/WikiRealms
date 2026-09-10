@@ -1,16 +1,13 @@
 /**
- * How busy an article is → how many creatures the world hosts.
+ * How busy an article is → how many fish the oceans host.
  *
- * Categories still pick WHICH families appear; this only scales COUNT.
+ * Categories still pick WHICH species appear; this only scales COUNT.
  * Log-compressed so a viral page does not flood the map and a quiet stub
  * is not empty forever — and so Everest and a niche biography stay in
  * one readable band.
  *
  * Free of three.js / adapters: pure arithmetic for tests.
  */
-
-/** Below this many 30-day views, oceans stay empty (land may still host a few). */
-export const SEA_PAGEVIEW_THRESHOLD = 8000
 
 /**
  * Maps a 30-day pageview total to a density scale in [0.12, 1].
@@ -31,18 +28,15 @@ export function pageviewDensityScale(pageviews) {
 }
 
 /**
- * Whether sea leviathans should appear for this popularity.
+ * Sea fauna always appears when there is ocean — pageviews only change
+ * how many fish swim, not whether the seas wake at all.
  *
- * When pageviews are known, the hard threshold wins — quiet articles stay
- * land-only even if the log curve would otherwise look "busy enough".
- * Unknown metrics fall back to the density scale alone.
- *
- * @param {number|null|undefined} pageviews
- * @param {number} [densityScale]
+ * @param {number|null|undefined} [_pageviews]
+ * @param {number} [_densityScale]
  */
-export function allowSeaCreatures(pageviews, densityScale = pageviewDensityScale(pageviews)) {
-  if (pageviews != null && Number.isFinite(pageviews)) {
-    return pageviews >= SEA_PAGEVIEW_THRESHOLD
-  }
-  return densityScale >= 0.45
+export function allowSeaCreatures(_pageviews, _densityScale) {
+  return true
 }
+
+/** @deprecated Fauna is water-only; threshold no longer gates spawning. */
+export const SEA_PAGEVIEW_THRESHOLD = 0

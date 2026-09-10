@@ -22,35 +22,40 @@ export const CREATURE_HABITAT = Object.freeze({
  * Sparse on purpose — noticed individuals, not cover.
  */
 export const CREATURE_DENSITY_BY_BAND = Object.freeze({
-  [BIOME.DUNES]: 0.012,
-  [BIOME.STEPPE]: 0.02,
-  [BIOME.LIGHT_VEG]: 0.035,
-  [BIOME.MEADOW]: 0.055,
-  [BIOME.WOODLAND]: 0.045,
-  [BIOME.JUNGLE]: 0.07,
-  // Open water: rarer than meadow so oceans stay empty enough to read.
-  [BIOME.OCEAN]: 0.028,
+  // Land bands stay at 0 — fauna is water-only (pageviews → fish count).
+  [BIOME.DUNES]: 0,
+  [BIOME.STEPPE]: 0,
+  [BIOME.LIGHT_VEG]: 0,
+  [BIOME.MEADOW]: 0,
+  [BIOME.WOODLAND]: 0,
+  [BIOME.JUNGLE]: 0,
+  // Open water carries the whole pageview signal.
+  [BIOME.OCEAN]: 0.07,
 })
 
 export const CREATURE_SAMPLING = Object.freeze({
-  /** Sample every Nth cell so we never approach foliage-scale counts. */
+  /** Unused for land (density 0); kept for older call sites. */
   stride: 3,
-  /** Ocean can be coarser — whales need room. */
-  seaStride: 4,
-  /** Hard ceilings after density rolls, before quality / pageview scaling. */
-  maxLand: 36,
-  maxSea: 12,
-  /** Wander radius in grid cells around the home cell. */
+  /** Ocean sampling lattice. */
+  seaStride: 3,
+  /** Hard ceilings after density rolls, before pageview scaling. */
+  maxLand: 0,
+  /** Busy pages fill the seas; quiet ones stay sparse via pageviewDensityScale. */
+  maxSea: 64,
+  /** Land wander (unused). */
   wanderRadius: 2.15,
-  seaWanderRadius: 5.0,
-  /** Crabs / penguins hug the shelf — short hops, not open-ocean cruising. */
-  shoreWanderRadius: 2.6,
-  /** Chance a beach cell hosts a shore pet (ocean density is separate). */
-  beachDensity: 0.02,
-  /** Seconds for one land stride cycle at gaitSpeed 1. Longer = calmer. */
+  /** Open-ocean cruise radius in grid cells — wide loops, not shoreline hugs. */
+  seaWanderRadius: 14,
+  /** Reef fish still roam, but farther from home than before. */
+  shoreWanderRadius: 9,
+  /** Soft push-apart distance between fish in the same layer (grid cells). */
+  swimSeparation: 2.4,
+  /** Beach never hosts fauna anymore. */
+  beachDensity: 0,
+  /** Seconds for one land stride cycle at gaitSpeed 1. */
   hopPeriod: 1.55,
-  /** Seconds for one sea cruise / crest cycle at gaitSpeed 1. */
-  breachPeriod: 3.6,
+  /** Seconds for one swim / bob cycle at gaitSpeed 1 — slow, readable. */
+  breachPeriod: 4.4,
 })
 
 /**
@@ -455,19 +460,22 @@ export function creaturePose(timeSec, creature) {
   }
 
   if (creature.gait === 'breach') {
-    // Mostly a surface cruise with body stretch; a soft crest instead of a leap.
+    // Slow surface cruise: continuous gentle bob that can crest partly
+    // out of the water, plus a softer body stretch — not a leap.
     const roll = Math.sin(cycle * Math.PI * 2)
-    const cresting = cycle > 0.68 && cycle < 0.92
-    const t = cresting ? (cycle - 0.68) / 0.24 : 0
+    const cresting = cycle > 0.55 && cycle < 0.9
+    const t = cresting ? (cycle - 0.55) / 0.35 : 0
     const crest = cresting ? Math.sin(t * Math.PI) : 0
+    const bob = 0.5 + 0.5 * roll
     const amp = 0.06 + Math.min(0.1, creature.hopHeight * 0.04)
     return {
-      lift: crest * body * 0.1,
-      squashX: body * (0.98 + crest * 0.05),
-      squashY: body * baseSquat * (1 - crest * amp * 0.55 + Math.abs(roll) * 0.02),
-      squashZ: body * (1 + crest * 0.1 + Math.abs(roll) * 0.02),
+      // Base bob keeps them alive between crests; crest peeks above the waterline.
+      lift: body * (0.04 + bob * 0.1 + crest * 0.28),
+      squashX: body * (0.98 + crest * 0.04 + Math.abs(roll) * 0.02),
+      squashY: body * baseSquat * (1 - crest * amp * 0.4 + Math.abs(roll) * 0.015),
+      squashZ: body * (1 + crest * 0.08 + Math.abs(roll) * 0.02),
       lean: 0,
-      pitch: crest * 0.18 + roll * 0.03,
+      pitch: crest * 0.22 + roll * 0.05,
     }
   }
 

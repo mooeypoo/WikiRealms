@@ -109,12 +109,12 @@ const stats = computed(() => [
     hint: 'Article length — sets the waterline',
   },
   // 30-day user pageviews from AQS — how busy the article is. Drives how
-  // many creatures roam the realm; shown here so that signal is readable.
+  // many fish swim the oceans; shown here so that signal is readable.
   {
     label: 'Views',
     value: formatPageviews(props.article.pageviews),
-    icon: 'creature',
-    hint: 'Pageviews — how many animals roam',
+    icon: 'fish',
+    hint: '30-day pageviews — denser fish in the seas',
   },
 ])
 

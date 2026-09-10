@@ -20,7 +20,7 @@ describe('creaturePose', () => {
     expect(Math.abs(pose.lean)).toBeLessThan(0.05)
   })
 
-  it('keeps sea breach crests modest', () => {
+  it('lets sea breach crests peek above the water without leaping', () => {
     let maxLift = 0
     for (let t = 0; t < 4; t += 0.05) {
       const pose = creaturePose(t, {
@@ -33,7 +33,9 @@ describe('creaturePose', () => {
       })
       maxLift = Math.max(maxLift, pose.lift)
     }
-    expect(maxLift).toBeLessThan(1.0)
+    // Enough to crest partly out; well under a full body-length leap.
+    expect(maxLift).toBeGreaterThan(1.2)
+    expect(maxLift).toBeLessThan(2.5)
   })
 })
 

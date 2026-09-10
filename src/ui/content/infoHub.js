@@ -51,11 +51,12 @@ export const infoHubContent = {
       </ul>
       <h3>Credits</h3>
       <p>
-        Animal models are
-        <a href="https://kenney.nl/assets/cube-pets" target="_blank" rel="noopener noreferrer">Cube Pets</a>
-        by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
+        Fish models are from the
+        <a href="https://quaternius.com" target="_blank" rel="noopener noreferrer">Cute Fish Pack</a>
+        by <a href="https://www.patreon.com/quaternius" target="_blank" rel="noopener noreferrer">Quaternius</a>
         (Creative Commons CC0). Portal fountains use pieces from
         <a href="https://kenney.nl/assets/fantasy-town-kit" target="_blank" rel="noopener noreferrer">Fantasy Town Kit</a>
+        by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
         (also CC0).
       </p>
     `,

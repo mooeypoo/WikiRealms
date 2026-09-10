@@ -113,12 +113,13 @@ describe('Legend', () => {
     expect(text).toContain('treeline')
   })
 
-  it('explains blobs as categories and pageviews', () => {
+  it('explains fish as categories and pageviews', () => {
     mountLegend()
     const text = document.querySelector('.legend__features').textContent
-    expect(text).toContain('Animals are the article')
+    expect(text).toContain('Fish in the seas')
     expect(text).toContain('pageviews')
     expect(text).toContain('categories')
+    expect(text).toContain('Land stays clear')
   })
 
   it('points at features that are actually on screen', () => {

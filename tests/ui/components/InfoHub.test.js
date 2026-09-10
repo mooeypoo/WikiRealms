@@ -65,11 +65,15 @@ describe('InfoHub', () => {
     wrapper.unmount()
   })
 
-  it('credits Kenney Cube Pets on the About tab', () => {
+  it('credits Quaternius fish and Kenney fountains on the About tab', () => {
     const wrapper = mountGuide({ currentTab: 'about' })
     const about = [...document.querySelectorAll('.guide__prose')].find((el) => el.textContent.includes('Credits'))
+    expect(about?.textContent).toContain('Quaternius')
+    expect(about?.textContent).toContain('Cute Fish Pack')
     expect(about?.textContent).toContain('Kenney')
-    expect(about?.innerHTML).toContain('https://kenney.nl/assets/cube-pets')
+    expect(about?.textContent).not.toContain('Cube Pets')
+    expect(about?.innerHTML).toContain('https://quaternius.com')
+    expect(about?.innerHTML).toContain('Fantasy Town Kit')
     expect(about?.innerHTML).toContain('https://kenney.nl/assets/fantasy-town-kit')
     wrapper.unmount()
   })

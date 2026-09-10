@@ -55,8 +55,8 @@ export const ICONS = {
   peaks: '<path d="M2.5 19.5L8.5 7l3.2 5.2L15 5.5l6.5 14z" /><path d="M2.5 19.5h19" />',
   tree: '<path d="M12 21v-6" /><path d="M12 15c-3.2 0-5.5-2-5.5-4.6C6.5 7.8 9 5.5 12 3.5c3 2 5.5 4.3 5.5 6.9C17.5 13 15.2 15 12 15z" /><path d="M8.2 12.2c-1.4.6-2.2 1.6-2.2 2.9 0 1.7 1.8 3 4 3h4c2.2 0 4-1.3 4-3 0-1.3-.8-2.3-2.2-2.9" />',
   prose: '<path d="M5 7h14" /><path d="M5 12h11" /><path d="M5 17h8" />',
-  creature:
-    '<path d="M6.5 10.5c0-2.4 2.2-4.5 5.5-4.5s5.5 2.1 5.5 4.5c0 1.2-.4 2.2-1.1 3" /><path d="M8.2 6.8L6.5 4.2" /><path d="M15.8 6.8L17.5 4.2" /><path d="M9.2 13.5c.6 2.2 1.6 4.8 2.8 4.8s2.2-2.6 2.8-4.8" /><circle cx="10.2" cy="10.2" r="0.7" fill="currentColor" stroke="none" /><circle cx="13.8" cy="10.2" r="0.7" fill="currentColor" stroke="none" />',
+  // Ocean fauna / pageviews — a simple side-on fish, not the old land blob.
+  fish: '<path d="M3.5 12c2.2-4.2 5.6-6.2 9.2-6.2 4.6 0 6.6 2.6 8.8 6.2-2.2 3.6-4.2 6.2-8.8 6.2-3.6 0-7-2-9.2-6.2z" /><circle cx="8.2" cy="11.2" r="0.85" fill="currentColor" stroke="none" /><path d="M16.8 12l3.7-3.2v6.4z" />',
 }
 
 export const ICON_NAMES = Object.keys(ICONS)
