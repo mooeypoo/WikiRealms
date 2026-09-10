@@ -10,6 +10,7 @@ import { buildSectionRows } from '../rendering/sectionRows.js'
 import {
   estimateWordCount,
   formatCount,
+  formatPageviews,
   formatPortals,
   formatSources,
   formatSubsections,
@@ -86,6 +87,9 @@ const stats = computed(() => [
   // Words is uncapped, is a fact about the article, and is the one the
   // world visibly answers to: length is what sets the waterline.
   { label: 'Words', value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)) },
+  // 30-day user pageviews from AQS — how busy the article is. Drives how
+  // many creatures roam the realm; shown here so that signal is readable.
+  { label: 'Views', value: formatPageviews(props.article.pageviews) },
 ])
 
 /**
@@ -606,7 +610,7 @@ watch(
 
 .ledger__stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--spacing-sm);
   margin: var(--spacing-md) 0 0;
   padding-top: var(--spacing-sm);

@@ -12,6 +12,7 @@ export default {
   args: {
     world: cassiniDivisionWorld,
     categories: cassiniDivisionArticle.categories,
+    pageviews: cassiniDivisionArticle.pageviews,
     showSections: true,
     showPortals: true,
     showFoliage: true,
@@ -62,6 +63,7 @@ export const WithBlobs = {
       'Mammals of fiction',
       'Olympic sports',
     ],
+    pageviews: 250_000,
   },
 }
 

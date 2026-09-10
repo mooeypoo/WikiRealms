@@ -4,8 +4,9 @@ import {
   normalizeArticleResponse,
 } from '../core/article/normalizeArticle.js'
 import { fetchWikipediaSectionsHtml } from './wikipediaSectionsAdapter.js'
+import { fetchArticlePageviews } from './wikipediaPageviewsAdapter.js'
 import { parseSectionTree } from '../core/article/parseSectionTree.js'
-import { WIKIMEDIA_USER_AGENT } from '../appInfo.js'
+import { wikimediaFetchInit } from './wikimediaFetch.js'
 
 export class WikipediaArticleError extends Error {
   constructor(message, { cause } = {}) {
@@ -21,10 +22,13 @@ export { ArticleNotFoundError }
  * Fetches and normalizes a single English Wikipedia article by title,
  * resolving its identity and latest revision information, and attaching
  * its parsed section tree (article.sections) for section-driven world
- * generation — see docs/generation.md. Two requests total: the action
- * API (identity/revision/categories/links) and the REST `with_html`
- * endpoint (section structure, deliberately not `action=parse` — see
- * docs/generation.md's fetching notes).
+ * generation — see docs/generation.md.
+ *
+ * Three requests: the action API (identity/revision/categories/links),
+ * the REST `with_html` endpoint (section structure), and AQS pageviews
+ * (last 30 days of user views). Pageviews soft-fail to null so a metrics
+ * outage never blocks arriving in a realm.
+ *
  * @param {string} title
  * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
  * @returns {Promise<object>} Article
@@ -41,7 +45,7 @@ export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal }
   try {
     // Browsers block scripts from setting the real User-Agent header, so
     // MediaWiki's documented workaround (Api-User-Agent) is used instead.
-    response = await fetchImpl(url, { signal, headers: { 'Api-User-Agent': WIKIMEDIA_USER_AGENT } })
+    response = await fetchImpl(url, wikimediaFetchInit(signal))
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw error
@@ -53,19 +57,30 @@ export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal }
     throw new WikipediaArticleError(`Wikipedia article API responded with status ${response.status}`)
   }
 
-
   const raw = await response.json()
   const article = normalizeArticleResponse(raw)
 
-  let html
-  try {
-    html = await fetchWikipediaSectionsHtml(article.title, { fetchImpl, signal })
-  } catch (error) {
-    if (error?.name === 'AbortError') {
-      throw error
+  // Sections are required for terrain; pageviews are atmosphere. Run them
+  // together, then only hard-fail if the section tree did not arrive.
+  const [sectionsResult, pageviews] = await Promise.all([
+    fetchWikipediaSectionsHtml(article.title, { fetchImpl, signal })
+      .then((html) => ({ ok: true, html }))
+      .catch((error) => ({ ok: false, error })),
+    fetchArticlePageviews(article.title, { fetchImpl, signal, language: article.language }),
+  ])
+
+  if (!sectionsResult.ok) {
+    if (sectionsResult.error?.name === 'AbortError') {
+      throw sectionsResult.error
     }
-    throw new WikipediaArticleError('Failed to fetch article section structure', { cause: error })
+    throw new WikipediaArticleError('Failed to fetch article section structure', {
+      cause: sectionsResult.error,
+    })
   }
 
-  return { ...article, sections: parseSectionTree(html) }
+  return {
+    ...article,
+    pageviews,
+    sections: parseSectionTree(sectionsResult.html),
+  }
 }

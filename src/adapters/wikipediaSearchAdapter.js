@@ -1,5 +1,5 @@
 import { buildOpenSearchUrl, normalizeOpenSearchResponse } from '../core/search/normalizeSearchResults.js'
-import { WIKIMEDIA_USER_AGENT } from '../appInfo.js'
+import { wikimediaFetchInit } from './wikimediaFetch.js'
 
 export class WikipediaSearchError extends Error {
   constructor(message, { cause } = {}) {
@@ -25,9 +25,7 @@ export async function searchWikipediaTitles(query, { fetchImpl = fetch, limit = 
 
   let response
   try {
-    // Browsers block scripts from setting the real User-Agent header, so
-    // MediaWiki's documented workaround (Api-User-Agent) is used instead.
-    response = await fetchImpl(url, { signal, headers: { 'Api-User-Agent': WIKIMEDIA_USER_AGENT } })
+    response = await fetchImpl(url, wikimediaFetchInit(signal))
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw error

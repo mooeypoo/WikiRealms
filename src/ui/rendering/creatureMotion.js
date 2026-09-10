@@ -1,10 +1,18 @@
 /**
- * Per-frame pose for instanced blobs: wander, hop, face travel, stick to
- * the heightfield. Uses three.js because it writes instance matrices.
+ * Per-frame pose for instanced blobs: wander, hop / waddle / breach,
+ * stick to the heightfield or the sea surface.
  */
 import * as THREE from 'three'
-import { creaturePose, creatureWander } from './creatures.js'
+import {
+  CREATURE_HABITAT,
+  CREATURE_SAMPLING,
+  creaturePose,
+  creatureWander,
+  gaitFromCode,
+  isSeaBiome,
+} from './creatures.js'
 import { sampleHeight } from './creatureScatter.js'
+import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const GEOMETRY_UP = new THREE.Vector3(0, 0, 1)
 const position = new THREE.Vector3()
@@ -13,9 +21,11 @@ const scale = new THREE.Vector3()
 const quaternion = new THREE.Quaternion()
 const yawQuat = new THREE.Quaternion()
 const leanQuat = new THREE.Quaternion()
+const pitchQuat = new THREE.Quaternion()
 const matrix = new THREE.Matrix4()
 const forward = new THREE.Vector3()
 const scratch = new THREE.Vector3()
+const pitchAxis = new THREE.Vector3()
 
 /**
  * Writes instance matrices for one family layer.
@@ -27,19 +37,23 @@ const scratch = new THREE.Vector3()
  */
 export function updateCreatureLayer(mesh, layer, ctx) {
   const { timeSec, animated, terrain, projection, heightScale, cellScale = 1 } = ctx
-  const { width, height, heightMap } = terrain
+  const { width, height, heightMap, biomeMap } = terrain
   const count = mesh.count
+  const sea = layer.habitat === CREATURE_HABITAT.sea
+  const wanderRadius = sea ? CREATURE_SAMPLING.seaWanderRadius : CREATURE_SAMPLING.wanderRadius
+  const seaLevel = BIOME_THRESHOLDS.oceanMaxHeight
 
   for (let i = 0; i < count; i += 1) {
     const homeX = layer.homes[i * 2]
     const homeY = layer.homes[i * 2 + 1]
     const phase = layer.phases[i]
     const gaitSpeed = layer.gaitSpeeds[i]
+    const elongate = layer.elongates?.[i] ?? layer.archetype?.elongate ?? 1
     const creature = {
       phase,
       gaitSpeed,
       hopHeight: layer.hopHeights[i],
-      gait: layer.gaits[i] === 1 ? 'waddle' : 'hop',
+      gait: gaitFromCode(layer.gaits[i]),
       scale: layer.scales[i] * cellScale,
       squat: layer.squats[i],
     }
@@ -49,19 +63,27 @@ export function updateCreatureLayer(mesh, layer, ctx) {
     let heading = phase * Math.PI * 2
 
     if (animated) {
-      const wander = creatureWander(timeSec, phase, gaitSpeed)
+      const wander = creatureWander(timeSec, phase, gaitSpeed, wanderRadius)
       gx = homeX + wander.dx
       gy = homeY + wander.dy
-      // Face roughly along the wander tangent.
-      const next = creatureWander(timeSec + 0.05, phase, gaitSpeed)
+      const next = creatureWander(timeSec + 0.05, phase, gaitSpeed, wanderRadius)
       heading = Math.atan2(next.dy - wander.dy, next.dx - wander.dx)
     }
 
-    // Stay on land cells; clamp into the interior so we never sample the rim.
     gx = Math.min(width - 2, Math.max(1, gx))
     gy = Math.min(height - 2, Math.max(1, gy))
 
-    const h01 = sampleHeight(heightMap, width, height, gx, gy)
+    // Sea creatures stay over ocean; if wander drifts ashore, snap home.
+    if (sea && biomeMap) {
+      const ix = Math.min(width - 1, Math.max(0, Math.round(gx)))
+      const iy = Math.min(height - 1, Math.max(0, Math.round(gy)))
+      if (!isSeaBiome(biomeMap[iy * width + ix])) {
+        gx = homeX
+        gy = homeY
+      }
+    }
+
+    const h01 = sea ? seaLevel : sampleHeight(heightMap, width, height, gx, gy)
     const local = projection.toLocal(gx, gy, h01, terrain, heightScale, 0)
     const surface = projection.normalAt(gx, gy, terrain)
     normal.set(surface.x, surface.y, surface.z).normalize()
@@ -69,24 +91,25 @@ export function updateCreatureLayer(mesh, layer, ctx) {
     const pose = animated
       ? creaturePose(timeSec, creature)
       : {
-          lift: 0,
+          lift: sea ? creature.scale * 0.08 : 0,
           squashX: creature.scale,
           squashY: creature.scale * creature.squat,
           squashZ: creature.scale,
           lean: 0,
+          pitch: 0,
         }
 
-    // Root sits on the ground; lift along the surface normal. Body radius
-    // keeps the pudding from burying into the mesh.
-    const radius = 0.5 * Math.max(pose.squashX, pose.squashZ)
-    position.set(local.x, local.y, local.z).addScaledVector(normal, radius + pose.lift)
+    // Root on ground / sea; lift along the surface normal. Half-height
+    // keeps land puddings from burying; sea leviathans sit slightly proud.
+    const radius = 0.5 * pose.squashY
+    const surfaceBias = sea ? radius * 0.35 : radius
+    position.set(local.x, local.y, local.z).addScaledVector(normal, surfaceBias + pose.lift)
 
     quaternion.setFromUnitVectors(GEOMETRY_UP, normal)
     yawQuat.setFromAxisAngle(normal, heading)
     quaternion.premultiply(yawQuat)
 
     if (pose.lean !== 0) {
-      // Lean around the local "forward" tangent for a waddle.
       forward.set(Math.cos(heading), Math.sin(heading), 0)
       scratch.copy(normal).cross(forward).normalize()
       if (scratch.lengthSq() > 1e-6) {
@@ -95,7 +118,18 @@ export function updateCreatureLayer(mesh, layer, ctx) {
       }
     }
 
-    scale.set(pose.squashX, pose.squashZ, pose.squashY)
+    if (pose.pitch) {
+      // Pitch around the local side axis so a breach arcs nose-up.
+      forward.set(Math.cos(heading), Math.sin(heading), 0)
+      pitchAxis.copy(forward).cross(normal).normalize()
+      if (pitchAxis.lengthSq() > 1e-6) {
+        pitchQuat.setFromAxisAngle(pitchAxis, pose.pitch)
+        quaternion.premultiply(pitchQuat)
+      }
+    }
+
+    // Local: X width, Y forward (elongate), Z up.
+    scale.set(pose.squashX, pose.squashZ * elongate, pose.squashY)
     mesh.setMatrixAt(i, matrix.compose(position, quaternion, scale))
   }
 

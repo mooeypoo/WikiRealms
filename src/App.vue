@@ -453,6 +453,7 @@ watch([graph, articleCache], () => {
         ref="worldViewRef"
         :world="world"
         :categories="article?.categories ?? []"
+        :pageviews="article?.pageviews ?? null"
         :show-portals="preferences.showPortals"
         :show-sections="preferences.showSections"
         :show-foliage="preferences.showFoliage"

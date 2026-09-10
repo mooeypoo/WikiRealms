@@ -1,4 +1,4 @@
-import { WIKIMEDIA_USER_AGENT } from '../appInfo.js'
+import { wikimediaFetchInit } from './wikimediaFetch.js'
 
 const REST_BASE = 'https://en.wikipedia.org/w/rest.php/v1/page'
 
@@ -41,9 +41,7 @@ export async function fetchWikipediaSectionsHtml(title, { fetchImpl = fetch, sig
 
   let response
   try {
-    // Browsers block scripts from setting the real User-Agent header, so
-    // MediaWiki's documented workaround (Api-User-Agent) is used instead.
-    response = await fetchImpl(url, { signal, headers: { 'Api-User-Agent': WIKIMEDIA_USER_AGENT } })
+    response = await fetchImpl(url, wikimediaFetchInit(signal))
   } catch (error) {
     if (error?.name === 'AbortError') {
       throw error

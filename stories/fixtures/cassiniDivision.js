@@ -91,7 +91,7 @@ export const cassiniDivisionArticle = {
   categories: ['Rings of Saturn', 'Astronomical objects discovered in 1675'],
   links: [],
   images: [],
-  pageviews: null,
+  pageviews: 28400,
   sectionCount: null,
   sections: parseSectionTree(cassiniDivisionHtml),
 }

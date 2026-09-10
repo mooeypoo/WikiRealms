@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { scatterCreatures, creatureCount, sampleHeight } from '../../../src/ui/rendering/creatureScatter.js'
-import { CREATURE_DENSITY_BY_BAND, CREATURE_SAMPLING, creaturePose } from '../../../src/ui/rendering/creatures.js'
+import {
+  scatterCreatures,
+  creatureCount,
+  creatureCountByHabitat,
+  sampleHeight,
+} from '../../../src/ui/rendering/creatureScatter.js'
+import {
+  CREATURE_DENSITY_BY_BAND,
+  CREATURE_HABITAT,
+  CREATURE_SAMPLING,
+  creaturePose,
+} from '../../../src/ui/rendering/creatures.js'
 import { CREATURE_FAMILY } from '../../../src/ui/rendering/creatureTaxonomy.js'
 import { flatProjection } from '../../../src/ui/rendering/projection.js'
 import { BIOME } from '../../../src/engine/generation/terrain.js'
+import { BIOME_THRESHOLDS } from '../../../src/engine/generation/config.js'
 
 function uniformTerrain(band, { width = 48, height = 48, height01 = 0.25 } = {}) {
   const cells = width * height
@@ -16,7 +27,7 @@ function uniformTerrain(band, { width = 48, height = 48, height01 = 0.25 } = {})
   }
 }
 
-const FLAT = { projection: flatProjection, heightScale: 10, densityScale: 1 }
+const FLAT = { projection: flatProjection, heightScale: 10, densityScale: 1, pageviews: 500_000 }
 
 describe('sampleHeight', () => {
   it('returns corner values exactly', () => {
@@ -32,17 +43,45 @@ describe('sampleHeight', () => {
 })
 
 describe('scatterCreatures', () => {
-  it('spawns nothing on ocean or snow', () => {
-    for (const band of [BIOME.OCEAN, BIOME.BEACH, BIOME.SNOW]) {
+  it('spawns nothing on beach or snow', () => {
+    for (const band of [BIOME.BEACH, BIOME.SNOW]) {
       expect(scatterCreatures(uniformTerrain(band), 1, ['Mammals'], FLAT)).toEqual([])
     }
   })
 
-  it('spawns on meadow and respects the hard cap', () => {
+  it('spawns sea leviathans on ocean', () => {
+    const layers = scatterCreatures(
+      uniformTerrain(BIOME.OCEAN, { width: 96, height: 96, height01: 0.1 }),
+      7,
+      ['Mammals'],
+      FLAT,
+    )
+    const { land, sea } = creatureCountByHabitat(layers)
+    expect(land).toBe(0)
+    expect(sea).toBeGreaterThan(0)
+    expect(sea).toBeLessThanOrEqual(CREATURE_SAMPLING.maxSea)
+    expect(layers.every((l) => l.habitat === CREATURE_HABITAT.sea)).toBe(true)
+    expect(layers[0].archetype.gait).toBe('breach')
+    expect(layers[0].archetype.elongate).toBeGreaterThan(1)
+  })
+
+  it('roots sea preview positions on the waterline', () => {
+    const terrain = uniformTerrain(BIOME.OCEAN, { height01: 0.1 })
+    const layers = scatterCreatures(terrain, 5, ['Astronomy'], FLAT)
+    const surfaceZ = BIOME_THRESHOLDS.oceanMaxHeight * FLAT.heightScale
+    for (const layer of layers) {
+      for (let i = 0; i < layer.count; i += 1) {
+        expect(layer.previewPositions[i * 3 + 2]).toBeCloseTo(surfaceZ, 5)
+      }
+    }
+  })
+
+  it('spawns on meadow and respects the land hard cap', () => {
     const layers = scatterCreatures(uniformTerrain(BIOME.MEADOW, { width: 96, height: 96 }), 7, ['Mammals'], FLAT)
     const total = creatureCount(layers)
     expect(total).toBeGreaterThan(0)
-    expect(total).toBeLessThanOrEqual(CREATURE_SAMPLING.maxCount)
+    expect(total).toBeLessThanOrEqual(CREATURE_SAMPLING.maxLand)
+    expect(layers.every((l) => l.habitat === CREATURE_HABITAT.land)).toBe(true)
   })
 
   it('is denser in jungle than in dunes', () => {
@@ -60,8 +99,8 @@ describe('scatterCreatures', () => {
     const cats = ['Mammals', 'Olympic sports']
     const a = scatterCreatures(uniformTerrain(BIOME.MEADOW), 42, cats, FLAT)
     const b = scatterCreatures(uniformTerrain(BIOME.MEADOW), 42, cats, FLAT)
-    expect(a.map((l) => ({ family: l.family, count: l.count }))).toEqual(
-      b.map((l) => ({ family: l.family, count: l.count })),
+    expect(a.map((l) => ({ family: l.family, count: l.count, habitat: l.habitat }))).toEqual(
+      b.map((l) => ({ family: l.family, count: l.count, habitat: l.habitat })),
     )
     expect(a[0]?.homes).toEqual(b[0]?.homes)
   })
@@ -79,6 +118,32 @@ describe('scatterCreatures', () => {
     expect(half).toBeLessThan(full)
   })
 
+  it('hosts fewer creatures on quiet articles than busy ones', () => {
+    const quiet = creatureCount(
+      scatterCreatures(uniformTerrain(BIOME.JUNGLE, { width: 96, height: 96 }), 9, ['Mammals'], {
+        ...FLAT,
+        pageviews: 200,
+      }),
+    )
+    const busy = creatureCount(
+      scatterCreatures(uniformTerrain(BIOME.JUNGLE, { width: 96, height: 96 }), 9, ['Mammals'], {
+        ...FLAT,
+        pageviews: 2_000_000,
+      }),
+    )
+    expect(busy).toBeGreaterThan(quiet)
+  })
+
+  it('keeps oceans empty on low-pageview articles', () => {
+    const layers = scatterCreatures(
+      uniformTerrain(BIOME.OCEAN, { width: 96, height: 96, height01: 0.1 }),
+      7,
+      ['Mammals'],
+      { ...FLAT, pageviews: 500 },
+    )
+    expect(creatureCountByHabitat(layers).sea).toBe(0)
+  })
+
   it('emits nature-heavy layers for nature categories', () => {
     const layers = scatterCreatures(
       uniformTerrain(BIOME.MEADOW, { width: 80, height: 80 }),
@@ -90,7 +155,7 @@ describe('scatterCreatures', () => {
     expect(nature?.count ?? 0).toBeGreaterThan(0)
   })
 
-  it('roots preview positions on the surface', () => {
+  it('roots land preview positions on the surface', () => {
     const terrain = uniformTerrain(BIOME.MEADOW, { height01: 0.4 })
     const layers = scatterCreatures(terrain, 5, ['Mammals'], FLAT)
     const surfaceZ = 0.4 * FLAT.heightScale
@@ -103,7 +168,7 @@ describe('scatterCreatures', () => {
 })
 
 describe('creaturePose', () => {
-  it('returns finite squash values', () => {
+  it('returns finite squash values for hop', () => {
     const pose = creaturePose(1.25, {
       phase: 0.3,
       gaitSpeed: 1,
@@ -115,5 +180,26 @@ describe('creaturePose', () => {
     expect(pose.lift).toBeGreaterThanOrEqual(0)
     expect(Number.isFinite(pose.squashX)).toBe(true)
     expect(Number.isFinite(pose.squashY)).toBe(true)
+  })
+
+  it('breaches above the surface for part of the cycle', () => {
+    const low = creaturePose(0.1, {
+      phase: 0,
+      gaitSpeed: 1,
+      hopHeight: 2,
+      gait: 'breach',
+      scale: 1,
+      squat: 0.5,
+    })
+    const high = creaturePose(2.8 * 0.8, {
+      phase: 0,
+      gaitSpeed: 1,
+      hopHeight: 2,
+      gait: 'breach',
+      scale: 1,
+      squat: 0.5,
+    })
+    expect(high.lift).toBeGreaterThan(low.lift)
+    expect(high.pitch).toBeGreaterThan(0)
   })
 })

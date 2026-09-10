@@ -12,6 +12,7 @@ const ARTICLE = {
   latestRevisionId: 1183920477,
   summary: 'A gap between Saturn\'s A and B rings.',
   links: ['Saturn', 'Titan'],
+  pageviews: 28400,
   sections: {
     lead: { ownSize: 100, sentenceCount: 5, citationCount: 2, links: [] },
     totalSize: 900,
@@ -183,7 +184,7 @@ describe('Ledger', () => {
       mountLedger({ state: 'peek' })
 
       expect(document.querySelector('.ledger__title').textContent).toBe('Cassini Division')
-      expect(document.querySelectorAll('.ledger__stats dd')).toHaveLength(4)
+      expect(document.querySelectorAll('.ledger__stats dd')).toHaveLength(5)
       expect(rows()).toHaveLength(0)
       expect(document.querySelector('.ledger__summary')).toBeNull()
     })
@@ -250,12 +251,12 @@ describe('Ledger', () => {
   })
 
   describe('readouts', () => {
-    it('reads out the four things worth knowing at a glance', () => {
+    it('reads out the five things worth knowing at a glance', () => {
       mountLedger()
       const values = [...document.querySelectorAll('.ledger__stats dd')].map((dd) => dd.textContent.trim())
 
-      // sections through the whole tree, citations, portals, words
-      expect(values).toEqual(['4', '24', '3', '164'])
+      // sections, citations, portals, words, 30-day views
+      expect(values).toEqual(['4', '24', '3', '164', '28.4k'])
     })
 
     it('counts words rather than links', () => {
@@ -267,8 +268,14 @@ describe('Ledger', () => {
       mountLedger()
       const labels = [...document.querySelectorAll('.ledger__stats dt')].map((dt) => dt.textContent.trim())
 
-      expect(labels).toEqual(['Sections', 'Citations', 'Portals', 'Words'])
+      expect(labels).toEqual(['Sections', 'Citations', 'Portals', 'Words', 'Views'])
       expect(labels).not.toContain('Links')
+    })
+
+    it('shows an em dash when pageviews are unknown', () => {
+      mountLedger({ article: { ...ARTICLE, pageviews: null } })
+      const values = [...document.querySelectorAll('.ledger__stats dd')].map((dd) => dd.textContent.trim())
+      expect(values[4]).toBe('—')
     })
 
     it('says so plainly when there is no summary', () => {

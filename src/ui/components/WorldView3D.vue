@@ -91,6 +91,11 @@ const props = defineProps({
    */
   categories: { type: Array, default: () => [] },
   /**
+   * 30-day user pageviews — how many creatures the realm hosts (log-scaled).
+   * Null when the metrics request soft-failed or has not been wired yet.
+   */
+  pageviews: { type: Number, default: null },
+  /**
    * Peaks-array index selected in the Ledger, or null — the other half of
    * the link `section-click` starts.
    *
@@ -429,7 +434,7 @@ function buildTerrainMesh(world) {
 
 /**
  * Topic-family blobs scattered like sparse fauna. Placement is
- * presentation-only (categories + seed); matrices update every frame.
+ * presentation-only (categories + pageviews + seed); matrices update every frame.
  *
  * @param {object} world
  * @param {number} heightScale
@@ -443,13 +448,18 @@ function buildCreatures(world, heightScale) {
     projection,
     heightScale,
     densityScale,
+    pageviews: props.pageviews,
   })
 
   const weather = sampleEnvironment(environment, performance.now() * 0.001)
 
   for (const layer of layers) {
     if (layer.count <= 0) continue
-    const geometry = createCreatureGeometry({ eyeSize: layer.archetype.eyeSize })
+    const geometry = createCreatureGeometry({
+      eyeSize: layer.archetype.eyeSize,
+      elongate: layer.archetype.elongate ?? 1,
+      dorsal: Boolean(layer.archetype.dorsal),
+    })
     const material = createCreatureMaterial({ spherical: projection.isSpherical })
     // Season grade shares the weather list; sway is off so wind is a no-op.
     windMaterials.push(material)
@@ -1976,7 +1986,7 @@ function legendAnchors() {
 
 defineExpose({ recenter, diveTo, cancelDive, legendAnchors })
 
-watch(() => [props.world, props.worldShape, props.categories], rebuildScene)
+watch(() => [props.world, props.worldShape, props.categories, props.pageviews], rebuildScene)
 
 watch(
   () => [props.showPortals, props.showSections, props.showFoliage],

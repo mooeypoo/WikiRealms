@@ -101,3 +101,18 @@ export function formatPortals(count) {
 export function formatCount(n) {
   return Math.max(0, Math.round(Number(n) || 0)).toLocaleString('en-US')
 }
+
+/**
+ * Compact 30-day pageviews for a Ledger readout tile.
+ * Null / unknown → em dash (metrics soft-failed or not yet fetched).
+ *
+ * @param {number|null|undefined} n
+ * @returns {string}
+ */
+export function formatPageviews(n) {
+  if (n == null || !Number.isFinite(n) || n < 0) return '—'
+  const int = Math.max(0, Math.round(n))
+  if (int >= 1_000_000) return `${(int / 1_000_000).toFixed(1)}M`
+  if (int >= 1000) return `${(int / 1000).toFixed(1)}k`
+  return String(int)
+}
