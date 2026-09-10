@@ -65,6 +65,14 @@ describe('InfoHub', () => {
     wrapper.unmount()
   })
 
+  it('credits Kenney Cube Pets on the About tab', () => {
+    const wrapper = mountGuide({ currentTab: 'about' })
+    const about = [...document.querySelectorAll('.guide__prose')].find((el) => el.textContent.includes('Credits'))
+    expect(about?.textContent).toContain('Kenney')
+    expect(about?.innerHTML).toContain('https://kenney.nl/assets/cube-pets')
+    wrapper.unmount()
+  })
+
   it('lists shortcuts from the registry rather than from a copy of them', async () => {
     // The hand-written list had already drifted: it advertised 1 and 3 for
     // a view toggle that no longer exists.

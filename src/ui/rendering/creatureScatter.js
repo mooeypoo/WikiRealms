@@ -1,15 +1,14 @@
 /**
- * WHERE blobs stand — seeded placement on land and ocean.
+ * WHERE fauna stand — seeded placement on land and ocean.
  *
- * Mirrors foliageScatter.js: Three-free attribute buffers grouped by
- * family + habitat. The component turns them into InstancedMeshes and
- * updates matrices each frame for roam / hop / breach.
+ * Candidates pick a topic family from categories, then a Kenney pet that
+ * lives in that habitat (fish/crab/penguin at sea; the rest on land).
+ * Layers are one InstancedMesh per pet id.
  */
 import {
   CREATURE_HABITAT,
   CREATURE_SALT,
   CREATURE_SAMPLING,
-  archetypeFor,
   cellCreatureRolls,
   creatureDensityForBiome,
   gaitCode,
@@ -17,6 +16,7 @@ import {
   retuneCreature,
 } from './creatures.js'
 import { computeCreatureMix, pickFamilyFromMix } from './creatureTaxonomy.js'
+import { KENNEY_PETS, petArchetype, pickPetForFamily } from './kenneyPets.js'
 import { allowSeaCreatures, pageviewDensityScale } from './pageviewDensity.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -70,16 +70,19 @@ function collectCandidates(terrain, seed, mix, { densityScale, habitat }) {
       if (spawnRoll >= density * densityScale) continue
 
       const family = pickFamilyFromMix(mix, familyRoll)
-      candidates.push({ gridX, gridY, index, biome, family, habitat })
+      const { a: petRoll } = cellCreatureRolls(gridX, gridY, seed, CREATURE_SALT.scale)
+      const petId = pickPetForFamily(family, habitat, petRoll)
+      candidates.push({ gridX, gridY, index, biome, family, habitat, petId })
     }
   }
 
   return candidates
 }
 
-function buildLayer(family, cells, seed, habitat, heightMap, width, height, projection, heightScale) {
-  const archetype = archetypeFor(family, habitat)
-  if (!archetype) return null
+function buildLayer(petId, cells, seed, habitat, heightMap, width, height, projection, heightScale) {
+  const pet = KENNEY_PETS[petId]
+  if (!pet || pet.habitat !== habitat) return null
+  const archetype = petArchetype(pet)
   const count = cells.length
   const homes = new Float32Array(count * 2)
   const phases = new Float32Array(count)
@@ -113,7 +116,8 @@ function buildLayer(family, cells, seed, habitat, heightMap, width, height, proj
   })
 
   return {
-    family,
+    petId,
+    family: cells[0]?.family ?? pet.families[0],
     habitat,
     archetype,
     count,
@@ -147,16 +151,16 @@ function buildPreviewPositions(cells, heightMap, width, height, projection, heig
 
 function layersFromCandidates(candidates, seed, habitat, thinningSalt, maxCount, heightMap, width, height, projection, heightScale) {
   const ordered = inThinningOrder(candidates, seed, thinningSalt).slice(0, Math.max(0, maxCount))
-  const byFamily = new Map()
+  const byPet = new Map()
   for (const cell of ordered) {
-    const list = byFamily.get(cell.family) ?? []
+    const list = byPet.get(cell.petId) ?? []
     list.push(cell)
-    byFamily.set(cell.family, list)
+    byPet.set(cell.petId, list)
   }
 
   const layers = []
-  for (const [family, cells] of byFamily) {
-    const layer = buildLayer(family, cells, seed, habitat, heightMap, width, height, projection, heightScale)
+  for (const [petId, cells] of byPet) {
+    const layer = buildLayer(petId, cells, seed, habitat, heightMap, width, height, projection, heightScale)
     if (layer) layers.push(layer)
   }
   return layers

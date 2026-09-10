@@ -48,6 +48,13 @@ export const infoHubContent = {
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
         <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>
       </ul>
+      <h3>Credits</h3>
+      <p>
+        Animal models are
+        <a href="https://kenney.nl/assets/cube-pets" target="_blank" rel="noopener noreferrer">Cube Pets</a>
+        by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
+        (Creative Commons CC0).
+      </p>
     `,
   },
   shortcuts: {

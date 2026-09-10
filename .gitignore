@@ -147,3 +147,6 @@ storybook-static
 
 # Generated design-canvas payload; re-seeded from design/*.dc.html + canvas.json
 design/wikirealms-interface-shell.html
+
+# Local Kenney reference packs (not shipped). Curated runtime assets live in public/assets/kenney/.
+models/

@@ -92,11 +92,11 @@ export const FEATURE_LEGEND = [
   },
   {
     id: 'creatures',
-    label: 'Blobs are the article’s topics — and how many people read it',
+    label: 'Animals are the article’s topics — and how many people read it',
     detail:
-      'Wikipedia categories pick which families roam (nature, science, arts, and the rest). ' +
-      'Thirty-day pageviews set how many appear: quieter pages stay sparse, busier ones host denser fauna, ' +
-      'and only the popular ones get sea leviathans.',
+      'Wikipedia categories pick which Kenney Cube Pets roam (foxes, deer, fish, and the rest). ' +
+      'Land animals stay on land; fish, crabs, and penguins keep to the sea. ' +
+      'Thirty-day pageviews set how many appear: quieter pages stay sparse, busier ones host denser fauna.',
   },
 ]
 

@@ -49,7 +49,7 @@ describe('scatterCreatures', () => {
     }
   })
 
-  it('spawns sea leviathans on ocean', () => {
+  it('spawns sea pets on ocean — never land animals', () => {
     const layers = scatterCreatures(
       uniformTerrain(BIOME.OCEAN, { width: 96, height: 96, height01: 0.1 }),
       7,
@@ -61,8 +61,13 @@ describe('scatterCreatures', () => {
     expect(sea).toBeGreaterThan(0)
     expect(sea).toBeLessThanOrEqual(CREATURE_SAMPLING.maxSea)
     expect(layers.every((l) => l.habitat === CREATURE_HABITAT.sea)).toBe(true)
-    expect(layers[0].archetype.gait).toBe('breach')
-    expect(layers[0].archetype.elongate).toBeGreaterThan(1)
+    expect(layers.every((l) => ['fish', 'crab', 'penguin'].includes(l.petId))).toBe(true)
+  })
+
+  it('keeps land pets off the ocean', () => {
+    const layers = scatterCreatures(uniformTerrain(BIOME.MEADOW, { width: 96, height: 96 }), 7, ['Mammals'], FLAT)
+    expect(layers.every((l) => l.habitat === CREATURE_HABITAT.land)).toBe(true)
+    expect(layers.every((l) => !['fish', 'crab', 'penguin'].includes(l.petId))).toBe(true)
   })
 
   it('roots sea preview positions on the waterline', () => {

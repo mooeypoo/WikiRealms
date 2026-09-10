@@ -116,7 +116,7 @@ describe('Legend', () => {
   it('explains blobs as categories and pageviews', () => {
     mountLegend()
     const text = document.querySelector('.legend__features').textContent
-    expect(text).toContain('Blobs are the article')
+    expect(text).toContain('Animals are the article')
     expect(text).toContain('pageviews')
     expect(text).toContain('categories')
   })

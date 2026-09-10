@@ -69,7 +69,7 @@ import {
 import { QUALITY_TIERS, detectQualityTier, readDeviceProfile, resolvePixelRatio } from '../rendering/quality.js'
 import { scatterFoliage } from '../rendering/foliageScatter.js'
 import { scatterCreatures } from '../rendering/creatureScatter.js'
-import { createCreatureGeometry, createCreatureMaterial } from '../rendering/creatureMaterial.js'
+import { getCreatureAsset, preloadCreatureAssets } from '../rendering/creatureAssets.js'
 import { updateCreatureLayer } from '../rendering/creatureMotion.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
@@ -433,8 +433,10 @@ function buildTerrainMesh(world) {
 }
 
 /**
- * Topic-family blobs scattered like sparse fauna. Placement is
- * presentation-only (categories + pageviews + seed); matrices update every frame.
+ * Kenney Cube Pets scattered like sparse fauna. Placement is
+ * presentation-only (categories + pageviews + seed); matrices update every
+ * frame. Geometry is shared from the asset cache — do not dispose it with
+ * the scene.
  *
  * @param {object} world
  * @param {number} heightScale
@@ -454,28 +456,18 @@ function buildCreatures(world, heightScale) {
   const weather = sampleEnvironment(environment, performance.now() * 0.001)
 
   for (const layer of layers) {
-    if (layer.count <= 0) continue
-    const geometry = createCreatureGeometry({
-      eyeSize: layer.archetype.eyeSize,
-      elongate: layer.archetype.elongate ?? 1,
-      dorsal: Boolean(layer.archetype.dorsal),
-    })
-    const material = createCreatureMaterial({ spherical: projection.isSpherical })
-    // Season grade shares the weather list; sway is off so wind is a no-op.
-    windMaterials.push(material)
-    const mesh = new THREE.InstancedMesh(geometry, material, layer.count)
+    if (layer.count <= 0 || !layer.petId) continue
+    const asset = getCreatureAsset(layer.petId)
+    if (!asset) continue
+
+    const mesh = new THREE.InstancedMesh(asset.geometry, asset.material, layer.count)
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     mesh.frustumCulled = false
+    mesh.castShadow = false
+    mesh.receiveShadow = true
     mesh.userData.creatureLayer = layer
     mesh.userData.fullCount = layer.count
-
-    for (let i = 0; i < layer.count; i += 1) {
-      mesh.setColorAt(
-        i,
-        instanceTint.setRGB(layer.colors[i * 3], layer.colors[i * 3 + 1], layer.colors[i * 3 + 2]),
-      )
-    }
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    mesh.userData.sharedCreatureAsset = true
 
     updateCreatureLayer(mesh, layer, {
       timeSec: weather.time,
@@ -1203,6 +1195,8 @@ function clearScene() {
     if (!group) continue
     worldGroup.remove(group)
     group.traverse((child) => {
+      // Kenney pet geometry/materials are shared across rebuilds.
+      if (child.userData?.sharedCreatureAsset) return
       child.geometry?.dispose()
       child.material?.map?.dispose()
       child.material?.dispose()
@@ -1861,6 +1855,10 @@ onMounted(() => {
   pointer = new THREE.Vector2()
 
   resizeToContainer()
+  // Pets are GLBs; first paint may be empty until they land, then we rebuild.
+  preloadCreatureAssets().then(() => {
+    if (scene) rebuildScene()
+  })
   rebuildScene()
   animate()
 
