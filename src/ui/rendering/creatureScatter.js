@@ -138,6 +138,7 @@ function buildLayer(petId, cells, seed, habitat, heightMap, width, height, proje
     const retuned = retuneCreature(archetype, cell.biome)
     const { a: phaseRoll } = cellCreatureRolls(cell.gridX, cell.gridY, seed, CREATURE_SALT.phase)
     const { a: scaleRoll } = cellCreatureRolls(cell.gridX, cell.gridY, seed, CREATURE_SALT.scale)
+    const { a: bounceRoll, b: tempoRoll } = cellCreatureRolls(cell.gridX, cell.gridY, seed, CREATURE_SALT.wander)
 
     homes[i * 2] = cell.gridX
     homes[i * 2 + 1] = cell.gridY
@@ -145,8 +146,9 @@ function buildLayer(petId, cells, seed, habitat, heightMap, width, height, proje
     scales[i] = retuned.scale * (0.88 + scaleRoll * 0.28)
     squats[i] = retuned.squat
     elongates[i] = retuned.elongate
-    gaitSpeeds[i] = retuned.gaitSpeed
-    hopHeights[i] = retuned.hopHeight
+    // Per-creature tempo and bounce so a meadow does not pulse in unison.
+    gaitSpeeds[i] = retuned.gaitSpeed * (0.7 + tempoRoll * 0.55)
+    hopHeights[i] = retuned.hopHeight * (0.4 + bounceRoll * 0.7)
     colors[i * 3] = retuned.colorR
     colors[i * 3 + 1] = retuned.colorG
     colors[i * 3 + 2] = retuned.colorB

@@ -41,16 +41,16 @@ export const CREATURE_SAMPLING = Object.freeze({
   maxLand: 36,
   maxSea: 12,
   /** Wander radius in grid cells around the home cell. */
-  wanderRadius: 1.35,
-  seaWanderRadius: 5.5,
+  wanderRadius: 2.15,
+  seaWanderRadius: 5.0,
   /** Crabs / penguins hug the shelf — short hops, not open-ocean cruising. */
-  shoreWanderRadius: 2.2,
+  shoreWanderRadius: 2.6,
   /** Chance a beach cell hosts a shore pet (ocean density is separate). */
   beachDensity: 0.02,
-  /** Seconds for one land stride cycle at gaitSpeed 1. */
-  hopPeriod: 1.15,
+  /** Seconds for one land stride cycle at gaitSpeed 1. Longer = calmer. */
+  hopPeriod: 1.55,
   /** Seconds for one sea cruise / crest cycle at gaitSpeed 1. */
-  breachPeriod: 2.8,
+  breachPeriod: 3.6,
 })
 
 /**
@@ -426,9 +426,9 @@ export function gaitFromCode(code) {
  * Hop / waddle / breach pose for one creature at a clock time.
  *
  * Land gaits stay on the ground: `hopHeight` is how hard the body squishes
- * each stride, not how high it jumps. Leaving the surface is what made
- * orbit views read as fleas. Sea breach still arcs a little, but most of
- * the read is stretch and pitch.
+ * each stride, not how high it jumps. Amplitudes stay soft so fauna reads
+ * as living accents rather than a bouncing crowd. Sea breach still arcs a
+ * little, but most of the read is stretch and pitch.
  *
  * @returns {{ lift: number, squashX: number, squashY: number, squashZ: number, lean: number, pitch: number }}
  */
@@ -446,10 +446,10 @@ export function creaturePose(timeSec, creature) {
     const weight = Math.abs(sway)
     return {
       lift: 0,
-      squashX: body * (1 + weight * 0.12),
-      squashY: body * baseSquat * (1 - weight * 0.14),
-      squashZ: body * (1 - weight * 0.05),
-      lean: sway * 0.28,
+      squashX: body * (1 + weight * 0.06),
+      squashY: body * baseSquat * (1 - weight * 0.07),
+      squashZ: body * (1 - weight * 0.025),
+      lean: sway * 0.14,
       pitch: 0,
     }
   }
@@ -460,35 +460,37 @@ export function creaturePose(timeSec, creature) {
     const cresting = cycle > 0.68 && cycle < 0.92
     const t = cresting ? (cycle - 0.68) / 0.24 : 0
     const crest = cresting ? Math.sin(t * Math.PI) : 0
-    const amp = 0.12 + Math.min(0.2, creature.hopHeight * 0.06)
+    const amp = 0.06 + Math.min(0.1, creature.hopHeight * 0.04)
     return {
-      lift: crest * body * 0.22,
-      squashX: body * (0.96 + crest * 0.1),
-      squashY: body * baseSquat * (1 - crest * amp * 0.8 + Math.abs(roll) * 0.04),
-      squashZ: body * (1 + crest * 0.18 + Math.abs(roll) * 0.03),
+      lift: crest * body * 0.1,
+      squashX: body * (0.98 + crest * 0.05),
+      squashY: body * baseSquat * (1 - crest * amp * 0.55 + Math.abs(roll) * 0.02),
+      squashZ: body * (1 + crest * 0.1 + Math.abs(roll) * 0.02),
       lean: 0,
-      pitch: crest * 0.35 + roll * 0.05,
+      pitch: crest * 0.18 + roll * 0.03,
     }
   }
 
-  // Grounded scoot: compress into the stride, spring back — never leave the ground.
+  // Grounded scoot: light compress into the stride — never leave the ground.
   const stride = Math.sin(cycle * Math.PI * 2)
   const compress = Math.max(0, -stride)
   const spring = Math.max(0, stride)
-  const amp = 0.12 + Math.min(0.2, creature.hopHeight * 0.07)
+  const amp = 0.05 + Math.min(0.1, creature.hopHeight * 0.04)
 
   return {
     lift: 0,
-    squashX: body * (1 + compress * amp * 1.15),
-    squashY: body * baseSquat * (1 - compress * amp * 1.7 + spring * amp * 0.45),
-    squashZ: body * (1 + compress * amp * 0.95 - spring * amp * 0.2),
-    lean: stride * 0.05,
-    pitch: compress * 0.1 - spring * 0.06,
+    squashX: body * (1 + compress * amp * 0.9),
+    squashY: body * baseSquat * (1 - compress * amp * 1.15 + spring * amp * 0.3),
+    squashZ: body * (1 + compress * amp * 0.7 - spring * amp * 0.12),
+    lean: stride * 0.03,
+    pitch: compress * 0.05 - spring * 0.03,
   }
 }
 
 /**
- * Wander offset in grid cells for a closed loop around home.
+ * Wander offset in grid cells — a closed, slightly irregular path around
+ * home. Phase picks a unique ellipse/skew so neighbours do not orbit in
+ * lockstep; the loop stays small enough to read as a trail, not a march.
  */
 export function creatureWander(
   timeSec,
@@ -496,10 +498,13 @@ export function creatureWander(
   speedMul,
   radius = CREATURE_SAMPLING.wanderRadius,
 ) {
-  const angle = timeSec * 0.35 * speedMul + phase * Math.PI * 2
-  const wobble = 0.65 + 0.35 * Math.sin(timeSec * 0.7 + phase * 9)
+  const turn = 0.16 + phase * 0.14
+  const stretch = 0.55 + phase * 0.4
+  const skew = 0.62 + ((phase * 5.3) % 1) * 0.5
+  const angle = timeSec * turn * speedMul + phase * Math.PI * 2
+  const pulse = 0.84 + 0.16 * Math.sin(timeSec * (0.28 + phase * 0.22) + phase * 11)
   return {
-    dx: Math.cos(angle) * radius * wobble,
-    dy: Math.sin(angle * 0.87 + 1.2) * radius * wobble,
+    dx: Math.cos(angle) * radius * pulse,
+    dy: Math.sin(angle * skew + 0.95 + phase * 2.1) * radius * pulse * stretch,
   }
 }

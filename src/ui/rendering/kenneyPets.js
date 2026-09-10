@@ -81,8 +81,8 @@ export function petArchetype(pet) {
     elongate: 1,
     dorsal: false,
     gait: sea ? 'breach' : 'hop',
-    hopHeight: sea ? 0.55 : 0.45,
-    gaitSpeed: sea ? 0.85 : 1,
+    hopHeight: sea ? 0.38 : 0.32,
+    gaitSpeed: sea ? 0.7 : 0.85,
     scale: sea ? 5.2 : 4.8,
   })
 }

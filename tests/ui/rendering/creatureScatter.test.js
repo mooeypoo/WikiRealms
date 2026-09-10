@@ -262,7 +262,7 @@ describe('creaturePose', () => {
       scale: 1,
       squat: 0.5,
     })
-    const high = creaturePose(2.8 * 0.8, {
+    const high = creaturePose(CREATURE_SAMPLING.breachPeriod * 0.8, {
       phase: 0,
       gaitSpeed: 1,
       hopHeight: 2,
