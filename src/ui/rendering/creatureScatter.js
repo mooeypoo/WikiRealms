@@ -2,7 +2,8 @@
  * WHERE fauna stand — seeded placement on land and ocean.
  *
  * Candidates pick a topic family from categories, then a Kenney pet that
- * lives in that habitat (fish/crab/penguin at sea; the rest on land).
+ * lives in that habitat. Sea pets split by depth: fish stay off the
+ * shelf; crabs and penguins hold the shallows (and may stand on beach).
  * Layers are one InstancedMesh per pet id.
  */
 import {
@@ -16,10 +17,30 @@ import {
   retuneCreature,
 } from './creatures.js'
 import { computeCreatureMix, pickFamilyFromMix } from './creatureTaxonomy.js'
-import { KENNEY_PETS, petArchetype, pickPetForFamily } from './kenneyPets.js'
+import {
+  KENNEY_PETS,
+  SEA_SHORE_PET_IDS,
+  petArchetype,
+  pickPetForFamily,
+  seaSubmerge,
+  seaZoneForDepth,
+} from './kenneyPets.js'
 import { allowSeaCreatures, pageviewDensityScale } from './pageviewDensity.js'
 import { BIOME } from '../../engine/generation/terrain.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
+import { waterDepth } from './waterSurface.js'
+
+/**
+ * Whether a sea pet may occupy this biome while wandering.
+ * Shore species can stand on the beach; fish stay over ocean only.
+ *
+ * @param {number} biome
+ * @param {string} petId
+ */
+export function seaPetCanStand(biome, petId) {
+  if (isSeaBiome(biome)) return true
+  return biome === BIOME.BEACH && SEA_SHORE_PET_IDS.includes(petId)
+}
 
 /**
  * Bilinear height sample so wanderers stay glued when they leave the
@@ -50,7 +71,7 @@ function inThinningOrder(cells, seed, salt) {
 }
 
 function collectCandidates(terrain, seed, mix, { densityScale, habitat }) {
-  const { width, height, biomeMap } = terrain
+  const { width, height, biomeMap, heightMap } = terrain
   const stride = habitat === CREATURE_HABITAT.sea ? CREATURE_SAMPLING.seaStride : CREATURE_SAMPLING.stride
   const spawnSalt = habitat === CREATURE_HABITAT.sea ? CREATURE_SALT.seaSpawn : CREATURE_SALT.spawn
   const candidates = []
@@ -60,10 +81,28 @@ function collectCandidates(terrain, seed, mix, { densityScale, habitat }) {
       const index = gridY * width + gridX
       const biome = biomeMap[index]
       const sea = isSeaBiome(biome)
-      if (habitat === CREATURE_HABITAT.sea && !sea) continue
-      if (habitat === CREATURE_HABITAT.land && sea) continue
+      const beach = biome === BIOME.BEACH
 
-      const density = creatureDensityForBiome(biome)
+      let density = 0
+      /** @type {'shore'|'deep'|null} */
+      let seaZone = null
+
+      if (habitat === CREATURE_HABITAT.sea) {
+        if (sea) {
+          density = creatureDensityForBiome(biome)
+          seaZone = seaZoneForDepth(waterDepth(heightMap[index]))
+        } else if (beach) {
+          // Crabs / penguins may stand on the sand; fish never do.
+          density = CREATURE_SAMPLING.beachDensity
+          seaZone = 'shore'
+        } else {
+          continue
+        }
+      } else {
+        if (sea) continue
+        density = creatureDensityForBiome(biome)
+      }
+
       if (density <= 0) continue
 
       const { a: spawnRoll, b: familyRoll } = cellCreatureRolls(gridX, gridY, seed, spawnSalt)
@@ -71,8 +110,8 @@ function collectCandidates(terrain, seed, mix, { densityScale, habitat }) {
 
       const family = pickFamilyFromMix(mix, familyRoll)
       const { a: petRoll } = cellCreatureRolls(gridX, gridY, seed, CREATURE_SALT.scale)
-      const petId = pickPetForFamily(family, habitat, petRoll)
-      candidates.push({ gridX, gridY, index, biome, family, habitat, petId })
+      const petId = pickPetForFamily(family, habitat, petRoll, seaZone ? { seaZone } : {})
+      candidates.push({ gridX, gridY, index, biome, family, habitat, petId, seaZone })
     }
   }
 
@@ -131,16 +170,24 @@ function buildLayer(petId, cells, seed, habitat, heightMap, width, height, proje
     colors,
     gaits,
     biomes,
-    previewPositions: buildPreviewPositions(cells, heightMap, width, height, projection, heightScale, habitat),
+    previewPositions: buildPreviewPositions(cells, heightMap, width, height, projection, heightScale, habitat, petId),
   }
 }
 
-function buildPreviewPositions(cells, heightMap, width, height, projection, heightScale, habitat) {
+function buildPreviewPositions(cells, heightMap, width, height, projection, heightScale, habitat, petId) {
   const positions = new Float32Array(cells.length * 3)
   const terrain = { width, height, heightMap }
   const seaLevel = BIOME_THRESHOLDS.oceanMaxHeight
+  const submerge = habitat === CREATURE_HABITAT.sea ? seaSubmerge(petId) : 0
   cells.forEach((cell, i) => {
-    const h = habitat === CREATURE_HABITAT.sea ? seaLevel : heightMap[cell.index]
+    let h
+    if (habitat === CREATURE_HABITAT.sea) {
+      // Beach stands on sand; ocean pets stay on the water plane (not the
+      // rising floor) so a shallow shelf never lifts them onto the shore.
+      h = cell.biome === BIOME.BEACH ? heightMap[cell.index] : seaLevel - submerge
+    } else {
+      h = heightMap[cell.index]
+    }
     const local = projection.toLocal(cell.gridX, cell.gridY, h, terrain, heightScale, 0)
     positions[i * 3] = local.x
     positions[i * 3 + 1] = local.y

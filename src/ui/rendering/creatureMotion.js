@@ -9,9 +9,10 @@ import {
   creaturePose,
   creatureWander,
   gaitFromCode,
-  isSeaBiome,
 } from './creatures.js'
-import { sampleHeight } from './creatureScatter.js'
+import { sampleHeight, seaPetCanStand } from './creatureScatter.js'
+import { seaSubmerge } from './kenneyPets.js'
+import { BIOME } from '../../engine/generation/terrain.js'
 import { BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const GEOMETRY_UP = new THREE.Vector3(0, 0, 1)
@@ -40,8 +41,15 @@ export function updateCreatureLayer(mesh, layer, ctx) {
   const { width, height, heightMap, biomeMap } = terrain
   const count = mesh.count
   const sea = layer.habitat === CREATURE_HABITAT.sea
-  const wanderRadius = sea ? CREATURE_SAMPLING.seaWanderRadius : CREATURE_SAMPLING.wanderRadius
+  const petId = layer.petId
+  const shoreHugger = sea && petId !== 'fish'
+  const wanderRadius = sea
+    ? shoreHugger
+      ? CREATURE_SAMPLING.shoreWanderRadius
+      : CREATURE_SAMPLING.seaWanderRadius
+    : CREATURE_SAMPLING.wanderRadius
   const seaLevel = BIOME_THRESHOLDS.oceanMaxHeight
+  const submerge = sea ? seaSubmerge(petId) : 0
 
   for (let i = 0; i < count; i += 1) {
     const homeX = layer.homes[i * 2]
@@ -73,17 +81,28 @@ export function updateCreatureLayer(mesh, layer, ctx) {
     gx = Math.min(width - 2, Math.max(1, gx))
     gy = Math.min(height - 2, Math.max(1, gy))
 
-    // Sea creatures stay over ocean; if wander drifts ashore, snap home.
+    // Sea creatures stay over water (fish) or water+beach (shore pets).
+    // Never sample rising land height for ocean cells — that climbs the
+    // shore as the waterline drops away.
     if (sea && biomeMap) {
       const ix = Math.min(width - 1, Math.max(0, Math.round(gx)))
       const iy = Math.min(height - 1, Math.max(0, Math.round(gy)))
-      if (!isSeaBiome(biomeMap[iy * width + ix])) {
+      if (!seaPetCanStand(biomeMap[iy * width + ix], petId)) {
         gx = homeX
         gy = homeY
       }
     }
 
-    const h01 = sea ? seaLevel : sampleHeight(heightMap, width, height, gx, gy)
+    const ix = Math.min(width - 1, Math.max(0, Math.round(gx)))
+    const iy = Math.min(height - 1, Math.max(0, Math.round(gy)))
+    const standBiome = biomeMap?.[iy * width + ix]
+    const onBeach = sea && standBiome === BIOME.BEACH
+
+    const h01 = sea
+      ? onBeach
+        ? sampleHeight(heightMap, width, height, gx, gy)
+        : seaLevel - submerge
+      : sampleHeight(heightMap, width, height, gx, gy)
     const local = projection.toLocal(gx, gy, h01, terrain, heightScale, 0)
     const surface = projection.normalAt(gx, gy, terrain)
     normal.set(surface.x, surface.y, surface.z).normalize()
@@ -91,7 +110,7 @@ export function updateCreatureLayer(mesh, layer, ctx) {
     const pose = animated
       ? creaturePose(timeSec, creature)
       : {
-          lift: sea ? creature.scale * 0.08 : 0,
+          lift: sea && !onBeach ? creature.scale * (shoreHugger ? 0.02 : 0.05) : 0,
           squashX: creature.scale,
           squashY: creature.scale * creature.squat,
           squashZ: creature.scale,
@@ -99,10 +118,19 @@ export function updateCreatureLayer(mesh, layer, ctx) {
           pitch: 0,
         }
 
-    // Root on ground / sea; lift along the surface normal. Half-height
-    // keeps land puddings from burying; sea leviathans sit slightly proud.
+    // Quiet shore pets: less breach so they do not leap out of shallows.
+    if (sea && shoreHugger && pose.lift) {
+      pose.lift *= 0.35
+    }
+
+    // Root on ground / under the water plane. Ocean pets sit slightly
+    // submerged; beach standers use a normal ground bias.
     const radius = 0.5 * pose.squashY
-    const surfaceBias = sea ? radius * 0.35 : radius
+    const surfaceBias = sea
+      ? onBeach
+        ? radius * 0.9
+        : -radius * (shoreHugger ? 0.12 : 0.28)
+      : radius
     position.set(local.x, local.y, local.z).addScaledVector(normal, surfaceBias + pose.lift)
 
     quaternion.setFromUnitVectors(GEOMETRY_UP, normal)

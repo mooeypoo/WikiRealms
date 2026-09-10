@@ -43,9 +43,17 @@ describe('sampleHeight', () => {
 })
 
 describe('scatterCreatures', () => {
-  it('spawns nothing on beach or snow', () => {
-    for (const band of [BIOME.BEACH, BIOME.SNOW]) {
-      expect(scatterCreatures(uniformTerrain(band), 1, ['Mammals'], FLAT)).toEqual([])
+  it('spawns nothing on snow, and only shore pets on beach', () => {
+    expect(scatterCreatures(uniformTerrain(BIOME.SNOW), 1, ['Mammals'], FLAT)).toEqual([])
+    const beach = scatterCreatures(
+      uniformTerrain(BIOME.BEACH, { width: 96, height: 96, height01: 0.34 }),
+      1,
+      ['Mammals'],
+      FLAT,
+    )
+    for (const layer of beach) {
+      expect(layer.habitat).toBe(CREATURE_HABITAT.sea)
+      expect(['crab', 'penguin']).toContain(layer.petId)
     }
   })
 
@@ -64,19 +72,44 @@ describe('scatterCreatures', () => {
     expect(layers.every((l) => ['fish', 'crab', 'penguin'].includes(l.petId))).toBe(true)
   })
 
+  it('keeps fish off the shallow shelf', () => {
+    // Depth 0.04 < SEA_FISH_MIN_DEPTH — crabs and penguins only.
+    const layers = scatterCreatures(
+      uniformTerrain(BIOME.OCEAN, { width: 96, height: 96, height01: 0.28 }),
+      11,
+      ['Mammals', 'Marine biology'],
+      FLAT,
+    )
+    expect(creatureCountByHabitat(layers).sea).toBeGreaterThan(0)
+    expect(layers.every((l) => ['crab', 'penguin'].includes(l.petId))).toBe(true)
+  })
+
+  it('may put shore pets on the beach', () => {
+    const layers = scatterCreatures(
+      uniformTerrain(BIOME.BEACH, { width: 96, height: 96, height01: 0.34 }),
+      13,
+      ['Mammals'],
+      FLAT,
+    )
+    const sea = layers.filter((l) => l.habitat === CREATURE_HABITAT.sea)
+    for (const layer of sea) {
+      expect(['crab', 'penguin']).toContain(layer.petId)
+    }
+  })
+
   it('keeps land pets off the ocean', () => {
     const layers = scatterCreatures(uniformTerrain(BIOME.MEADOW, { width: 96, height: 96 }), 7, ['Mammals'], FLAT)
     expect(layers.every((l) => l.habitat === CREATURE_HABITAT.land)).toBe(true)
     expect(layers.every((l) => !['fish', 'crab', 'penguin'].includes(l.petId))).toBe(true)
   })
 
-  it('roots sea preview positions on the waterline', () => {
+  it('roots sea preview positions under the waterline', () => {
     const terrain = uniformTerrain(BIOME.OCEAN, { height01: 0.1 })
     const layers = scatterCreatures(terrain, 5, ['Astronomy'], FLAT)
     const surfaceZ = BIOME_THRESHOLDS.oceanMaxHeight * FLAT.heightScale
     for (const layer of layers) {
       for (let i = 0; i < layer.count; i += 1) {
-        expect(layer.previewPositions[i * 3 + 2]).toBeCloseTo(surfaceZ, 5)
+        expect(layer.previewPositions[i * 3 + 2]).toBeLessThan(surfaceZ)
       }
     }
   })

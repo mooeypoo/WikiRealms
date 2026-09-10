@@ -31,6 +31,28 @@ describe('kenneyPets', () => {
     expect(SEA_PET_IDS).toContain(pickPetForFamily(CREATURE_FAMILY.wanderer, CREATURE_HABITAT.sea, 0.5))
   })
 
+  it('never offers fish on the shore zone', () => {
+    for (let i = 0; i < 40; i += 1) {
+      const id = pickPetForFamily(CREATURE_FAMILY.nature, CREATURE_HABITAT.sea, (i + 0.5) / 40, {
+        seaZone: 'shore',
+      })
+      expect(['crab', 'penguin']).toContain(id)
+    }
+  })
+
+  it('keeps fish in the deep-water pool', () => {
+    const seen = new Set()
+    for (let i = 0; i < 40; i += 1) {
+      seen.add(
+        pickPetForFamily(CREATURE_FAMILY.wanderer, CREATURE_HABITAT.sea, (i + 0.5) / 40, {
+          seaZone: 'deep',
+        }),
+      )
+    }
+    expect(seen.has('fish')).toBe(true)
+    expect(seen.has('crab')).toBe(false)
+  })
+
   it('still draws from the full land pool half the time for sparse families', () => {
     const seen = new Set()
     for (let i = 0; i < 40; i += 1) {

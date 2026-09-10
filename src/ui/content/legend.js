@@ -95,7 +95,8 @@ export const FEATURE_LEGEND = [
     label: 'Animals are the article’s topics — and how many people read it',
     detail:
       'Wikipedia categories pick which Kenney Cube Pets roam (foxes, deer, fish, and the rest). ' +
-      'Land animals stay on land; fish, crabs, and penguins keep to the sea. ' +
+      'Land animals stay on land; fish keep to deeper water, while crabs and penguins hold the ' +
+      'shallows and may stand on the beach. ' +
       'Thirty-day pageviews set how many appear: quieter pages stay sparse, busier ones host denser fauna.',
   },
 ]

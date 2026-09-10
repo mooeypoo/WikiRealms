@@ -43,6 +43,10 @@ export const CREATURE_SAMPLING = Object.freeze({
   /** Wander radius in grid cells around the home cell. */
   wanderRadius: 1.35,
   seaWanderRadius: 5.5,
+  /** Crabs / penguins hug the shelf — short hops, not open-ocean cruising. */
+  shoreWanderRadius: 2.2,
+  /** Chance a beach cell hosts a shore pet (ocean density is separate). */
+  beachDensity: 0.02,
   /** Seconds for one land stride cycle at gaitSpeed 1. */
   hopPeriod: 1.15,
   /** Seconds for one sea cruise / crest cycle at gaitSpeed 1. */

@@ -5,8 +5,9 @@
  * Assets live in `public/assets/kenney/cube-pets/` (CC0). The raw packs
  * under `models/` are reference only and gitignored.
  *
- * Sea vs land is a hard split: fish/crab/penguin never spawn on land,
- * and land pets never spawn in ocean.
+ * Sea vs land is mostly a hard split: fish never leave the ocean, and
+ * land pets never spawn in water. Crabs and penguins hold the shelf and
+ * may stand on the beach.
  */
 
 import { CREATURE_FAMILY } from './creatureTaxonomy.js'
@@ -53,6 +54,12 @@ export const KENNEY_PET_IDS = Object.freeze(Object.keys(KENNEY_PETS))
 export const LAND_PET_IDS = Object.freeze(KENNEY_PET_IDS.filter((id) => KENNEY_PETS[id].habitat === CREATURE_HABITAT.land))
 export const SEA_PET_IDS = Object.freeze(KENNEY_PET_IDS.filter((id) => KENNEY_PETS[id].habitat === CREATURE_HABITAT.sea))
 
+/** Near the waterline / beach — can climb ashore; never fish. */
+export const SEA_SHORE_PET_IDS = Object.freeze(['crab', 'penguin'])
+
+/** Deeper basin — fish belong here; penguins may still cruise. */
+export const SEA_DEEP_PET_IDS = Object.freeze(['fish', 'penguin'])
+
 /**
  * Motion / size profile for a pet. Models are normalised to unit height;
  * `scale` is in grid cells (then multiplied by the projection's foliageScale).
@@ -81,7 +88,31 @@ export function petArchetype(pet) {
 }
 
 /**
- * Soft family preference over the full habitat pool.
+ * How far below the waterline (in heightMap units) a sea pet's root sits.
+ * Fish hang deeper; shore pets skim just under so they stay visible.
+ */
+export function seaSubmerge(petId) {
+  return petId === 'fish' ? 0.045 : 0.012
+}
+
+/**
+ * Shallower than this depth (oceanMaxHeight − floor) is the shelf: crabs
+ * and penguins only. Matches WATER.opaqueDepth so fauna and the visible
+ * shelf agree.
+ */
+export const SEA_FISH_MIN_DEPTH = 0.08
+
+/**
+ * @param {number} depth from waterDepth(height01)
+ * @returns {'shore'|'deep'}
+ */
+export function seaZoneForDepth(depth) {
+  return depth < SEA_FISH_MIN_DEPTH ? 'shore' : 'deep'
+}
+
+/**
+ * Soft family preference over the habitat pool, optionally narrowed by
+ * sea zone so fish stay off the shelf.
  *
  * Preferred pets get half the roll space so a physics article still leans
  * science-ish, but the other half draws from every land (or sea) pet —
@@ -90,9 +121,15 @@ export function petArchetype(pet) {
  * @param {string} family
  * @param {string} habitat
  * @param {number} roll 0..1
+ * @param {{ seaZone?: 'shore'|'deep' }} [options]
  */
-export function pickPetForFamily(family, habitat, roll) {
-  const all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
+export function pickPetForFamily(family, habitat, roll, options = {}) {
+  let all = habitat === CREATURE_HABITAT.sea ? SEA_PET_IDS : LAND_PET_IDS
+  if (habitat === CREATURE_HABITAT.sea && options.seaZone === 'shore') {
+    all = SEA_SHORE_PET_IDS
+  } else if (habitat === CREATURE_HABITAT.sea && options.seaZone === 'deep') {
+    all = SEA_DEEP_PET_IDS
+  }
   const preferred = all.filter((id) => KENNEY_PETS[id].families.includes(family))
   const t = Math.min(0.999999, Math.max(0, roll))
 
