@@ -1,5 +1,6 @@
 <script setup>
 import { watch } from 'vue'
+import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
@@ -48,7 +49,12 @@ function onSelect(result) {
     @close="$emit('close')"
   >
     <template #header>
-      <p class="palette__label">Travel to another realm</p>
+      <div class="palette__bar">
+        <p class="palette__label">Travel to another realm</p>
+        <button class="palette__close" type="button" aria-label="Close search" @click="$emit('close')">
+          <Icon name="close" :size="18" />
+        </button>
+      </div>
     </template>
 
     <SearchBar
@@ -64,19 +70,42 @@ function onSelect(result) {
 
     <p v-if="results.length === 0 && status === 'idle'" class="palette__hint">
       Searching leaves the world you are in and starts a new journey. To carry on
-      from here, take a portal.
+      from here, take a portal. Press <kbd>Esc</kbd> to stay.
     </p>
   </Sheet>
 </template>
 
 <style scoped>
+.palette__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
 .palette__label {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+}
+
+.palette__close {
+  display: grid;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.palette__close:hover {
+  border-color: var(--edge-accent);
+  color: var(--accent);
 }
 
 .palette__hint {
@@ -84,5 +113,12 @@ function onSelect(result) {
   color: var(--ink-3);
   font-size: var(--text-xs);
   line-height: 1.55;
+}
+
+.palette__hint kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
 }
 </style>

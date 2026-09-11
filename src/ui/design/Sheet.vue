@@ -516,7 +516,8 @@ function onScrimDismiss() {
   place-items: center;
   /* Comfortably larger than the bar it draws: this is the one control a
      viewer aims at with a thumb, mid-scroll. */
-  height: 28px;
+  min-height: var(--hit);
+  height: var(--hit);
   cursor: grab;
   touch-action: none;
 }
@@ -526,10 +527,10 @@ function onScrimDismiss() {
 }
 
 .sheet__grip-bar {
-  width: 38px;
+  width: 42px;
   height: 4px;
   border-radius: 2px;
-  background: rgba(var(--edge-rgb), 0.35);
+  background: rgba(var(--edge-rgb), 0.55);
 }
 
 .sheet__header {

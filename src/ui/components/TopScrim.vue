@@ -142,7 +142,7 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
   flex: none;
   align-items: center;
   gap: var(--spacing-sm);
-  min-height: 34px;
+  min-height: var(--hit);
   padding: 0;
   border: none;
   background: none;
@@ -159,9 +159,9 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
 
 .scrim__wordmark {
   flex: none;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }

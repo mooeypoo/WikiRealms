@@ -48,6 +48,8 @@ export const useUIState = () => {
     firstVisitDone: false,
     /** First-session Legend tip has been seen or dismissed. */
     legendHintSeen: false,
+    /** Phone peek tip (pull up for sections) has been seen or dismissed. */
+    ledgerPeekHintSeen: false,
   });
 
   // ===== LOAD & SAVE PREFERENCES =====

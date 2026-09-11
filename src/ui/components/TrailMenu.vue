@@ -491,13 +491,13 @@ function pathFor(link) {
   gap: 4px;
   min-height: var(--hit);
   padding: var(--spacing-sm) var(--spacing-xs);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   cursor: pointer;

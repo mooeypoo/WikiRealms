@@ -100,7 +100,7 @@ function sectionRowTitles() {
 async function collapseLedger(wrapper) {
   // Step down from open → peek → collapsed.
   for (let step = 0; step < 3; step += 1) {
-    const less = document.querySelector('[aria-label="Show less of this panel"]')
+    const less = document.querySelector('[aria-label^="Show less"]')
     if (!less) break
     less.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()

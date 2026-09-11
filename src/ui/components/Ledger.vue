@@ -58,9 +58,14 @@ const props = defineProps({
    * scheme clicking that mountain did nothing at all.
    */
   selectedPeak: { type: Number, default: null },
+  /**
+   * Soft tip on phone peek: pull up for sections. Shown only after the
+   * Legend hint has been seen, so two tips never fight.
+   */
+  showPeekHint: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:state', 'share', 'select', 'legend'])
+const emit = defineEmits(['update:state', 'share', 'select', 'legend', 'dismiss-peek-hint'])
 
 /**
  * Below this many rows the whole tree is shown expanded, above it every
@@ -79,6 +84,33 @@ const summaryExpanded = ref(false)
 const viewport = useViewport()
 
 const snap = computed(() => Math.max(0, STATES.indexOf(props.state) - 1))
+
+/**
+ * On a phone the helm rides the sheet lip at open/full. Leave room on the
+ * header so the step buttons stay hittable under that strip.
+ */
+const clearHelm = computed(
+  () =>
+    !viewport.atLeast('md') &&
+    !viewport.isShort.value &&
+    (props.state === 'open' || props.state === 'full'),
+)
+
+/** Quiet Legend backup only while the place panel is small; Helm owns it otherwise. */
+const showLegendLink = computed(() => props.state === 'peek' || props.state === 'collapsed')
+
+const moreLabel = computed(() => {
+  if (props.state === 'peek') return 'Show more — open for sections'
+  if (props.state === 'open') return 'Show more — expand this panel'
+  return 'Show more of this panel'
+})
+
+const lessLabel = computed(() => {
+  if (props.state === 'open') return 'Show less — peek at this place'
+  if (props.state === 'full') return 'Show less — open view'
+  if (props.state === 'peek') return 'Show less — collapse this panel'
+  return 'Show less of this panel'
+})
 
 /**
  * The list is built from the WORLD, not from the parsed article — see
@@ -148,7 +180,11 @@ function countSections(tree) {
 }
 
 function setState(next) {
-  if (next !== props.state) emit('update:state', next)
+  if (next === props.state) return
+  if (props.showPeekHint && next !== 'peek' && next !== 'collapsed') {
+    emit('dismiss-peek-hint')
+  }
+  emit('update:state', next)
 }
 
 function onSnap(index) {
@@ -438,14 +474,14 @@ watch(
       <button class="ledger__restore" type="button" @click="setState('peek')">
         <span class="ledger__restore-title">{{ article.title }}</span>
         <span class="ledger__restore-stats tabular">
-          {{ stats[0].value }} · {{ stats[2].value }}
+          {{ stats[0].value }} sections · {{ stats[2].value }} portals
         </span>
         <Icon name="chevron-up" :size="16" />
       </button>
     </template>
 
     <template #header>
-      <div class="ledger__head">
+      <div class="ledger__head" :class="{ 'ledger__head--clear-helm': clearHelm }">
         <div class="ledger__identity">
           <h2 class="ledger__title">{{ article.title }}</h2>
           <p class="ledger__origin tabular">
@@ -461,16 +497,28 @@ watch(
             v-if="state !== 'full'"
             class="ledger__step"
             type="button"
-            aria-label="Show more of this panel"
+            :aria-label="moreLabel"
             @click="step(1)"
           >
             <Icon name="chevron-up" :size="16" />
           </button>
-          <button class="ledger__step" type="button" aria-label="Show less of this panel" @click="step(-1)">
+          <button class="ledger__step" type="button" :aria-label="lessLabel" @click="step(-1)">
             <Icon name="chevron-down" :size="16" />
           </button>
         </div>
       </div>
+
+      <p v-if="showPeekHint" class="ledger__peek-hint" role="status">
+        <span>Pull up for sections and share</span>
+        <button
+          type="button"
+          class="ledger__peek-hint-dismiss"
+          aria-label="Dismiss hint"
+          @click="$emit('dismiss-peek-hint')"
+        >
+          <Icon name="close" :size="14" />
+        </button>
+      </p>
 
       <p v-if="stale" class="ledger__stale">
         <Icon name="alert" :size="14" />
@@ -651,7 +699,12 @@ watch(
             :label="footerCta.label"
           />
         </div>
-        <button class="ledger__legend" type="button" @click="$emit('legend')">
+        <button
+          v-if="showLegendLink"
+          class="ledger__legend"
+          type="button"
+          @click="$emit('legend')"
+        >
           <Icon name="legend" :size="13" />
           Legend
         </button>
@@ -700,6 +753,11 @@ watch(
   gap: var(--spacing-md);
 }
 
+/* Phone helm sits on the sheet lip at open/full — keep the step controls clear. */
+.ledger__head--clear-helm {
+  padding-right: calc(4 * var(--hit) + var(--spacing-md));
+}
+
 .ledger__identity {
   min-width: 0;
 }
@@ -711,8 +769,8 @@ watch(
 
 .ledger__origin {
   margin: 2px 0 0;
-  color: var(--ink-3);
-  font-size: 9px;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
 }
 
@@ -720,6 +778,37 @@ watch(
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.ledger__peek-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin: var(--spacing-sm) 0 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--edge-accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-wash);
+  color: var(--ink-1);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.ledger__peek-hint-dismiss {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.ledger__peek-hint-dismiss:hover {
+  color: var(--accent);
 }
 
 /* Three ascending bars: which of peek / open / full you are in. */
@@ -795,9 +884,9 @@ watch(
 }
 
 .ledger__stats dt {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -875,9 +964,9 @@ watch(
   align-items: baseline;
   justify-content: space-between;
   margin: 0 0 var(--spacing-sm);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   font-weight: 400;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
@@ -898,9 +987,9 @@ watch(
 .ledger__columns {
   padding: 0 0 3px 22px;
   border-bottom: 1px solid var(--edge-hair);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -962,8 +1051,9 @@ watch(
 .ledger__twist {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 26px;
+  width: var(--hit);
+  height: var(--hit);
+  margin: calc((var(--hit) - 26px) / -2) 0;
   padding: 0;
   border: none;
   background: none;
@@ -983,6 +1073,13 @@ watch(
   color: var(--ink-1);
   font: inherit;
   text-align: left;
+}
+
+@media (pointer: coarse) {
+  .ledger__cells {
+    min-height: var(--hit);
+    padding: var(--spacing-xs) 0;
+  }
 }
 
 button.ledger__cells:hover .ledger__row-title {
@@ -1125,7 +1222,7 @@ button.ledger__cells:hover .ledger__row-title {
   justify-content: center;
   gap: var(--spacing-sm);
   width: 100%;
-  min-height: calc(var(--hit) * 0.85);
+  min-height: var(--hit);
   padding: 0 var(--spacing-md);
   border: none;
   border-top: 1px solid var(--edge-hair);

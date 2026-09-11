@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import { useOverlays } from '../design/useOverlays.js'
+import { useViewport } from '../design/useViewport.js'
 import {
   CREATURE_SWATCH,
   FEATURE_LEGEND,
@@ -36,6 +37,13 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const overlays = useOverlays()
+const viewport = useViewport()
+
+const dismissCopy = computed(() =>
+  viewport.atLeast('md')
+    ? 'Press L or click the world to put this away.'
+    : 'Tap the world or close to put this away.',
+)
 
 // It is a summon like any other, so it takes its turn in the stack: Escape
 // closes it, and opening something else puts it away rather than leaving
@@ -126,7 +134,7 @@ function featureSwatch(id) {
             </ul>
           </section>
 
-          <p class="legend__dismiss">Press <kbd>L</kbd> or click the world to put this away.</p>
+          <p class="legend__dismiss">{{ dismissCopy }}</p>
         </aside>
       </div>
     </Transition>
@@ -201,7 +209,7 @@ function featureSwatch(id) {
   max-height: 80dvh;
   padding: var(--spacing-md);
   overflow-y: auto;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   background: var(--surface-1-solid);
   box-shadow: var(--shadow-panel);
@@ -318,10 +326,11 @@ function featureSwatch(id) {
   .legend__key {
     top: auto;
     right: var(--spacing-sm);
-    bottom: max(var(--spacing-sm), env(safe-area-inset-bottom, 0px));
+    /* Sit above the phone helm strip so Legend stays readable and closable. */
+    bottom: calc(var(--hit) + var(--spacing-lg) + env(safe-area-inset-bottom, 0px));
     left: var(--spacing-sm);
     width: auto;
-    max-height: 62dvh;
+    max-height: 56dvh;
     transform: none;
   }
 }

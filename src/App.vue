@@ -276,8 +276,22 @@ function dismissLegendHint() {
   updatePreferences({ legendHintSeen: true })
 }
 
+function dismissPeekHint() {
+  updatePreferences({ ledgerPeekHintSeen: true })
+}
+
 const showLegendHint = computed(
   () => Boolean(world.value) && preferences.legendHintSeen !== true,
+)
+
+const showPeekHint = computed(
+  () =>
+    Boolean(world.value) &&
+    preferences.legendHintSeen === true &&
+    preferences.ledgerPeekHintSeen !== true &&
+    !viewport.atLeast('md') &&
+    !viewport.isShort.value &&
+    ledgerState.value === 'peek',
 )
 
 /**
@@ -558,10 +572,12 @@ watch([graph, articleCache], () => {
       :state="ledgerState"
       :stale="isStale"
       :selected-peak="selectedPeak"
+      :show-peek-hint="showPeekHint"
       @update:state="setLedgerState"
       @select="selectedPeak = $event"
       @share="onShareClick"
       @legend="toggleLegend"
+      @dismiss-peek-hint="dismissPeekHint"
     />
 
     <PortalPreview
