@@ -224,9 +224,9 @@ function featureSwatch(id) {
 .legend__head button {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--edge-hair);
+  width: var(--hit);
+  height: var(--hit);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
@@ -234,9 +234,9 @@ function featureSwatch(id) {
 
 .legend__key h3 {
   margin: 0 0 var(--spacing-sm);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   font-weight: 400;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;

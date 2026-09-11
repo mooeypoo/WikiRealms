@@ -46,6 +46,8 @@ export const useUIState = () => {
     chrome: 'translucent',
     autoHideHUD: false,
     firstVisitDone: false,
+    /** First-session Legend tip has been seen or dismissed. */
+    legendHintSeen: false,
   });
 
   // ===== LOAD & SAVE PREFERENCES =====

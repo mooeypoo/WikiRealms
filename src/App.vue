@@ -267,7 +267,18 @@ function toggleLegend() {
   }
   legendAnchors.value = worldViewRef.value?.legendAnchors?.() ?? {}
   showLegend.value = true
+  if (!preferences.legendHintSeen) {
+    updatePreferences({ legendHintSeen: true })
+  }
 }
+
+function dismissLegendHint() {
+  updatePreferences({ legendHintSeen: true })
+}
+
+const showLegendHint = computed(
+  () => Boolean(world.value) && preferences.legendHintSeen !== true,
+)
 
 /**
  * The menu is a way to the tools, not a place to be: choosing one closes
@@ -516,9 +527,11 @@ watch([graph, articleCache], () => {
       :world-shape="preferences.worldShape"
       :disabled="worldStatus !== 'success'"
       :can-recenter="rendersInWebGL"
+      :show-hint="showLegendHint"
       @update:world-shape="setWorldShape"
       @recenter="recenterView"
       @legend="toggleLegend"
+      @dismiss-hint="dismissLegendHint"
     />
 
 

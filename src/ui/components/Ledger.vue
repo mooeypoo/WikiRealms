@@ -745,9 +745,9 @@ watch(
 .ledger__step {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--edge-hair);
+  width: var(--hit);
+  height: var(--hit);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
