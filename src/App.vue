@@ -717,7 +717,7 @@ watch([graph, articleCache], () => {
       v-if="showHudHidden"
       class="app__reveal"
       type="button"
-      aria-label="Show the interface"
+      :aria-label="t('wikirealms-show-interface')"
       @click="showHudHidden = false"
     >
       <Icon name="eye" :size="18" />

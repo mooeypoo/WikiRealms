@@ -29,6 +29,7 @@ import {
 } from '../rendering/sectionStats.js'
 import WikipediaCtaLink from './WikipediaCtaLink.vue'
 import WikipediaFieldTask from './WikipediaFieldTask.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * What this place is.
@@ -67,6 +68,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:state', 'share', 'select', 'legend', 'dismiss-peek-hint'])
 
+const { t } = useI18n()
+
 /**
  * Below this many rows the whole tree is shown expanded, above it every
  * range starts closed.
@@ -100,16 +103,16 @@ const clearHelm = computed(
 const showLegendLink = computed(() => props.state === 'peek' || props.state === 'collapsed')
 
 const moreLabel = computed(() => {
-  if (props.state === 'peek') return 'Show more — open for sections'
-  if (props.state === 'open') return 'Show more — expand this panel'
-  return 'Show more of this panel'
+  if (props.state === 'peek') return t('wikirealms-ledger-more-peek')
+  if (props.state === 'open') return t('wikirealms-ledger-more-open')
+  return t('wikirealms-ledger-more')
 })
 
 const lessLabel = computed(() => {
-  if (props.state === 'open') return 'Show less — peek at this place'
-  if (props.state === 'full') return 'Show less — open view'
-  if (props.state === 'peek') return 'Show less — collapse this panel'
-  return 'Show less of this panel'
+  if (props.state === 'open') return t('wikirealms-ledger-less-open')
+  if (props.state === 'full') return t('wikirealms-ledger-less-full')
+  if (props.state === 'peek') return t('wikirealms-ledger-less-peek')
+  return t('wikirealms-ledger-less')
 })
 
 /**
@@ -122,45 +125,35 @@ const rows = computed(() => model.value.rows)
 
 const stats = computed(() => [
   {
-    label: 'Sections',
+    label: t('wikirealms-ledger-stat-sections'),
     value: countSections(props.article.sections),
     icon: 'peaks',
-    hint: 'Mountain ranges on the map',
+    hint: t('wikirealms-ledger-stat-sections-hint'),
   },
   {
-    label: 'Citations',
+    label: t('wikirealms-ledger-stat-citations'),
     value: props.article.sections?.citationCount ?? 0,
     icon: 'tree',
-    hint: 'How well sections cite — trees and green',
+    hint: t('wikirealms-ledger-stat-citations-hint'),
   },
   {
-    label: 'Portals',
+    label: t('wikirealms-ledger-stat-portals'),
     value: props.world?.portals?.length ?? 0,
     accent: true,
     icon: 'mark',
-    hint: 'Outbound links you can travel through',
+    hint: t('wikirealms-ledger-stat-portals-hint'),
   },
-  // Was "Links", which read 500 for almost every article — that being the
-  // API's page limit for an anonymous request, which nothing here follows
-  // past. A number that describes our query rather than the article has no
-  // business in an instrument panel, and sitting beside Portals it invited
-  // a comparison between two things that are not comparable.
-  //
-  // Words is uncapped, is a fact about the article, and is the one the
-  // world visibly answers to: length is what sets the waterline.
   {
-    label: 'Words',
+    label: t('wikirealms-ledger-stat-words'),
     value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)),
     icon: 'prose',
-    hint: 'Article length — sets the waterline',
+    hint: t('wikirealms-ledger-stat-words-hint'),
   },
-  // 30-day user pageviews from AQS — how busy the article is. Drives how
-  // many fish swim the oceans; shown here so that signal is readable.
   {
-    label: 'Views',
+    label: t('wikirealms-ledger-stat-views'),
     value: formatPageviews(props.article.pageviews),
     icon: 'fish',
-    hint: '30-day pageviews — fish in the seas track how busy this page is',
+    hint: t('wikirealms-ledger-stat-views-hint'),
   },
 ])
 
@@ -285,7 +278,7 @@ function subsectionSummary(row) {
   if (lowest === highest) return label
 
   const nameAt = (index) => describeBand(LUSHNESS_BANDS[index]).name
-  return `${label}, ${nameAt(lowest)} to ${nameAt(highest)}`
+  return t('wikirealms-ledger-subsection-range', label, nameAt(lowest), nameAt(highest))
 }
 
 /**
@@ -469,7 +462,7 @@ watch(
     :compact="state === 'peek'"
     :snap-points="SNAP_POINTS"
     :snap="snap"
-    :label="`About ${article.title}`"
+    :label="t('wikirealms-ledger-about', article.title)"
     side="left"
     @update:snap="onSnap"
   >
@@ -481,7 +474,7 @@ watch(
           {{ article.title }}
         </span>
         <span class="ledger__restore-stats tabular">
-          {{ stats[0].value }} sections · {{ stats[2].value }} portals
+          {{ t('wikirealms-ledger-restore-stats', stats[0].value, stats[2].value) }}
         </span>
         <Icon name="chevron-up" :size="16" />
       </button>
@@ -500,7 +493,7 @@ watch(
         </div>
 
         <div class="ledger__controls">
-          <span class="ledger__meter" :title="`Panel is ${state}`" aria-hidden="true">
+          <span class="ledger__meter" :title="t('wikirealms-ledger-panel-state', state)" aria-hidden="true">
             <span v-for="level in [1, 2, 3]" :key="level" :class="['ledger__bar', { 'is-on': snap + 1 === level }]" />
           </span>
           <button
@@ -519,11 +512,11 @@ watch(
       </div>
 
       <p v-if="showPeekHint" class="ledger__peek-hint" role="status">
-        <span>Pull up for sections and share</span>
+        <span>{{ t('wikirealms-ledger-peek-hint') }}</span>
         <button
           type="button"
           class="ledger__peek-hint-dismiss"
-          aria-label="Dismiss hint"
+          :aria-label="t('wikirealms-dismiss-hint')"
           @click="$emit('dismiss-peek-hint')"
         >
           <Icon name="close" :size="14" />
@@ -533,7 +526,7 @@ watch(
       <p v-if="stale" class="ledger__stale">
         <Icon name="alert" :size="14" />
         <span class="ledger__stale-copy">
-          Updated on Wikipedia since this world was made
+          {{ t('wikirealms-ledger-stale') }}
           <WikipediaCtaLink
             v-if="headerCta?.href && headerCta?.label"
             class="ledger__stale-cta"
@@ -559,14 +552,14 @@ watch(
         <div v-if="article.summary" class="ledger__summary">
           <p :class="{ 'is-clamped': !summaryExpanded }">{{ article.summary }}</p>
           <button class="ledger__more" type="button" @click="summaryExpanded = !summaryExpanded">
-            {{ summaryExpanded ? 'Show less' : 'Show more' }}
+            {{ summaryExpanded ? t('wikirealms-show-less') : t('wikirealms-show-more') }}
           </button>
         </div>
-        <p v-else class="ledger__empty">No summary for this article.</p>
+        <p v-else class="ledger__empty">{{ t('wikirealms-ledger-no-summary') }}</p>
 
         <section v-if="rows.length" class="ledger__sections">
           <h3 class="ledger__sections-head">
-            Sections
+            {{ t('wikirealms-ledger-stat-sections') }}
             <span class="tabular">{{ listSummary }}</span>
           </h3>
 
@@ -576,10 +569,10 @@ watch(
                once, and it is what left no room for the figures that
                actually vary. -->
           <div class="ledger__columns" aria-hidden="true">
-            <span>Range</span>
-            <span>Words</span>
-            <span>Refs</span>
-            <span>Ground</span>
+            <span>{{ t('wikirealms-ledger-col-range') }}</span>
+            <span>{{ t('wikirealms-ledger-stat-words') }}</span>
+            <span>{{ t('wikirealms-ledger-col-refs') }}</span>
+            <span>{{ t('wikirealms-ledger-col-ground') }}</span>
           </div>
 
           <ul class="ledger__list">
@@ -603,7 +596,11 @@ watch(
                   class="ledger__twist"
                   type="button"
                   :aria-expanded="isExpanded(row)"
-                  :aria-label="`${isExpanded(row) ? 'Hide' : 'Show'} the summits in ${row.title}`"
+                  :aria-label="
+                    isExpanded(row)
+                      ? t('wikirealms-ledger-hide-summits', row.title)
+                      : t('wikirealms-ledger-show-summits', row.title)
+                  "
                   @click="toggle(row)"
                 >
                   <Icon :name="isExpanded(row) ? 'chevron-down' : 'chevron-right'" :size="13" />
@@ -692,12 +689,12 @@ watch(
         <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
           <div class="ledger__footer-links">
             <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
-              View on Wikipedia
+              {{ t('wikirealms-ledger-view-wikipedia') }}
               <Icon name="external" :size="12" />
             </a>
             <button class="ledger__link" type="button" @click="$emit('share')">
               <Icon name="share" :size="13" />
-              Share…
+              {{ t('wikirealms-ledger-share') }}
             </button>
           </div>
           <WikipediaFieldTask
@@ -716,7 +713,7 @@ watch(
           @click="$emit('legend')"
         >
           <Icon name="legend" :size="13" />
-          Legend
+          {{ t('wikirealms-legend-short') }}
         </button>
       </div>
     </template>

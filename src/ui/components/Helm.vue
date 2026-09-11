@@ -1,5 +1,6 @@
 <script setup>
 import Icon from '../design/Icon.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * The helm: how you are looking at the world.
@@ -35,15 +36,17 @@ defineProps({
 
 defineEmits(['update:worldShape', 'recenter', 'legend', 'dismiss-hint'])
 
+const { t } = useI18n()
+
 const SHAPES = [
-  { value: 'sphere', label: 'Planet', icon: 'globe' },
-  { value: 'flat', label: 'Flat', icon: 'map' },
+  { value: 'sphere', labelKey: 'wikirealms-helm-planet', icon: 'globe' },
+  { value: 'flat', labelKey: 'wikirealms-helm-flat', icon: 'map' },
 ]
 </script>
 
 <template>
   <div class="helm" :style="{ '--helm-lift': lift }">
-    <div class="helm__shapes" role="radiogroup" aria-label="World shape">
+    <div class="helm__shapes" role="radiogroup" :aria-label="t('wikirealms-helm-shape')">
       <button
         v-for="shape in SHAPES"
         :key="shape.value"
@@ -56,7 +59,7 @@ const SHAPES = [
         @click="$emit('update:worldShape', shape.value)"
       >
         <Icon :name="shape.icon" :size="16" />
-        <span class="helm__label">{{ shape.label }}</span>
+        <span class="helm__label">{{ t(shape.labelKey) }}</span>
       </button>
     </div>
 
@@ -64,8 +67,8 @@ const SHAPES = [
       v-if="canRecenter"
       class="helm__action"
       type="button"
-      aria-label="Recentre the view"
-      title="Recentre the view"
+      :aria-label="t('wikirealms-helm-recenter')"
+      :title="t('wikirealms-helm-recenter')"
       :disabled="disabled"
       @click="$emit('recenter')"
     >
@@ -83,11 +86,11 @@ const SHAPES = [
          Legend label makes the control scannable; phones stay icon-only. -->
     <div class="helm__legend-wrap">
       <p v-if="showHint" class="helm__hint" role="status">
-        <span>Open Legend to learn the map</span>
+        <span>{{ t('wikirealms-helm-legend-hint') }}</span>
         <button
           type="button"
           class="helm__hint-dismiss"
-          aria-label="Dismiss hint"
+          :aria-label="t('wikirealms-dismiss-hint')"
           @click="$emit('dismiss-hint')"
         >
           <Icon name="close" :size="14" />
@@ -97,18 +100,17 @@ const SHAPES = [
         class="helm__action helm__legend"
         :class="{ 'helm__legend--hint': showHint }"
         type="button"
-        aria-label="What am I looking at?"
-        title="What am I looking at?"
+        :aria-label="t('wikirealms-helm-legend-aria')"
+        :title="t('wikirealms-helm-legend-aria')"
         :disabled="disabled"
         @click="$emit('legend')"
       >
         <Icon name="legend" :size="18" />
-        <span class="helm__label">Legend</span>
+        <span class="helm__label">{{ t('wikirealms-legend-short') }}</span>
       </button>
     </div>
   </div>
 </template>
-
 <style scoped>
 .helm {
   position: fixed;
