@@ -98,7 +98,7 @@ const { t } = useI18n()
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .share__list button:hover:not(:disabled) {

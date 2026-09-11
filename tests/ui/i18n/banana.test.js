@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getEdition } from '../../../src/core/i18n/wikipediaEditions.js'
 import { setUiLocale, t } from '../../../src/ui/i18n/banana.js'
 
 describe('banana-i18n UI messages', () => {
@@ -17,5 +18,14 @@ describe('banana-i18n UI messages', () => {
     await setUiLocale('he')
     expect(t('wikirealms-settings-title')).toBe('Settings')
     await setUiLocale('en')
+  })
+})
+
+describe('document direction from Wikipedia editions', () => {
+  it('marks Hebrew and Arabic as RTL for the document dir attribute', () => {
+    expect(getEdition('he').dir).toBe('rtl')
+    expect(getEdition('ar').dir).toBe('rtl')
+    expect(getEdition('en').dir).toBe('ltr')
+    expect(getEdition('de').dir).toBe('ltr')
   })
 })

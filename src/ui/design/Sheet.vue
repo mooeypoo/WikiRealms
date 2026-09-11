@@ -434,7 +434,7 @@ function onScrimDismiss() {
 /* Centred, for a surface that wants the viewer's whole attention. */
 .sheet--dialog {
   top: 50%;
-  left: 50%;
+  inset-inline-start: 50%;
   width: min(560px, 92vw);
   max-height: 86dvh;
   transform: translate(-50%, -50%);
@@ -443,15 +443,15 @@ function onScrimDismiss() {
 
 /* Up from the bottom edge, within thumb reach, resizable by its grip. */
 .sheet--sheet {
-  right: 0;
+  inset-inline: 0;
   bottom: 0;
-  left: 0;
   border-width: 1px 0 0;
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
-/* In from a side edge: the `short` case, where height is what is scarce. */
+/* In from a side edge: the `short` case, where height is what is scarce.
+   `left` / `right` props mean start / end so drawers mirror under dir=rtl. */
 .sheet--drawer {
   top: 0;
   bottom: 0;
@@ -460,15 +460,25 @@ function onScrimDismiss() {
 }
 
 .sheet--drawer.sheet--left {
-  left: 0;
-  border-width: 0 1px 0 0;
-  padding-left: env(safe-area-inset-left, 0);
+  inset-inline-start: 0;
+  border-width: 0;
+  border-inline-end: 1px solid var(--edge-line);
+  padding-inline-start: env(safe-area-inset-left, 0);
+}
+
+[dir='rtl'] .sheet--drawer.sheet--left {
+  padding-inline-start: env(safe-area-inset-right, 0);
 }
 
 .sheet--drawer.sheet--right {
-  right: 0;
-  border-width: 0 0 0 1px;
-  padding-right: env(safe-area-inset-right, 0);
+  inset-inline-end: 0;
+  border-width: 0;
+  border-inline-start: 1px solid var(--edge-line);
+  padding-inline-end: env(safe-area-inset-right, 0);
+}
+
+[dir='rtl'] .sheet--drawer.sheet--right {
+  padding-inline-end: env(safe-area-inset-left, 0);
 }
 
 /* Docked to a corner and non-modal: the world stays usable around it. */
@@ -481,11 +491,11 @@ function onScrimDismiss() {
 }
 
 .sheet--panel.sheet--left {
-  left: var(--spacing-md);
+  inset-inline-start: var(--spacing-md);
 }
 
 .sheet--panel.sheet--right {
-  right: var(--spacing-md);
+  inset-inline-end: var(--spacing-md);
 }
 
 .sheet--collapsed {
@@ -599,6 +609,16 @@ function onScrimDismiss() {
 .sheet--right.sheet-drawer-enter-from,
 .sheet--right.sheet-drawer-leave-to {
   transform: translateX(8%);
+}
+
+[dir='rtl'] .sheet-drawer-enter-from,
+[dir='rtl'] .sheet-drawer-leave-to {
+  transform: translateX(8%);
+}
+
+[dir='rtl'] .sheet--right.sheet-drawer-enter-from,
+[dir='rtl'] .sheet--right.sheet-drawer-leave-to {
+  transform: translateX(-8%);
 }
 
 .sheet-panel-enter-from,

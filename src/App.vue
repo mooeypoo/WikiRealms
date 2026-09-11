@@ -800,7 +800,7 @@ watch([graph, articleCache], () => {
 .app__reveal {
   position: fixed;
   top: max(var(--spacing-md), env(safe-area-inset-top, 0px));
-  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   z-index: var(--z-instruments);
   display: grid;
   place-items: center;
@@ -812,6 +812,10 @@ watch([graph, articleCache], () => {
   box-shadow: var(--shadow-float);
   color: var(--ink-1);
   opacity: 0.85;
+}
+
+[dir='rtl'] .app__reveal {
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-left, 0px));
 }
 
 .app__reveal:hover {

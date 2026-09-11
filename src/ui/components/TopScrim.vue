@@ -108,8 +108,7 @@ const { t } = useI18n()
 .scrim {
   position: fixed;
   top: 0;
-  right: 0;
-  left: 0;
+  inset-inline: 0;
   z-index: var(--z-instruments);
   display: flex;
   align-items: center;
@@ -126,6 +125,11 @@ const { t } = useI18n()
     rgba(var(--surface-1-rgb), 0) 100%
   );
   pointer-events: none;
+}
+
+/* Back / forward glyphs point along the reading direction. */
+[dir='rtl'] .scrim__travel :deep(svg) {
+  transform: scaleX(-1);
 }
 
 .scrim > * {
@@ -296,8 +300,8 @@ const { t } = useI18n()
 @media (max-width: 767px) {
   .scrim {
     gap: var(--spacing-sm);
-    padding-right: max(var(--spacing-sm), env(safe-area-inset-right, 0px));
-    padding-left: max(var(--spacing-sm), env(safe-area-inset-left, 0px));
+    padding-inline-end: max(var(--spacing-sm), env(safe-area-inset-right, 0px));
+    padding-inline-start: max(var(--spacing-sm), env(safe-area-inset-left, 0px));
   }
 
   .scrim__wordmark,

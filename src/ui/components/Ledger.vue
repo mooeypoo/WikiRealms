@@ -639,7 +639,7 @@ watch(
                       <span
                         v-if="meterFor(row).tick"
                         class="ledger__meter-tick"
-                        :style="{ left: meterFor(row).tick }"
+                        :style="{ insetInlineStart: meterFor(row).tick }"
                       />
                     </span>
                     <span class="ledger__band">{{ bandFor(row).name }}</span>
@@ -731,7 +731,7 @@ watch(
   border: none;
   background: transparent;
   color: var(--ink-1);
-  text-align: left;
+  text-align: start;
 }
 
 .ledger__restore:hover {
@@ -765,7 +765,7 @@ watch(
 
 /* Phone helm sits on the sheet lip at open/full — keep the step controls clear. */
 .ledger__head--clear-helm {
-  padding-right: calc(4 * var(--hit) + var(--spacing-md));
+  padding-inline-end: calc(4 * var(--hit) + var(--spacing-md));
 }
 
 .ledger__identity {
@@ -774,7 +774,7 @@ watch(
 
 .ledger__lang {
   flex: none;
-  margin-right: var(--spacing-sm);
+  margin-inline-end: var(--spacing-sm);
   color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: 0.72em;
@@ -1017,7 +1017,7 @@ watch(
 
 .ledger__columns span:nth-child(2),
 .ledger__columns span:nth-child(3) {
-  text-align: right;
+  text-align: end;
 }
 
 .ledger__list {
@@ -1042,7 +1042,7 @@ watch(
    ground column in and out down the page and destroy the one thing the
    column is for. */
 .ledger__row-title {
-  padding-left: calc(var(--depth) * 13px);
+  padding-inline-start: calc(var(--depth) * 13px);
   overflow: hidden;
   font-size: var(--text-sm);
   text-overflow: ellipsis;
@@ -1060,8 +1060,8 @@ watch(
   position: absolute;
   top: -6px;
   bottom: -6px;
-  left: calc(var(--depth) * 13px - 7px);
-  border-left: 1px solid var(--edge-hair);
+  inset-inline-start: calc(var(--depth) * 13px - 7px);
+  border-inline-start: 1px solid var(--edge-hair);
 }
 
 .ledger__row.is-groundless .ledger__row-title,
@@ -1085,6 +1085,10 @@ watch(
   color: var(--accent);
 }
 
+[dir='rtl'] .ledger__twist :deep(svg) {
+  transform: scaleX(-1);
+}
+
 .ledger__cells {
   width: 100%;
   min-height: 26px;
@@ -1093,7 +1097,7 @@ watch(
   background: none;
   color: var(--ink-1);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 @media (pointer: coarse) {
@@ -1122,7 +1126,7 @@ button.ledger__cells:hover .ledger__row-title {
 .ledger__row-figure {
   color: var(--ink-2);
   font-size: var(--text-xs);
-  text-align: right;
+  text-align: end;
 }
 
 .ledger__ground {

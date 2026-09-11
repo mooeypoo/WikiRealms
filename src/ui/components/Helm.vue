@@ -114,13 +114,17 @@ const SHAPES = [
 <style scoped>
 .helm {
   position: fixed;
-  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   bottom: calc(max(var(--spacing-md), env(safe-area-inset-bottom, 0px)) + var(--helm-lift, 0px));
   transition: bottom var(--dur-2) var(--ease-out);
   z-index: var(--z-instruments);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+[dir='rtl'] .helm {
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-left, 0px));
 }
 
 .helm__shapes {
@@ -289,12 +293,16 @@ const SHAPES = [
   }
 }
 
-/* The `short` case: the Ledger becomes a right-hand drawer, so the helm
+/* The `short` case: the Ledger becomes a start-side drawer, so the helm
    moves to the opposite edge rather than sitting underneath it. */
 @media (max-height: 520px) {
   .helm {
-    right: auto;
-    left: max(var(--spacing-md), env(safe-area-inset-left, 0px));
+    inset-inline-end: auto;
+    inset-inline-start: max(var(--spacing-md), env(safe-area-inset-left, 0px));
+  }
+
+  [dir='rtl'] .helm {
+    inset-inline-start: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   }
 }
 </style>

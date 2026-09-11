@@ -202,7 +202,7 @@ function chooseEnglish(title) {
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  margin-left: auto;
+  margin-inline-start: auto;
   border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
@@ -263,7 +263,7 @@ function chooseEnglish(title) {
   background: transparent;
   color: var(--ink-1);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .launch__realms button:hover {

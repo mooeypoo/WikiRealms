@@ -244,16 +244,16 @@ defineExpose({ focus: () => field.value?.focus() })
   min-height: var(--hit);
   padding: var(--spacing-sm) var(--spacing-md);
   border: none;
-  border-left: 2px solid transparent;
+  border-inline-start: 2px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-1);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .search-bar__results button.is-active {
-  border-left-color: var(--accent);
+  border-inline-start-color: var(--accent);
   background: var(--accent-wash);
 }
 
