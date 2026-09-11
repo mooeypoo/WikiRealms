@@ -125,9 +125,54 @@ describe('resolveWikipediaCta', () => {
     ).toBeNull()
   })
 
+  it('resolves cite-sparse-article for thinly cited realms', () => {
+    const barren = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+      articleUrl: ARTICLE,
+      citationRate: 0,
+      wordCount: 5000,
+      sectionCount: 12,
+    })
+    expect(barren?.id).toBe('cite-sparse-article')
+    expect(barren?.eyebrow).toBe('Field task')
+    expect(barren?.notice).toMatch(/Barren/)
+    expect(barren?.label).toMatch(/seed this article/)
+    expect(barren?.href).toBe(ARTICLE)
+
+    const sparse = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+      articleUrl: ARTICLE,
+      citationRate: WIKIPEDIA_CTA_CONFIG.sparseArticle.maxCitationRate,
+      wordCount: 5000,
+      sectionCount: 12,
+    })
+    expect(sparse?.id).toBe('cite-sparse-article')
+    expect(sparse?.notice).toMatch(/Sparse/)
+    expect(sparse?.label).toMatch(/add citations to this article/)
+
+    expect(
+      resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+        articleUrl: ARTICLE,
+        citationRate: WIKIPEDIA_CTA_CONFIG.sparseArticle.maxCitationRate + 0.01,
+        wordCount: 5000,
+        sectionCount: 12,
+      }),
+    ).toBeNull()
+  })
+
+  it('prefers cite-sparse-article over grow-small-realm when both match', () => {
+    const resolved = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+      articleUrl: ARTICLE,
+      citationRate: 0,
+      wordCount: 400,
+      sectionCount: 3,
+    })
+    expect(resolved?.id).toBe('cite-sparse-article')
+  })
+
   it('resolves grow-small-realm only when both caps are met', () => {
     const small = resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
       articleUrl: ARTICLE,
+      // Above the sparse-article rate so this CTA is not shadowed.
+      citationRate: 0.5,
       wordCount: 400,
       sectionCount: 3,
     })
@@ -140,6 +185,7 @@ describe('resolveWikipediaCta', () => {
     expect(
       resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
         articleUrl: ARTICLE,
+        citationRate: 0.5,
         wordCount: 400,
         sectionCount: 12,
       }),
@@ -148,6 +194,7 @@ describe('resolveWikipediaCta', () => {
     expect(
       resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
         articleUrl: ARTICLE,
+        citationRate: 0.5,
         wordCount: 5000,
         sectionCount: 2,
       }),

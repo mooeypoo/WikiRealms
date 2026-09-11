@@ -26,6 +26,16 @@ export const WIKIPEDIA_CTA_CONFIG = Object.freeze({
     maxSections: 4,
   }),
   /**
+   * Whole-article citation invite. Measured in citations per sentence —
+   * the same absolute rate the lushness ceiling uses — not relative
+   * section bands (those always produce "sparse" peaks inside even a
+   * well-sourced article). At or below this rate the map reads as
+   * mostly barren or scrub, and the Ledger asks for seeding.
+   */
+  sparseArticle: Object.freeze({
+    maxCitationRate: 0.2,
+  }),
+  /**
    * Stewardship asks that wait for a real walk. Donate / become-editor
    * on the Trail only after this many portal hops — enough for the
    * landscape metaphor to land before we ask for support.
@@ -150,9 +160,42 @@ function citeLabel(ctx) {
  * @property {string} [articleUrl]
  * @property {number} [wordCount]
  * @property {number} [sectionCount]
+ * @property {number} [citationRate] article citations-per-sentence
  * @property {boolean} [stale]
  * @property {number} [portalHops] portal edges walked this session (Trail)
  */
+
+/**
+ * Absolute article rate is sparse enough to invite whole-realm seeding.
+ * @param {WikipediaCtaContext} ctx
+ */
+function isSparseArticle(ctx) {
+  const rate = ctx.citationRate
+  if (typeof rate !== 'number' || !(rate >= 0)) return false
+  return rate <= WIKIPEDIA_CTA_CONFIG.sparseArticle.maxCitationRate
+}
+
+/**
+ * Ledger field-task body for a thinly cited article as a whole.
+ * @param {WikipediaCtaContext} ctx
+ */
+function sparseArticleNotice(ctx) {
+  if ((ctx.citationRate ?? 0) <= 0) {
+    return 'Barren ground — this realm cites almost nothing yet. Open the article on Wikipedia and seed it with sources; citations grow the forest.'
+  }
+  return 'Sparse ground — thin references across the article. Citations grow the forest; open it on Wikipedia to help seed what is missing.'
+}
+
+/**
+ * Ledger action label for a thinly cited article.
+ * @param {WikipediaCtaContext} ctx
+ */
+function sparseArticleLabel(ctx) {
+  if ((ctx.citationRate ?? 0) <= 0) {
+    return 'Help seed this article with citations on Wikipedia'
+  }
+  return 'Help add citations to this article on Wikipedia'
+}
 
 /**
  * @typedef {object} WikipediaCtaDef
@@ -187,6 +230,20 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     label: citeLabel,
     href: (ctx) =>
       ctx.anchor ? buildSectionViewUrl(ctx.articleUrl ?? '', ctx.anchor) : null,
+  }),
+
+  Object.freeze({
+    id: 'cite-sparse-article',
+    enabled: true,
+    surfaces: Object.freeze([WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER]),
+    // Ahead of grow-small-realm: a short barren stub needs seeding as much
+    // as land, and the citation invite matches the section field task.
+    priority: 15,
+    match: (ctx) => Boolean(ctx.articleUrl) && isSparseArticle(ctx),
+    eyebrow: () => FIELD_TASK_EYEBROW,
+    notice: sparseArticleNotice,
+    label: sparseArticleLabel,
+    href: (ctx) => ctx.articleUrl ?? '',
   }),
 
   Object.freeze({

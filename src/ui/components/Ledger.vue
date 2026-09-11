@@ -334,13 +334,17 @@ const selectedDetailCta = computed(() => {
   return row ? detailCtaFor(row) : null
 })
 
-const footerCta = computed(() =>
-  resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
+const footerCta = computed(() => {
+  const tree = props.article.sections
+  const sentences = tree?.sentenceCount ?? 0
+  const citations = tree?.citationCount ?? 0
+  return resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_FOOTER, {
     articleUrl: props.article.url,
-    wordCount: estimateWordCount(props.article.sections?.totalSize ?? 0),
-    sectionCount: countSections(props.article.sections),
-  }),
-)
+    wordCount: estimateWordCount(tree?.totalSize ?? 0),
+    sectionCount: countSections(tree),
+    citationRate: sentences > 0 ? citations / sentences : 0,
+  })
+})
 
 const headerCta = computed(() =>
   resolveWikipediaCta(WIKIPEDIA_CTA_SURFACES.LEDGER_HEADER, {

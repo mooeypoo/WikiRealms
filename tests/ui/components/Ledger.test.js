@@ -215,6 +215,28 @@ describe('Ledger', () => {
       expect(footer.querySelector('.ledger__footer-actions')).not.toBeNull()
     })
 
+    it('asks to seed a barren article with citations in the footer', () => {
+      mountLedger({
+        state: 'open',
+        article: {
+          ...ARTICLE,
+          sections: {
+            ...ARTICLE.sections,
+            citationCount: 0,
+            sentenceCount: 40,
+            lead: { ...ARTICLE.sections.lead, citationCount: 0 },
+          },
+        },
+      })
+
+      const task = document.querySelector('.ledger__footer-task')
+      expect(task).not.toBeNull()
+      expect(task.textContent).toMatch(/Field task/)
+      expect(task.textContent).toMatch(/Barren/)
+      expect(task.textContent).toMatch(/seed this article/)
+      expect(task.querySelector('a')?.getAttribute('href')).toBe(ARTICLE.url)
+    })
+
     it('keeps the legend on the collapsed bar', () => {
       mountLedger({ state: 'collapsed' })
 
