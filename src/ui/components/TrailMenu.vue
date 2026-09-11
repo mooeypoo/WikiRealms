@@ -376,7 +376,7 @@ function pathFor(link) {
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
-  min-height: 34px;
+  min-height: var(--hit);
   padding: 0 var(--spacing-sm);
   border: none;
   border-radius: var(--radius-md);

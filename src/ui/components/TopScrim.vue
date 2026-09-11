@@ -234,13 +234,13 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
 .scrim__button {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: var(--hit);
+  height: var(--hit);
   box-sizing: border-box;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
-  background: rgba(var(--surface-1-rgb), 0.6);
-  color: var(--ink-2);
+  background: var(--surface-1);
+  color: var(--ink-1);
 }
 
 .scrim__button:hover:not(:disabled) {
@@ -282,7 +282,7 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
   .scrim__label {
     display: inline;
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: var(--text-xs);
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }

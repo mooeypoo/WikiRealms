@@ -420,7 +420,7 @@ function onScrimDismiss() {
   box-sizing: border-box;
   color: var(--ink-1);
   background: var(--surface-1);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-panel);
   transition: height var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);

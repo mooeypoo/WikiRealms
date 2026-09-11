@@ -116,8 +116,8 @@ describe('accessibility', () => {
   })
 
   it('gives every summonable surface a visible way in', async () => {
-    // The trail is included because the journey actions moved onto it: it
-    // is now the only route to Share.
+    // Share is reachable from the Ledger, Tools (phone), and the trail
+    // panel — not a single buried door.
     // The rule from §4.2, tested. The legend shipped reachable only by `L`,
     // which is how it went unfound — and it was the second control to do
     // that, after the Ledger's collapse-to-nothing.
@@ -217,9 +217,9 @@ describe('the phone top bar', () => {
     const menu = document.querySelector('.tools__list')
 
     expect(menu).not.toBeNull()
-    // Journey is not among them: those actions live on the trail panel,
-    // whose chevron is on the bar at every width.
-    for (const label of ['Search realms', 'About WikiRealms', 'Settings']) {
+    // Share joins the overflow on phone; journey end-of-session actions
+    // stay on the trail panel.
+    for (const label of ['Search realms', 'Share', 'About WikiRealms', 'Settings']) {
       expect(menu.textContent).toContain(label)
     }
     expect(menu.textContent).not.toContain('Journey')

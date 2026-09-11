@@ -601,9 +601,11 @@ watch([graph, articleCache], () => {
 
     <ToolsMenu
       :show="showTools"
+      :can-share="Boolean(article)"
       @search="fromTools(() => (isSearchOpen = true))"
       @guide="fromTools(() => (showInfoHub = true))"
       @settings="fromTools(() => (showSettings = true))"
+      @share="fromTools(() => (showShareMenu = true))"
       @close="showTools = false"
     />
 
@@ -731,11 +733,12 @@ watch([graph, articleCache], () => {
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: var(--surface-1);
-  color: var(--ink-3);
-  opacity: 0.5;
+  box-shadow: var(--shadow-float);
+  color: var(--ink-1);
+  opacity: 0.85;
 }
 
 .app__reveal:hover {
@@ -867,15 +870,16 @@ watch([graph, articleCache], () => {
   position: fixed;
   z-index: var(--z-toast);
   left: 50%;
-  bottom: 1.5rem;
+  bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
   margin: 0;
   padding: 0.7rem 1rem;
   transform: translateX(-50%);
-  border: 1px solid rgba(127, 223, 255, 0.5);
-  border-radius: 6px;
-  background: rgba(18, 22, 40, 0.95);
-  box-shadow: 0 0 14px rgba(127, 223, 255, 0.25);
+  border: 1px solid var(--edge-accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-float), 0 0 14px rgba(var(--accent-rgb), 0.22);
   color: var(--ink-1);
+  backdrop-filter: blur(14px);
 }
 
 .toast-enter-active,
