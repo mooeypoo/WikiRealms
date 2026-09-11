@@ -25,7 +25,7 @@ const props = defineProps({
 const emit = defineEmits(['travel', 'dismiss'])
 
 const card = ref(null)
-const size = ref({ width: 260, height: 132 })
+const size = ref({ width: 260, height: 152 })
 const viewport = ref({ width: 0, height: 0 })
 
 function measure() {
@@ -83,6 +83,7 @@ const style = computed(() =>
         >
           <p class="preview__label">Portal to</p>
           <h2 id="preview-title" class="preview__title">{{ portal.targetTitle }}</h2>
+          <p class="preview__blurb">Travels to another article's world</p>
 
           <div class="preview__actions">
             <button class="preview__go" type="button" data-autofocus @click="$emit('travel', portal)">
@@ -143,9 +144,9 @@ const style = computed(() =>
 
 .preview__label {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -156,6 +157,13 @@ const style = computed(() =>
   font-size: var(--text-md);
   font-weight: 500;
   text-wrap: pretty;
+}
+
+.preview__blurb {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
 .preview__actions {
@@ -169,7 +177,7 @@ const style = computed(() =>
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 36px;
+  min-height: var(--hit);
   padding: 0 var(--spacing-md);
   border-radius: var(--radius-md);
   font: inherit;

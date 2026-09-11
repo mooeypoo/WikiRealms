@@ -26,9 +26,14 @@ defineProps({
    * everywhere else they are on opposite sides of the screen.
    */
   lift: { type: String, default: '0px' },
+  /**
+   * First-session nudge toward Legend. Dismissed once the viewer opens it
+   * (or dismisses the tip), then remembered in preferences.
+   */
+  showHint: { type: Boolean, default: false },
 })
 
-defineEmits(['update:worldShape', 'recenter', 'legend'])
+defineEmits(['update:worldShape', 'recenter', 'legend', 'dismiss-hint'])
 
 const SHAPES = [
   { value: 'sphere', label: 'Planet', icon: 'globe' },
@@ -76,17 +81,31 @@ const SHAPES = [
          opens the About dialog, and two different things behind the same
          glyph is worse than a shortcut nobody finds. On wide screens the
          Legend label makes the control scannable; phones stay icon-only. -->
-    <button
-      class="helm__action helm__legend"
-      type="button"
-      aria-label="What am I looking at?"
-      title="What am I looking at?"
-      :disabled="disabled"
-      @click="$emit('legend')"
-    >
-      <Icon name="legend" :size="18" />
-      <span class="helm__label">Legend</span>
-    </button>
+    <div class="helm__legend-wrap">
+      <p v-if="showHint" class="helm__hint" role="status">
+        <span>Open Legend to learn the map</span>
+        <button
+          type="button"
+          class="helm__hint-dismiss"
+          aria-label="Dismiss hint"
+          @click="$emit('dismiss-hint')"
+        >
+          <Icon name="close" :size="14" />
+        </button>
+      </p>
+      <button
+        class="helm__action helm__legend"
+        :class="{ 'helm__legend--hint': showHint }"
+        type="button"
+        aria-label="What am I looking at?"
+        title="What am I looking at?"
+        :disabled="disabled"
+        @click="$emit('legend')"
+      >
+        <Icon name="legend" :size="18" />
+        <span class="helm__label">Legend</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -106,7 +125,7 @@ const SHAPES = [
   display: flex;
   gap: 3px;
   padding: 3px;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   backdrop-filter: blur(14px);
@@ -122,7 +141,7 @@ const SHAPES = [
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -135,8 +154,9 @@ const SHAPES = [
 
 .helm__shape--active {
   border-color: var(--edge-accent);
-  background: var(--accent-wash);
+  background: rgba(var(--accent-rgb), 0.28);
   color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
 }
 
 .helm__shape:disabled,
@@ -153,16 +173,80 @@ const SHAPES = [
   min-width: var(--hit);
   height: var(--hit);
   padding: 0;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-float);
-  color: var(--ink-2);
+  color: var(--ink-1);
 }
 
 .helm__legend {
   padding: 0 var(--spacing-md);
+}
+
+.helm__legend-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.helm__hint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  max-width: 14rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--edge-accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(14px);
+  color: var(--ink-1);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.helm__hint-dismiss {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.helm__hint-dismiss:hover {
+  color: var(--accent);
+}
+
+.helm__legend--hint {
+  border-color: var(--edge-accent);
+  color: var(--accent);
+  animation: helm-hint-pulse 1.8s var(--ease-out) infinite;
+}
+
+@keyframes helm-hint-pulse {
+  0%,
+  100% {
+    box-shadow: var(--shadow-float), 0 0 0 0 rgba(var(--accent-rgb), 0.35);
+  }
+  50% {
+    box-shadow: var(--shadow-float), 0 0 0 6px rgba(var(--accent-rgb), 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .helm__legend--hint {
+    animation: none;
+  }
 }
 
 .helm__legend .helm__label {
@@ -180,8 +264,13 @@ const SHAPES = [
 
 /* Below md the labels go and the buttons square up: the control has to
    clear the Ledger sheet beside it, and an icon pair reads fine once the
-   two shapes are the only choice there is. */
+   two shapes are the only choice there is. Sit above the sheet in paint
+   order so the strip stays hittable when the ledger is open or full. */
 @media (max-width: 767px) {
+  .helm {
+    z-index: var(--z-instruments-raised);
+  }
+
   .helm__label {
     display: none;
   }

@@ -61,7 +61,10 @@ export const FEATURE_LEGEND = [
     // hundreds of markers is a world you cannot see. Saying "a portal is a
     // link" without saying "some of them" is the same overclaim the Links
     // readout was making.
-    detail: `Up to ${PORTAL_LIMITS.maxPortals} of them, spread across the sections rather than taken from the top, and placed in the range whose section links there. Taking one starts a new world.`,
+    detail:
+      `Up to ${PORTAL_LIMITS.maxPortals} across a world, and at most ` +
+      `${PORTAL_LIMITS.maxPerTopLevelSection} per mountain range (lead links have their own small budget). ` +
+      `They are spread across the sections rather than taken from the top, and placed in the range whose section links there. Taking one starts a new world.`,
   },
   {
     id: 'water',

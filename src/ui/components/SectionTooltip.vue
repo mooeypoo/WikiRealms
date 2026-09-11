@@ -88,13 +88,13 @@ const ctaNotice = computed(
 
 .section-tooltip__body {
   background: var(--surface-1);
-  border: 1px solid var(--edge-hair);
-  border-radius: 0.65rem;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
   padding: 0;
   overflow: hidden;
   backdrop-filter: blur(8px);
   color: var(--ink-1);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-float);
   /* Little caret pointing down toward the summit anchor. */
   position: relative;
 }
@@ -108,8 +108,8 @@ const ctaNotice = computed(
   width: 10px;
   height: 10px;
   background: var(--surface-1);
-  border-right: 1px solid var(--edge-hair);
-  border-bottom: 1px solid var(--edge-hair);
+  border-right: 1px solid var(--edge-line);
+  border-bottom: 1px solid var(--edge-line);
 }
 
 /* Caret matches the accent footer when the citation strip is showing. */
@@ -143,11 +143,11 @@ const ctaNotice = computed(
 
 .section-tooltip__chip {
   font-family: var(--font-body);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   color: var(--ink-2);
   background: rgba(var(--edge-rgb), 0.12);
-  border: 1px solid rgba(var(--edge-rgb), 0.25);
-  border-radius: 0.4rem;
+  border: 1px solid rgba(var(--edge-rgb), 0.35);
+  border-radius: var(--radius-sm);
   padding: 0.12rem 0.4rem;
   white-space: nowrap;
 }
@@ -178,7 +178,7 @@ const ctaNotice = computed(
   border-top: 1px solid rgba(var(--accent-rgb), 0.28);
   color: var(--ink-1);
   font-family: var(--font-body);
-  font-size: 0.72rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 </style>

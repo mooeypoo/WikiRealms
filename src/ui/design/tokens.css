@@ -13,13 +13,15 @@
   color-scheme: dark;
 
   /* ── SURFACES ──────────────────────────────────────────────────────
-     The stage is the darkest thing on screen; panels sit above it. */
+     The stage is the darkest thing on screen; panels sit a step above it
+     so instruments silhouette against terrain and starfield rather than
+     dissolving into the void. */
   --surface-void: #05070d;                  /* behind the world */
   --surface-nebula: #0d1120;                /* the body gradient's lift */
-  --surface-deep: #0a0d14;
-  --surface-1-solid: #0a0d14;               /* panel fill with no alpha */
-  --surface-1: rgba(10, 13, 20, 0.9);       /* panels */
-  --surface-2: rgba(16, 20, 28, 0.94);      /* raised, inside a panel */
+  --surface-deep: #0c1018;
+  --surface-1-solid: #121722;               /* panel fill with no alpha */
+  --surface-1: rgba(18, 23, 34, 0.92);      /* panels */
+  --surface-2: rgba(22, 28, 40, 0.95);      /* raised, inside a panel */
   --surface-scrim: rgba(5, 7, 13, 0.72);    /* behind a modal surface */
 
   /* Panel alpha is derived, not chosen. At 0.90 every ink still clears its
@@ -54,15 +56,16 @@
 
   /* ── INK ───────────────────────────────────────────────────────────
      Measured against --surface-1 over snow, the worst case in the app. */
-  --ink-1: #e9edf3;                         /* 13.2:1 — body and headings */
-  --ink-2: #a3b1c2;                         /* 7.1:1  — secondary prose */
-  --ink-3: #6c7b8e;                         /* 3.6:1  — labels, never body */
+  --ink-1: #e9edf3;                         /* body and headings */
+  --ink-2: #b0bdcd;                         /* secondary prose */
+  --ink-3: #8494a8;                         /* labels, never body */
 
   /* ── EDGES ─────────────────────────────────────────────────────────
-     Hairlines, not borders: the instrument look comes from thin rules. */
-  --edge-hair: rgba(163, 184, 205, 0.16);
-  --edge-line: rgba(163, 184, 205, 0.28);
-  --edge-accent: rgba(116, 214, 232, 0.55);
+     Hairlines, not borders — but bright enough to silhouette instruments
+     against dark terrain. The old 0.16/0.28 pair read as "part of the sky". */
+  --edge-hair: rgba(163, 184, 205, 0.32);
+  --edge-line: rgba(163, 184, 205, 0.48);
+  --edge-accent: rgba(116, 214, 232, 0.72);
 
   /* ── ACCENT ────────────────────────────────────────────────────────
      Three accents, each with one meaning. Cyan is interactive: controls,
@@ -72,9 +75,9 @@
      a portal. */
   --accent: #74d6e8;                        /* 9.3:1 worst case */
   --accent-ink: #cff2fa;                    /* text on an accent fill */
-  --accent-wash: rgba(116, 214, 232, 0.14);
-  --trail: #e0b878;                         /* 8.4:1 worst case */
-  --trail-wash: rgba(224, 184, 120, 0.14);
+  --accent-wash: rgba(116, 214, 232, 0.2);
+  --trail: #e0b878;                         /* history and breadcrumb text */
+  --trail-wash: rgba(224, 184, 120, 0.2);
   --sea: #98b4e6;                           /* pageviews / fish */
   --sea-wash: rgba(152, 180, 230, 0.16);
 
@@ -90,7 +93,7 @@
   --sea-rgb: 152, 180, 230;
   --ink-1-rgb: 233, 237, 243;
   --edge-rgb: 163, 184, 205;
-  --surface-1-rgb: 10, 13, 20;
+  --surface-1-rgb: 18, 23, 34;
 
   /* ── TYPE ──────────────────────────────────────────────────────────
      Two faces. Space Grotesk carries display and body alike; IBM Plex
@@ -159,6 +162,8 @@
   --z-stage-portal: 6;
   --z-instruments: 10;
   --z-sheets: 100;
+  /* Phone helm rides above the Ledger sheet lip while reading. */
+  --z-instruments-raised: 110;
   --z-overlays: 200;
   --z-toast: 300;
 }
@@ -174,13 +179,13 @@
  */
 :root[data-chrome='solid'] {
   --surface-1: var(--surface-1-solid);
-  --surface-2: #10141c;
+  --surface-2: #161c28;
 }
 
 :root[data-chrome='minimal'] {
   --shadow-panel: none;
   --shadow-float: none;
-  --edge-hair: rgba(163, 184, 205, 0.1);
+  --edge-hair: rgba(163, 184, 205, 0.22);
 }
 
 /* Coarse pointers need a larger target than a mouse does. */

@@ -94,9 +94,16 @@ function pathFor(link) {
       </div>
     </template>
 
-    <p v-if="layout.nodes.length === 0" class="trail__empty">Nowhere yet.</p>
+    <p v-if="layout.nodes.length === 0" class="trail__empty">
+      Nowhere yet. Travel through a portal and this map will keep the path —
+      you can revisit any stop or share the trail as a postcard.
+    </p>
 
     <template v-else>
+      <p class="trail__lede">
+        Your path through Wikipedia is kept here. Jump to any stop, or share
+        the trail when you want someone else to start from where you are.
+      </p>
       <div class="trail__map">
         <!-- Hidden from assistive technology on purpose: the list below is
              the same map in a form a screen reader and a keyboard can walk,
@@ -198,7 +205,7 @@ function pathFor(link) {
         </button>
         <button type="button" :disabled="!canShare" @click="$emit('share')">
           <Icon name="share" :size="15" />
-          <span>Postcard</span>
+          <span>Share trail</span>
         </button>
         <button type="button" :disabled="!canClear" @click="$emit('clear')">
           <Icon name="renew" :size="15" />
@@ -240,15 +247,23 @@ function pathFor(link) {
 
 .trail__empty {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.trail__lede {
+  margin: 0 0 var(--spacing-md);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 .trail__map {
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
   overflow: auto;
-  border-bottom: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-line);
 }
 
 .trail__links path {
@@ -328,9 +343,9 @@ function pathFor(link) {
   flex-wrap: wrap;
   gap: var(--spacing-md);
   margin: 0 0 var(--spacing-sm);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -376,7 +391,7 @@ function pathFor(link) {
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
-  min-height: 34px;
+  min-height: var(--hit);
   padding: 0 var(--spacing-sm);
   border: none;
   border-radius: var(--radius-md);
@@ -476,13 +491,13 @@ function pathFor(link) {
   gap: 4px;
   min-height: var(--hit);
   padding: var(--spacing-sm) var(--spacing-xs);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   cursor: pointer;

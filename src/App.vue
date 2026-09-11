@@ -10,6 +10,7 @@ import Icon from './ui/design/Icon.vue'
 import TopScrim from './ui/components/TopScrim.vue'
 import Helm from './ui/components/Helm.vue'
 import TrailMenu from './ui/components/TrailMenu.vue'
+import ShareMenu from './ui/components/ShareMenu.vue'
 import TrailPostcard from './ui/components/TrailPostcard.vue'
 import ToolsMenu from './ui/components/ToolsMenu.vue'
 import Ledger from './ui/components/Ledger.vue'
@@ -73,6 +74,7 @@ const worldViewRef = ref(null)
 const showHudHidden = ref(false)
 const isSearchOpen = ref(false)
 const showTrail = ref(false)
+const showShareMenu = ref(false)
 const showTrailPostcard = ref(false)
 const showTools = ref(false)
 const showLaunch = ref(false)
@@ -174,9 +176,9 @@ const ledgerState = computed(
 
 /**
  * On a phone the Ledger's sheet and the helm share the bottom of the
- * screen, so the helm rises to clear it — and once the sheet is past peek
- * there is nowhere left to rise to, so the helm stands down rather than
- * perching on top of a panel the viewer is reading.
+ * screen, so the helm rises to clear it at every ledger depth — including
+ * open/full, where Planet / Flat / Legend stay as a compact strip above
+ * the sheet instead of disappearing while someone is reading.
  *
  * Neither applies elsewhere: on a desktop the Ledger is docked bottom-LEFT
  * and the helm is bottom-right, and on a landscape phone the Ledger is a
@@ -188,9 +190,7 @@ const helmLift = computed(() =>
   ledgerSharesTheCorner.value ? ledgerClearance(ledgerState.value) : '0px',
 )
 
-const helmVisible = computed(
-  () => !ledgerSharesTheCorner.value || clearsLedger(ledgerState.value),
-)
+const helmVisible = computed(() => clearsLedger(ledgerState.value))
 
 function setLedgerState(state) {
   updatePreferences({ ledgerState: state })
@@ -267,7 +267,32 @@ function toggleLegend() {
   }
   legendAnchors.value = worldViewRef.value?.legendAnchors?.() ?? {}
   showLegend.value = true
+  if (!preferences.legendHintSeen) {
+    updatePreferences({ legendHintSeen: true })
+  }
 }
+
+function dismissLegendHint() {
+  updatePreferences({ legendHintSeen: true })
+}
+
+function dismissPeekHint() {
+  updatePreferences({ ledgerPeekHintSeen: true })
+}
+
+const showLegendHint = computed(
+  () => Boolean(world.value) && preferences.legendHintSeen !== true,
+)
+
+const showPeekHint = computed(
+  () =>
+    Boolean(world.value) &&
+    preferences.legendHintSeen === true &&
+    preferences.ledgerPeekHintSeen !== true &&
+    !viewport.atLeast('md') &&
+    !viewport.isShort.value &&
+    ledgerState.value === 'peek',
+)
 
 /**
  * The menu is a way to the tools, not a place to be: choosing one closes
@@ -290,9 +315,20 @@ function onTrailSelect(nodeId) {
 }
 
 function onShareClick() {
+  showShareMenu.value = true
+}
+
+function onShareRealm() {
+  showShareMenu.value = false
   if (article.value?.title) {
     shareArticle(article.value.title)
   }
+}
+
+function onShareTrail() {
+  showShareMenu.value = false
+  showTrail.value = false
+  showTrailPostcard.value = true
 }
 
 function onTrailPostcard() {
@@ -505,9 +541,11 @@ watch([graph, articleCache], () => {
       :world-shape="preferences.worldShape"
       :disabled="worldStatus !== 'success'"
       :can-recenter="rendersInWebGL"
+      :show-hint="showLegendHint"
       @update:world-shape="setWorldShape"
       @recenter="recenterView"
       @legend="toggleLegend"
+      @dismiss-hint="dismissLegendHint"
     />
 
 
@@ -534,10 +572,12 @@ watch([graph, articleCache], () => {
       :state="ledgerState"
       :stale="isStale"
       :selected-peak="selectedPeak"
+      :show-peek-hint="showPeekHint"
       @update:state="setLedgerState"
       @select="selectedPeak = $event"
       @share="onShareClick"
       @legend="toggleLegend"
+      @dismiss-peek-hint="dismissPeekHint"
     />
 
     <PortalPreview
@@ -577,9 +617,11 @@ watch([graph, articleCache], () => {
 
     <ToolsMenu
       :show="showTools"
+      :can-share="Boolean(article)"
       @search="fromTools(() => (isSearchOpen = true))"
       @guide="fromTools(() => (showInfoHub = true))"
       @settings="fromTools(() => (showSettings = true))"
+      @share="fromTools(() => (showShareMenu = true))"
       @close="showTools = false"
     />
 
@@ -594,6 +636,16 @@ watch([graph, articleCache], () => {
       @export="onExportClick"
       @import="onImportFile"
       @close="showTrail = false"
+    />
+
+    <ShareMenu
+      :show="showShareMenu"
+      :realm-title="article?.title ?? ''"
+      :can-share-trail="Boolean(article)"
+      :trail-length="trailSize"
+      @share-realm="onShareRealm"
+      @share-trail="onShareTrail"
+      @close="showShareMenu = false"
     />
 
     <TrailPostcard
@@ -697,11 +749,12 @@ watch([graph, articleCache], () => {
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: var(--surface-1);
-  color: var(--ink-3);
-  opacity: 0.5;
+  box-shadow: var(--shadow-float);
+  color: var(--ink-1);
+  opacity: 0.85;
 }
 
 .app__reveal:hover {
@@ -791,10 +844,10 @@ watch([graph, articleCache], () => {
 .hud {
   position: absolute;
   background: var(--surface-1);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-panel);
   padding: var(--spacing-lg) var(--spacing-xl);
   z-index: var(--z-stage-notice);
   transition: opacity var(--dur-2) ease-out;
@@ -833,15 +886,16 @@ watch([graph, articleCache], () => {
   position: fixed;
   z-index: var(--z-toast);
   left: 50%;
-  bottom: 1.5rem;
+  bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
   margin: 0;
   padding: 0.7rem 1rem;
   transform: translateX(-50%);
-  border: 1px solid rgba(127, 223, 255, 0.5);
-  border-radius: 6px;
-  background: rgba(18, 22, 40, 0.95);
-  box-shadow: 0 0 14px rgba(127, 223, 255, 0.25);
+  border: 1px solid var(--edge-accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-float), 0 0 14px rgba(var(--accent-rgb), 0.22);
   color: var(--ink-1);
+  backdrop-filter: blur(14px);
 }
 
 .toast-enter-active,

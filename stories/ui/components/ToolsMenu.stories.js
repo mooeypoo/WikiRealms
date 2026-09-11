@@ -12,4 +12,8 @@ export default {
   parameters: { layout: 'fullscreen' },
 }
 
-export const Open = { render: () => ({ setup: () => () => h(ToolsMenu, { show: true }) }) }
+export const Open = {
+  render: () => ({
+    setup: () => () => h(ToolsMenu, { show: true, canShare: true }),
+  }),
+}

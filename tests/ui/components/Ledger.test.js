@@ -192,30 +192,27 @@ describe('Ledger', () => {
 
     it('keeps the legend at peek, and holds back the rest of the actions', () => {
       // Peek is where you are and four readouts — Wikipedia / Share wait
-      // for open. The legend stays: it answers what the world means, which
-      // is the question peek is for. Compact sizing keeps it under the
-      // stats instead of across a hollow gap.
+      // for open. The legend stays as a quiet backup to the Helm control.
       mountLedger({ state: 'peek' })
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).toContain('Legend')
       expect(footer.textContent).not.toContain('View on Wikipedia')
       expect(footer.textContent).not.toContain('Share')
       expect(document.querySelector('.sheet--compact')).not.toBeNull()
     })
 
-    it('offers Wikipedia and Share from open onwards, under the legend', () => {
+    it('offers Wikipedia and Share from open onwards; Legend stays on Helm', () => {
       mountLedger({ state: 'open' })
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).not.toContain('Legend')
       expect(footer.textContent).toContain('View on Wikipedia')
       expect(footer.textContent).toContain('Share')
-      const legend = footer.querySelector('.ledger__legend')
-      const actions = footer.querySelector('.ledger__footer-actions')
-      expect(legend.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+      expect(footer.querySelector('.ledger__legend')).toBeNull()
+      expect(footer.querySelector('.ledger__footer-actions')).not.toBeNull()
     })
 
     it('keeps the legend on the collapsed bar', () => {
@@ -223,7 +220,7 @@ describe('Ledger', () => {
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).toContain('Legend')
       expect(footer.textContent).not.toContain('Share')
     })
 
@@ -237,11 +234,15 @@ describe('Ledger', () => {
     it('steps one state at a time rather than jumping to an extreme', async () => {
       const wrapper = mountLedger({ state: 'open' })
 
-      document.querySelector('[aria-label="Show less of this panel"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      document
+        .querySelector('[aria-label="Show less — peek at this place"]')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await wrapper.vm.$nextTick()
       expect(wrapper.emitted('update:state')?.at(-1)).toEqual(['peek'])
 
-      document.querySelector('[aria-label="Show more of this panel"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      document
+        .querySelector('[aria-label="Show more — expand this panel"]')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await wrapper.vm.$nextTick()
       expect(wrapper.emitted('update:state')?.at(-1)).toEqual(['full'])
     })
@@ -250,10 +251,10 @@ describe('Ledger', () => {
       const wrapper = mountLedger({ state: 'collapsed' })
 
       // Collapsed renders only the bar, so "show less" is not even offered.
-      expect(document.querySelector('[aria-label="Show less of this panel"]')).toBeNull()
+      expect(document.querySelector('[aria-label^="Show less"]')).toBeNull()
 
       const atFull = mountLedger({ state: 'full' })
-      expect(document.querySelector('[aria-label="Show more of this panel"]')).toBeNull()
+      expect(document.querySelector('[aria-label^="Show more"]')).toBeNull()
 
       wrapper.unmount()
       atFull.unmount()
@@ -262,7 +263,9 @@ describe('Ledger', () => {
     it('does not emit when asked for the state it is already in', async () => {
       const wrapper = mountLedger({ state: 'full' })
 
-      document.querySelector('[aria-label="Show less of this panel"]').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      document
+        .querySelector('[aria-label="Show less — open view"]')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await wrapper.vm.$nextTick()
 
       expect(wrapper.emitted('update:state')).toEqual([['open']])
@@ -729,12 +732,11 @@ describe('Ledger', () => {
   })
 
   it('asks its owner to open the legend rather than knowing how', async () => {
-    // Same surface as the Helm control: the Ledger is where people read
-    // the numbers, so it needs its own way into "what does this mean".
-    const wrapper = mountLedger()
+    // Quiet backup while peeking: Helm owns Legend once the panel is open.
+    const wrapper = mountLedger({ state: 'peek' })
 
     ;[...document.querySelectorAll('button')]
-      .find((button) => button.textContent.includes('What am I looking at?'))
+      .find((button) => button.textContent.includes('Legend'))
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await wrapper.vm.$nextTick()
 

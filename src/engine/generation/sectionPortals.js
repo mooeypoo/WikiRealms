@@ -51,7 +51,7 @@ function flattenLinkedSections(nodes, topLevelTitle) {
 }
 
 /**
- * Round-robins (section, link) pairs so the maxPortals cap can't starve
+ * Round-robins (section, link) pairs so the portal budget can't starve
  * whole sections. In document order, a link-heavy opening section eats
  * the entire budget and everything after it gets no portal at all;
  * taking one link per section per pass means every linked section places
@@ -73,6 +73,33 @@ function interleaveBySection(pairs) {
     }
   }
   return interleaved
+}
+
+/**
+ * Apply the hybrid portal budget: per top-level range (or lead), then the
+ * world-wide ceiling. Walks an interleaved list so fairness and caps compose.
+ *
+ * @param {{ sectionKey: string, topLevelTitle: string|null }[]} pairs
+ */
+export function selectPortals(pairs) {
+  const selected = []
+  const perArea = new Map()
+
+  for (const pair of interleaveBySection(pairs)) {
+    if (selected.length >= PORTAL_LIMITS.maxPortals) break
+
+    const areaKey = pair.topLevelTitle ?? 'lead'
+    const areaLimit = pair.topLevelTitle == null
+      ? PORTAL_LIMITS.maxLeadPortals
+      : PORTAL_LIMITS.maxPerTopLevelSection
+    const used = perArea.get(areaKey) ?? 0
+    if (used >= areaLimit) continue
+
+    perArea.set(areaKey, used + 1)
+    selected.push(pair)
+  }
+
+  return selected
 }
 
 /**
@@ -189,7 +216,7 @@ export function generateSectionPortals({ lead, sections }, peaks, rng, { width, 
     }
   }
 
-  const selected = interleaveBySection(pairs).slice(0, PORTAL_LIMITS.maxPortals)
+  const selected = selectPortals(pairs)
 
   // Group by the region each portal resolves to BEFORE placing any of
   // them: sunflower spacing needs to know how many portals share a

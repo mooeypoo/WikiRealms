@@ -69,6 +69,16 @@ describe('Helm', () => {
     expect(wrapper.emitted('legend')).toHaveLength(1)
   })
 
+  it('can nudge a first-time viewer toward the legend', async () => {
+    const wrapper = mountHelm({ showHint: true })
+
+    expect(wrapper.find('.helm__hint').text()).toContain('Open Legend')
+    expect(wrapper.find('.helm__legend--hint').exists()).toBe(true)
+
+    await wrapper.find('[aria-label="Dismiss hint"]').trigger('click')
+    expect(wrapper.emitted('dismiss-hint')).toHaveLength(1)
+  })
+
   it('hides recentring where there is no camera to recentre', () => {
     // The 2D fallback draws a fixed chart. A button that does nothing is
     // worse than no button, and the old UI was full of them.

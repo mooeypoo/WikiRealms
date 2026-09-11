@@ -427,24 +427,25 @@ function truncate(title, max = 36) {
 
 .postcard__actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: var(--spacing-xs);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm);
 }
 
 .postcard__actions button {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: var(--spacing-sm);
   min-height: var(--hit);
-  padding: var(--spacing-sm) var(--spacing-xs);
-  border: 1px solid var(--edge-hair);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   cursor: pointer;
@@ -458,5 +459,17 @@ function truncate(title, max = 36) {
 .postcard__actions button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+@media (min-width: 480px) {
+  .postcard__actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .postcard__actions button {
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--spacing-sm) var(--spacing-xs);
+  }
 }
 </style>

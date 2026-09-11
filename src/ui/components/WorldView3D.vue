@@ -2033,14 +2033,14 @@ function legendAnchors() {
   if (range) {
     const point = screenPositionOf(range.userData.summitLocal)
     const peak = props.world?.terrain?.peaks?.[range.userData.peakIndex]
-    if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
+    if (point) anchors.range = { ...point, name: peak?.title || undefined }
   }
 
   const portal = portalTargets().find((marker) => marker.visible && !isOccluded(marker.position))
   if (portal) {
     const point = screenPositionOf(portal.position)
     const title = portal.userData.portal?.targetTitle
-    if (point) anchors.portal = { ...point, label: title ? `A portal to ${title}` : undefined }
+    if (point) anchors.portal = { ...point, name: title || undefined }
   }
 
   return anchors
@@ -2117,19 +2117,20 @@ watch(
   z-index: var(--z-stage-portal);
   transform: translate(-50%, calc(-100% - 12px));
   background: var(--surface-1-solid);
-  border: 1px solid var(--edge-hair);
-  border-radius: 6px;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.8rem;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.65rem;
+  font-size: var(--text-sm);
   color: var(--ink-1);
   pointer-events: none;
   white-space: nowrap;
+  box-shadow: var(--shadow-float);
 }
 
 /* Pageviews / fish — sea accent, so this popup is not the same cyan as
    portals and section titles. */
 .world-view-3d__tooltip--creature {
-  border-color: rgba(var(--sea-rgb), 0.45);
+  border-color: rgba(var(--sea-rgb), 0.55);
   background: color-mix(in srgb, var(--surface-1-solid) 88%, var(--sea) 12%);
   box-shadow: 0 0 0 1px var(--sea-wash);
 }
@@ -2145,7 +2146,7 @@ watch(
 
 .world-view-3d__tooltip span {
   margin-top: 0.1rem;
-  color: var(--ink-3);
-  font-size: 0.72rem;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
 }
 </style>

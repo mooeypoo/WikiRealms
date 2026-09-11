@@ -202,7 +202,7 @@ describe('the journey actions', () => {
     const actions = document.querySelector('.trail__actions')
 
     expect(actions).not.toBeNull()
-    for (const label of ['Somewhere new', 'Postcard', 'Clear trail', 'Save', 'Load']) {
+    for (const label of ['Somewhere new', 'Share trail', 'Clear trail', 'Save', 'Load']) {
       expect(actions.textContent).toContain(label)
     }
   })
@@ -215,7 +215,7 @@ describe('the journey actions', () => {
         .dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     click('Somewhere new')
-    click('Postcard')
+    click('Share trail')
     click('Clear trail')
     click('Save')
     await wrapper.vm.$nextTick()
@@ -232,7 +232,7 @@ describe('the journey actions', () => {
     mount(TrailMenu, { props: { show: true, graph: createVisitGraph(), canShare: false }, attachTo: document.body })
 
     const share = [...document.querySelectorAll('.trail__actions button')].find((button) =>
-      button.textContent.includes('Postcard'),
+      button.textContent.includes('Share trail'),
     )
     expect(share.disabled).toBe(true)
     expect(document.querySelector('.trail__actions').textContent).toContain('Load')

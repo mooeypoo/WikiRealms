@@ -17,7 +17,7 @@ import { useKeymap } from '../design/useKeymap.js'
  */
 defineProps({
   show: Boolean,
-  currentTab: { type: String, default: 'what-is-this' },
+  currentTab: { type: String, default: 'start-here' },
 })
 
 defineEmits(['update:currentTab', 'close'])
@@ -115,10 +115,10 @@ const { shortcuts } = useKeymap()
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
 }
 
 .guide__close:hover {
@@ -130,7 +130,7 @@ const { shortcuts } = useKeymap()
   display: flex;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-md);
-  border-bottom: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-line);
   overflow-x: auto;
 }
 
@@ -143,7 +143,7 @@ const { shortcuts } = useKeymap()
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -167,9 +167,9 @@ const { shortcuts } = useKeymap()
 }
 
 .guide__keys dt {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -286,11 +286,77 @@ const { shortcuts } = useKeymap()
 
 .guide__prose :deep(.info-hub__feature) {
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   color: var(--ink-2);
   font-size: var(--text-sm);
   line-height: 1.55;
+}
+
+.guide__prose :deep(.info-hub__bullets) {
+  display: grid;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-md);
+  padding-left: 1.15em;
+}
+
+.guide__prose :deep(.info-hub__bullets li) {
+  line-height: 1.5;
+}
+
+.guide__prose :deep(.info-hub__callout) {
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-left: 2px solid var(--edge-accent);
+  background: var(--accent-wash);
+  color: var(--ink-1);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.guide__prose :deep(.info-hub__details) {
+  margin: 0 0 var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
+}
+
+.guide__prose :deep(.info-hub__details summary) {
+  cursor: pointer;
+  color: var(--ink-1);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  list-style: none;
+}
+
+.guide__prose :deep(.info-hub__details summary::-webkit-details-marker) {
+  display: none;
+}
+
+.guide__prose :deep(.info-hub__details[open] summary) {
+  margin-bottom: var(--spacing-sm);
+  color: var(--accent);
+}
+
+.guide__prose :deep(.info-hub__details ol) {
+  margin-bottom: 0;
+}
+
+.guide__prose :deep(.info-hub__links) {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin: 0 0 var(--spacing-md);
+  padding: 0;
+  list-style: none;
+}
+
+.guide__prose :deep(.info-hub__links a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.guide__prose :deep(.info-hub__links a:hover) {
+  text-decoration: underline;
 }
 
 .guide__prose :deep(.info-hub__shortcuts) {

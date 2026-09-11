@@ -10,8 +10,9 @@ import Sheet from '../design/Sheet.vue'
  * are the smallest things anyone has to hit. So below md they collapse to
  * one control, and open here with room for a label beside each icon.
  *
- * Journey is not among them: those actions live on the trail panel, which
- * is the journey, and the trail chevron is on the bar at every width.
+ * Share joins them on phone so realm/trail sharing is not only behind a
+ * Ledger footer that peek may not show. Journey end-of-session actions
+ * (clear / save / load) still live on the trail panel.
  *
  * This is NOT the floating panel the old shell had. That one duplicated a
  * taskbar that was still on screen, in a different visual language, so the
@@ -21,12 +22,21 @@ import Sheet from '../design/Sheet.vue'
  */
 defineProps({
   show: Boolean,
+  /** Share needs a realm underfoot. */
+  canShare: { type: Boolean, default: false },
 })
 
-defineEmits(['search', 'guide', 'settings', 'close'])
+defineEmits(['search', 'guide', 'settings', 'share', 'close'])
 
 const TOOLS = [
   { event: 'search', icon: 'search', label: 'Search realms', hint: 'Leave for a different world' },
+  {
+    event: 'share',
+    icon: 'share',
+    label: 'Share',
+    hint: 'This realm, or the trail you walked',
+    needsShare: true,
+  },
   { event: 'guide', icon: 'guide', label: 'About WikiRealms', hint: 'What this is and how it works' },
   { event: 'settings', icon: 'settings', label: 'Settings', hint: 'Layers, rendering, motion' },
 ]
@@ -40,11 +50,21 @@ const TOOLS = [
 
     <ul class="tools__list">
       <li v-for="tool in TOOLS" :key="tool.event">
-        <button type="button" @click="$emit(tool.event)">
+        <button
+          type="button"
+          :disabled="tool.needsShare && !canShare"
+          @click="$emit(tool.event)"
+        >
           <Icon :name="tool.icon" :size="18" />
           <span>
             <strong>{{ tool.label }}</strong>
-            <small>{{ tool.hint }}</small>
+            <small>
+              {{
+                tool.needsShare && !canShare
+                  ? 'Open a realm first'
+                  : tool.hint
+              }}
+            </small>
           </span>
         </button>
       </li>
@@ -73,7 +93,7 @@ const TOOLS = [
   width: 100%;
   min-height: var(--hit);
   padding: var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
@@ -81,9 +101,14 @@ const TOOLS = [
   text-align: left;
 }
 
-.tools__list button:hover {
+.tools__list button:hover:not(:disabled) {
   border-color: var(--edge-accent);
   color: var(--accent);
+}
+
+.tools__list button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .tools__list span {

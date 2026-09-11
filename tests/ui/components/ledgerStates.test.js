@@ -19,15 +19,15 @@ describe('ledger states', () => {
     expect(ledgerClearance('peek')).toBe(`${LEDGER_PEEK_HEIGHT}px`)
   })
 
-  it('stops offering room once the sheet is most of the screen', () => {
-    // Perching a control on top of a panel someone is reading is worse
-    // than standing it down until they are done.
+  it('keeps lifting through open and full so Legend stays reachable', () => {
+    // Hiding the helm while reading erased Planet / Flat / Legend on phones.
+    // Clearance matches the snap fractions so the strip sits above the sheet.
     expect(clearsLedger('collapsed')).toBe(true)
     expect(clearsLedger('peek')).toBe(true)
-    expect(clearsLedger('open')).toBe(false)
-    expect(clearsLedger('full')).toBe(false)
+    expect(clearsLedger('open')).toBe(true)
+    expect(clearsLedger('full')).toBe(true)
 
-    expect(ledgerClearance('open')).toBe('0px')
-    expect(ledgerClearance('full')).toBe('0px')
+    expect(ledgerClearance('open')).toBe('42dvh')
+    expect(ledgerClearance('full')).toBe('88dvh')
   })
 })

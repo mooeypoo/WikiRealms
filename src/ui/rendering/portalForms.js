@@ -28,7 +28,7 @@
  * resolves a raycast hit by walking up to the nearest ancestor that has
  * it. That works for one Object3D per portal and would not for a single
  * InstancedMesh, where a hit reports an `instanceId` instead. At the
- * portal cap (24) separate meshes are cheap enough that we do not
+ * portal cap (see PORTAL_LIMITS.maxPortals) separate meshes are cheap enough that we do not
  * instance yet.
  */
 import * as THREE from 'three'

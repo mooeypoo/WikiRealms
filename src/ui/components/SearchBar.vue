@@ -121,10 +121,11 @@ defineExpose({ focus: () => field.value?.focus() })
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  min-height: var(--hit);
   padding: 0 var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
-  background: rgba(var(--edge-rgb), 0.06);
+  background: rgba(var(--edge-rgb), 0.08);
 }
 
 .search-bar__field:focus-within {
@@ -133,7 +134,7 @@ defineExpose({ focus: () => field.value?.focus() })
 }
 
 .search-bar__icon {
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .search-bar input {
@@ -162,7 +163,7 @@ defineExpose({ focus: () => field.value?.focus() })
   align-items: center;
   gap: var(--spacing-sm);
   margin: var(--spacing-sm) 0 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-sm);
 }
 
@@ -184,6 +185,7 @@ defineExpose({ focus: () => field.value?.focus() })
   display: grid;
   gap: 2px;
   width: 100%;
+  min-height: var(--hit);
   padding: var(--spacing-sm) var(--spacing-md);
   border: none;
   border-left: 2px solid transparent;
@@ -205,7 +207,7 @@ defineExpose({ focus: () => field.value?.focus() })
 }
 
 .search-bar__results span {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-xs);
   line-height: 1.4;
 }

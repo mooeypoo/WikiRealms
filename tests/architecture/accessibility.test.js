@@ -116,8 +116,8 @@ describe('accessibility', () => {
   })
 
   it('gives every summonable surface a visible way in', async () => {
-    // The trail is included because the journey actions moved onto it: it
-    // is now the only route to Share.
+    // Share is reachable from the Ledger, Tools (phone), and the trail
+    // panel — not a single buried door.
     // The rule from §4.2, tested. The legend shipped reachable only by `L`,
     // which is how it went unfound — and it was the second control to do
     // that, after the Ledger's collapse-to-nothing.
@@ -185,12 +185,14 @@ describe('the phone bottom-right', () => {
     expect(helm.attributes('style')).not.toContain('--helm-lift: 0px')
   })
 
-  it('stands the helm down once the sheet is most of the screen', async () => {
+  it('keeps the helm above an open sheet so Legend stays reachable', async () => {
     phone()
     localStorage.setItem('wikirealms:preferences', JSON.stringify({ ledgerState: 'full' }))
     const wrapper = await inAWorld()
 
-    expect(wrapper.find('.helm').exists()).toBe(false)
+    const helm = wrapper.find('.helm')
+    expect(helm.exists()).toBe(true)
+    expect(helm.attributes('style')).toContain('--helm-lift: 88dvh')
   })
 
   it('never lifts on a desktop, where they are on opposite sides', async () => {
@@ -215,9 +217,9 @@ describe('the phone top bar', () => {
     const menu = document.querySelector('.tools__list')
 
     expect(menu).not.toBeNull()
-    // Journey is not among them: those actions live on the trail panel,
-    // whose chevron is on the bar at every width.
-    for (const label of ['Search realms', 'About WikiRealms', 'Settings']) {
+    // Share joins the overflow on phone; journey end-of-session actions
+    // stay on the trail panel.
+    for (const label of ['Search realms', 'Share', 'About WikiRealms', 'Settings']) {
       expect(menu.textContent).toContain(label)
     }
     expect(menu.textContent).not.toContain('Journey')

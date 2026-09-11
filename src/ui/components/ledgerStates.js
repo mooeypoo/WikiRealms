@@ -26,8 +26,9 @@ export const LEDGER_PEEK_HEIGHT = 240
 /**
  * How far something in the bottom-right must rise to clear the sheet.
  *
- * Above `peek` there is nowhere useful to rise to — the sheet is most of
- * the screen — so the caller hides instead, which `clearsLedger` decides.
+ * Open and full match the snap fractions so Planet / Flat / Legend stay
+ * reachable while reading — a compact strip above the sheet — rather than
+ * vanishing the moment the ledger opens.
  *
  * @param {'collapsed'|'peek'|'open'|'full'} state
  * @returns {string} a CSS length
@@ -35,10 +36,15 @@ export const LEDGER_PEEK_HEIGHT = 240
 export function ledgerClearance(state) {
   if (state === 'collapsed') return `${LEDGER_COLLAPSED_HEIGHT}px`
   if (state === 'peek') return `${LEDGER_PEEK_HEIGHT}px`
+  if (state === 'open') return `${Math.round(LEDGER_SNAP_POINTS[1] * 100)}dvh`
+  if (state === 'full') return `${Math.round(LEDGER_SNAP_POINTS[2] * 100)}dvh`
   return '0px'
 }
 
-/** Whether a bottom-right control can still find room beside the sheet. */
-export function clearsLedger(state) {
-  return state === 'collapsed' || state === 'peek'
+/**
+ * Whether a bottom-right control can still find room beside the sheet.
+ * Always true now: clearance lifts the helm at every ledger depth.
+ */
+export function clearsLedger(_state) {
+  return true
 }
