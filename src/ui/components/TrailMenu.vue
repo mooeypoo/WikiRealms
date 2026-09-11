@@ -94,9 +94,16 @@ function pathFor(link) {
       </div>
     </template>
 
-    <p v-if="layout.nodes.length === 0" class="trail__empty">Nowhere yet.</p>
+    <p v-if="layout.nodes.length === 0" class="trail__empty">
+      Nowhere yet. Travel through a portal and this map will keep the path —
+      you can revisit any stop or share the trail as a postcard.
+    </p>
 
     <template v-else>
+      <p class="trail__lede">
+        Your path through Wikipedia is kept here. Jump to any stop, or share
+        the trail when you want someone else to start from where you are.
+      </p>
       <div class="trail__map">
         <!-- Hidden from assistive technology on purpose: the list below is
              the same map in a form a screen reader and a keyboard can walk,
@@ -240,15 +247,23 @@ function pathFor(link) {
 
 .trail__empty {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.trail__lede {
+  margin: 0 0 var(--spacing-md);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
 }
 
 .trail__map {
   margin-bottom: var(--spacing-md);
   padding-bottom: var(--spacing-sm);
   overflow: auto;
-  border-bottom: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-line);
 }
 
 .trail__links path {
@@ -328,9 +343,9 @@ function pathFor(link) {
   flex-wrap: wrap;
   gap: var(--spacing-md);
   margin: 0 0 var(--spacing-sm);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }

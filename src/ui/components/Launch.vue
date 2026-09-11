@@ -166,7 +166,7 @@ function choose(title) {
   width: var(--hit);
   height: var(--hit);
   margin-left: auto;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-2);
@@ -221,7 +221,7 @@ function choose(title) {
   width: 100%;
   min-height: var(--hit);
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink-1);

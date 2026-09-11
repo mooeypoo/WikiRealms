@@ -143,9 +143,9 @@ const style = computed(() =>
 
 .preview__label {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -169,7 +169,7 @@ const style = computed(() =>
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 36px;
+  min-height: var(--hit);
   padding: 0 var(--spacing-md);
   border-radius: var(--radius-md);
   font: inherit;

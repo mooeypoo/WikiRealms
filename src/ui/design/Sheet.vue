@@ -550,7 +550,7 @@ function onScrimDismiss() {
 .sheet__footer {
   flex: none;
   padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
-  border-top: 1px solid var(--edge-hair);
+  border-top: 1px solid var(--edge-line);
 }
 
 .sheet__footer--collapsed {
