@@ -10,7 +10,7 @@
  * not world math. Rendering modules must not import this file.
  */
 import { BIOME } from '../../engine/generation/terrain.js'
-import { t } from '../i18n/banana.js'
+import { t, tBdiHtml } from '../i18n/banana.js'
 import { LUSHNESS_BAND_COPY } from './lushnessBands.js'
 
 /** Master switches and thresholds. Edit here to retune without UI prefs. */
@@ -288,11 +288,11 @@ export const WIKIPEDIA_CTAS = Object.freeze([
       return (ctx.portalHops ?? 0) >= min
     },
     prose: () =>
-      `<p class="trail-cta__lead">${t('wikirealms-cta-trail-lead')}</p>
+      `<p class="trail-cta__lead">${tBdiHtml('wikirealms-cta-trail-lead')}</p>
       <p class="trail-cta__actions">
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${t('wikirealms-cta-become-editor')}</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-become-editor')}</a>
         <span class="trail-cta__sep" aria-hidden="true">·</span>
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${t('wikirealms-cta-donate')}</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-donate')}</a>
       </p>`.trim(),
   }),
 
@@ -303,11 +303,11 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     priority: 40,
     match: () => true,
     prose: () =>
-      `<p class="guide-cta__lead">${t('wikirealms-cta-guide-lead')}</p>
+      `<p class="guide-cta__lead">${tBdiHtml('wikirealms-cta-guide-lead')}</p>
       <p class="guide-cta__actions">
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${t('wikirealms-cta-become-editor')}</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-become-editor')}</a>
         <span class="guide-cta__sep" aria-hidden="true">·</span>
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${t('wikirealms-cta-donate')}</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-donate')}</a>
       </p>`.trim(),
   }),
 ])

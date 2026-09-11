@@ -30,7 +30,7 @@ describe('Launch', () => {
     const firstTitle = chips[0]
       .find('strong')
       .text()
-      .replace(/^\s*EN\s+/, '')
+      .replace(/^\s*EN\s*/, '')
       .trim()
 
     expect(chips).toHaveLength(SUGGESTION_COUNT)

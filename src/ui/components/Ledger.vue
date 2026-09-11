@@ -471,10 +471,10 @@ watch(
       <button class="ledger__restore" type="button" @click="setState('peek')">
         <span class="ledger__restore-title">
           <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
-          {{ article.title }}
+          <bdi>{{ article.title }}</bdi>
         </span>
         <span class="ledger__restore-stats tabular">
-          {{ t('wikirealms-ledger-restore-stats', stats[0].value, stats[2].value) }}
+          <bdi>{{ t('wikirealms-ledger-restore-stats', stats[0].value, stats[2].value) }}</bdi>
         </span>
         <Icon name="chevron-up" :size="16" />
       </button>
@@ -485,7 +485,7 @@ watch(
         <div class="ledger__identity">
           <h2 class="ledger__title">
             <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
-            {{ article.title }}
+            <bdi>{{ article.title }}</bdi>
           </h2>
           <p class="ledger__origin tabular">
             {{ (article.language || 'en').toUpperCase() }}.WIKIPEDIA · REV {{ article.latestRevisionId }}
@@ -512,7 +512,7 @@ watch(
       </div>
 
       <p v-if="showPeekHint" class="ledger__peek-hint" role="status">
-        <span>{{ t('wikirealms-ledger-peek-hint') }}</span>
+        <span><bdi>{{ t('wikirealms-ledger-peek-hint') }}</bdi></span>
         <button
           type="button"
           class="ledger__peek-hint-dismiss"
@@ -526,7 +526,7 @@ watch(
       <p v-if="stale" class="ledger__stale">
         <Icon name="alert" :size="14" />
         <span class="ledger__stale-copy">
-          {{ t('wikirealms-ledger-stale') }}
+          <bdi>{{ t('wikirealms-ledger-stale') }}</bdi>
           <WikipediaCtaLink
             v-if="headerCta?.href && headerCta?.label"
             class="ledger__stale-cta"
@@ -538,7 +538,7 @@ watch(
 
       <dl class="ledger__stats">
         <div v-for="stat in stats" :key="stat.label" :title="stat.hint">
-          <dt>{{ stat.label }}</dt>
+          <dt><bdi>{{ stat.label }}</bdi></dt>
           <dd class="tabular" :class="{ 'is-accent': stat.accent }">{{ stat.value }}</dd>
           <span class="ledger__stat-mark" :class="{ 'is-accent': stat.accent }" aria-hidden="true">
             <Icon :name="stat.icon" :size="17" />
@@ -550,16 +550,16 @@ watch(
     <div ref="body" class="ledger__body">
       <template v-if="state !== 'peek'">
         <div v-if="article.summary" class="ledger__summary">
-          <p :class="{ 'is-clamped': !summaryExpanded }">{{ article.summary }}</p>
+          <p :class="{ 'is-clamped': !summaryExpanded }"><bdi>{{ article.summary }}</bdi></p>
           <button class="ledger__more" type="button" @click="summaryExpanded = !summaryExpanded">
-            {{ summaryExpanded ? t('wikirealms-show-less') : t('wikirealms-show-more') }}
+            <bdi>{{ summaryExpanded ? t('wikirealms-show-less') : t('wikirealms-show-more') }}</bdi>
           </button>
         </div>
-        <p v-else class="ledger__empty">{{ t('wikirealms-ledger-no-summary') }}</p>
+        <p v-else class="ledger__empty"><bdi>{{ t('wikirealms-ledger-no-summary') }}</bdi></p>
 
         <section v-if="rows.length" class="ledger__sections">
           <h3 class="ledger__sections-head">
-            {{ t('wikirealms-ledger-stat-sections') }}
+            <bdi>{{ t('wikirealms-ledger-stat-sections') }}</bdi>
             <span class="tabular">{{ listSummary }}</span>
           </h3>
 
@@ -569,10 +569,10 @@ watch(
                once, and it is what left no room for the figures that
                actually vary. -->
           <div class="ledger__columns" aria-hidden="true">
-            <span>{{ t('wikirealms-ledger-col-range') }}</span>
-            <span>{{ t('wikirealms-ledger-stat-words') }}</span>
-            <span>{{ t('wikirealms-ledger-col-refs') }}</span>
-            <span>{{ t('wikirealms-ledger-col-ground') }}</span>
+            <span><bdi>{{ t('wikirealms-ledger-col-range') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-stat-words') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-col-refs') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-col-ground') }}</bdi></span>
           </div>
 
           <ul class="ledger__list">
@@ -619,7 +619,7 @@ watch(
                   :aria-pressed="row.hasGround ? isSelected(row) : undefined"
                   @click="row.hasGround && onRowClick(row)"
                 >
-                  <span class="ledger__row-title">{{ row.title }}</span>
+                  <span class="ledger__row-title"><bdi>{{ row.title }}</bdi></span>
                   <span class="ledger__row-figure tabular">{{ formatCount(estimateWordCount(row.subtreeSize)) }}</span>
                   <span class="ledger__row-figure tabular">{{ formatCount(row.refs) }}</span>
 
@@ -642,7 +642,7 @@ watch(
                         :style="{ insetInlineStart: meterFor(row).tick }"
                       />
                     </span>
-                    <span class="ledger__band">{{ bandFor(row).name }}</span>
+                    <span class="ledger__band"><bdi>{{ bandFor(row).name }}</bdi></span>
                   </span>
                   <span v-else class="ledger__ground ledger__ground--none">—</span>
                 </component>
@@ -654,7 +654,7 @@ watch(
                   Everything too small for a range of its own, gathered into one.
                 </p>
                 <p v-else-if="bandFor(row)" class="ledger__detail-why">
-                  {{ bandFor(row).comparison }}
+                  <bdi>{{ bandFor(row).comparison }}</bdi>
                 </p>
                 <p class="ledger__detail-stats">{{ detailFor(row).join(' · ') }}</p>
                 <a
@@ -689,12 +689,12 @@ watch(
         <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
           <div class="ledger__footer-links">
             <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
-              {{ t('wikirealms-ledger-view-wikipedia') }}
+              <bdi>{{ t('wikirealms-ledger-view-wikipedia') }}</bdi>
               <Icon name="external" :size="12" />
             </a>
             <button class="ledger__link" type="button" @click="$emit('share')">
               <Icon name="share" :size="13" />
-              {{ t('wikirealms-ledger-share') }}
+              <bdi>{{ t('wikirealms-ledger-share') }}</bdi>
             </button>
           </div>
           <WikipediaFieldTask
@@ -713,7 +713,7 @@ watch(
           @click="$emit('legend')"
         >
           <Icon name="legend" :size="13" />
-          {{ t('wikirealms-legend-short') }}
+          <bdi>{{ t('wikirealms-legend-short') }}</bdi>
         </button>
       </div>
     </template>

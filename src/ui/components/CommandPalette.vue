@@ -79,7 +79,7 @@ function onSelect(result) {
   >
     <template #header>
       <div class="palette__bar">
-        <p class="palette__label">{{ t('wikirealms-search-travel-label') }}</p>
+        <p class="palette__label"><bdi>{{ t('wikirealms-search-travel-label') }}</bdi></p>
         <button class="palette__close" type="button" :aria-label="t('wikirealms-search-close')" @click="$emit('close')">
           <Icon name="close" :size="18" />
         </button>
@@ -100,7 +100,7 @@ function onSelect(result) {
     />
 
     <p v-if="results.length === 0 && status === 'idle'" class="palette__hint">
-      {{ t('wikirealms-search-hint', 'Esc') }}
+      <bdi>{{ t('wikirealms-search-hint', 'Esc') }}</bdi>
     </p>
   </Sheet>
 </template>

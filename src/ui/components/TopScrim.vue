@@ -34,12 +34,12 @@ const { t } = useI18n()
            rather than the pair. -->
       <button class="scrim__home" type="button" :aria-label="t('wikirealms-scrim-home')" @click="$emit('home')">
         <Icon name="mark" :size="18" />
-        <span class="scrim__wordmark">{{ t('wikirealms-app-name') }}</span>
+        <span class="scrim__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></span>
       </button>
 
       <template v-if="realm">
         <span class="scrim__rule" aria-hidden="true" />
-        <h1 class="scrim__realm">{{ realm }}</h1>
+        <h1 class="scrim__realm"><bdi>{{ realm }}</bdi></h1>
 
         <!-- Always, once there is a realm: the trail panel is where the
              journey actions live now, so it cannot be a control that only
@@ -53,7 +53,7 @@ const { t } = useI18n()
           @click="$emit('trail')"
         >
           <Icon name="trail" :size="15" />
-          <span class="scrim__trail-label">{{ t('wikirealms-scrim-trail') }}</span>
+          <span class="scrim__trail-label"><bdi>{{ t('wikirealms-scrim-trail') }}</bdi></span>
           <span class="scrim__trail-count tabular">{{ trailLength }}</span>
         </button>
       </template>
@@ -90,15 +90,15 @@ const { t } = useI18n()
     <nav class="scrim__utilities" :aria-label="t('wikirealms-scrim-tools')">
       <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-search-aria')" @click="$emit('search')">
         <Icon name="search" :size="17" />
-        <span class="scrim__label">{{ t('wikirealms-scrim-search') }}</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-search') }}</bdi></span>
       </button>
       <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-about-aria')" @click="$emit('guide')">
         <Icon name="guide" :size="17" />
-        <span class="scrim__label">{{ t('wikirealms-scrim-about') }}</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-about') }}</bdi></span>
       </button>
       <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-settings')" @click="$emit('settings')">
         <Icon name="settings" :size="17" />
-        <span class="scrim__label">{{ t('wikirealms-scrim-settings') }}</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-settings') }}</bdi></span>
       </button>
     </nav>
   </header>

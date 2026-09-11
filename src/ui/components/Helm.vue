@@ -59,7 +59,7 @@ const SHAPES = [
         @click="$emit('update:worldShape', shape.value)"
       >
         <Icon :name="shape.icon" :size="16" />
-        <span class="helm__label">{{ t(shape.labelKey) }}</span>
+        <span class="helm__label"><bdi>{{ t(shape.labelKey) }}</bdi></span>
       </button>
     </div>
 
@@ -86,7 +86,7 @@ const SHAPES = [
          Legend label makes the control scannable; phones stay icon-only. -->
     <div class="helm__legend-wrap">
       <p v-if="showHint" class="helm__hint" role="status">
-        <span>{{ t('wikirealms-helm-legend-hint') }}</span>
+        <span><bdi>{{ t('wikirealms-helm-legend-hint') }}</bdi></span>
         <button
           type="button"
           class="helm__hint-dismiss"
@@ -106,7 +106,7 @@ const SHAPES = [
         @click="$emit('legend')"
       >
         <Icon name="legend" :size="18" />
-        <span class="helm__label">{{ t('wikirealms-legend-short') }}</span>
+        <span class="helm__label"><bdi>{{ t('wikirealms-legend-short') }}</bdi></span>
       </button>
     </div>
   </div>

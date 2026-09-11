@@ -71,7 +71,7 @@ const tools = computed(() => [
     @close="$emit('close')"
   >
     <template #header>
-      <h2 class="tools__title">{{ t('wikirealms-scrim-tools') }}</h2>
+      <h2 class="tools__title"><bdi>{{ t('wikirealms-scrim-tools') }}</bdi></h2>
     </template>
 
     <ul class="tools__list">
@@ -83,13 +83,13 @@ const tools = computed(() => [
         >
           <Icon :name="tool.icon" :size="18" />
           <span>
-            <strong>{{ tool.label }}</strong>
+            <strong><bdi>{{ tool.label }}</bdi></strong>
             <small>
-              {{
+              <bdi>{{
                 tool.needsShare && !props.canShare
                   ? t('wikirealms-share-need-realm')
                   : tool.hint
-              }}
+              }}</bdi>
             </small>
           </span>
         </button>

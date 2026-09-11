@@ -19,8 +19,8 @@ const { t } = useI18n()
 
 <template>
   <aside class="field-task" :aria-label="t('wikirealms-field-task-eyebrow')">
-    <p v-if="eyebrow" class="field-task__eyebrow tabular">{{ eyebrow }}</p>
-    <p v-if="notice" class="field-task__notice">{{ notice }}</p>
+    <p v-if="eyebrow" class="field-task__eyebrow tabular"><bdi>{{ eyebrow }}</bdi></p>
+    <p v-if="notice" class="field-task__notice"><bdi>{{ notice }}</bdi></p>
     <WikipediaCtaLink class="field-task__action" :href="href" :label="label" />
   </aside>
 </template>

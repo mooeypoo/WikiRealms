@@ -736,7 +736,7 @@ watch([graph, articleCache], () => {
       @close="showSettings = false"
     />
     <Transition name="toast">
-      <p v-if="toastVisible" class="app__toast">{{ toastMessage }}</p>
+      <p v-if="toastVisible" class="app__toast"><bdi>{{ toastMessage }}</bdi></p>
     </Transition>
   </div>
 </template>

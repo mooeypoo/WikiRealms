@@ -168,52 +168,52 @@ function pinTitle(item) {
         >
           <strong>
             <template v-if="item.title.kind === 'section'">
-              <em>{{ item.title.name }}</em>{{ t('wikirealms-legend-pin-section-suffix') }}
+              <em><bdi>{{ item.title.name }}</bdi></em><bdi>{{ t('wikirealms-legend-pin-section-suffix') }}</bdi>
             </template>
             <template v-else-if="item.title.kind === 'portal'">
-              {{ t('wikirealms-legend-pin-portal-prefix') }}<em>{{ item.title.name }}</em>
+              <bdi>{{ t('wikirealms-legend-pin-portal-prefix') }}</bdi><em><bdi>{{ item.title.name }}</bdi></em>
             </template>
             <template v-else>{{ item.title.text }}</template>
           </strong>
-          <span>{{ item.detail }}</span>
+          <span><bdi>{{ item.detail }}</bdi></span>
         </p>
 
         <aside class="legend__key" @click.stop>
           <header class="legend__head">
-            <h2>{{ t('wikirealms-legend-title') }}</h2>
+            <h2><bdi>{{ t('wikirealms-legend-title') }}</bdi></h2>
             <button type="button" :aria-label="t('wikirealms-legend-close')" @click="$emit('close')">
               <Icon name="close" :size="16" />
             </button>
           </header>
 
           <section>
-            <h3>{{ t('wikirealms-legend-ground-heading') }}</h3>
+            <h3><bdi>{{ t('wikirealms-legend-ground-heading') }}</bdi></h3>
             <ul class="legend__ground">
               <li v-for="entry in groundRows" :key="entry.biome">
                 <span class="legend__swatch" :style="{ background: entry.swatch }" />
                 <span class="legend__text">
-                  <strong>{{ entry.name }}</strong>
-                  <span>{{ entry.detail }}</span>
+                  <strong><bdi>{{ entry.name }}</bdi></strong>
+                  <span><bdi>{{ entry.detail }}</bdi></span>
                 </span>
               </li>
             </ul>
-            <p class="legend__note">{{ ceilingNote }}</p>
+            <p class="legend__note"><bdi>{{ ceilingNote }}</bdi></p>
           </section>
 
           <section v-if="keyed.length">
-            <h3>{{ t('wikirealms-legend-rest-heading') }}</h3>
+            <h3><bdi>{{ t('wikirealms-legend-rest-heading') }}</bdi></h3>
             <ul class="legend__features">
               <li v-for="entry in keyed" :key="entry.id">
                 <span class="legend__swatch" :style="{ background: featureSwatch(entry.id) }" />
                 <span class="legend__text">
-                  <strong>{{ entry.label }}</strong>
-                  <span>{{ entry.detail }}</span>
+                  <strong><bdi>{{ entry.label }}</bdi></strong>
+                  <span><bdi>{{ entry.detail }}</bdi></span>
                 </span>
               </li>
             </ul>
           </section>
 
-          <p class="legend__dismiss">{{ dismissCopy }}</p>
+          <p class="legend__dismiss"><bdi>{{ dismissCopy }}</bdi></p>
         </aside>
       </div>
     </Transition>

@@ -34,7 +34,7 @@ const { t } = useI18n()
     @close="$emit('close')"
   >
     <template #header>
-      <h2 class="share__title">{{ t('wikirealms-share') }}</h2>
+      <h2 class="share__title"><bdi>{{ t('wikirealms-share') }}</bdi></h2>
     </template>
 
     <ul class="share__list">
@@ -42,13 +42,13 @@ const { t } = useI18n()
         <button type="button" @click="$emit('share-realm')">
           <Icon name="share" :size="18" />
           <span>
-            <strong>{{ t('wikirealms-share-realm') }}</strong>
+            <strong><bdi>{{ t('wikirealms-share-realm') }}</bdi></strong>
             <small>
-              {{
+              <bdi>{{
                 realmTitle
                   ? t('wikirealms-share-realm-hint-named', realmTitle)
                   : t('wikirealms-share-realm-hint')
-              }}
+              }}</bdi>
             </small>
           </span>
         </button>
@@ -57,13 +57,13 @@ const { t } = useI18n()
         <button type="button" :disabled="!canShareTrail" @click="$emit('share-trail')">
           <Icon name="trail" :size="18" />
           <span>
-            <strong>{{ t('wikirealms-share-trail') }}</strong>
+            <strong><bdi>{{ t('wikirealms-share-trail') }}</bdi></strong>
             <small>
-              {{
+              <bdi>{{
                 canShareTrail
                   ? t('wikirealms-share-trail-hint', trailLength)
                   : t('wikirealms-share-trail-need-realm')
-              }}
+              }}</bdi>
             </small>
           </span>
         </button>

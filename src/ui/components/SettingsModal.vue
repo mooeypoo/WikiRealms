@@ -68,7 +68,7 @@ function renderingLabel(preferences) {
   >
     <template #header>
       <div class="settings__bar">
-        <h2 class="settings__title">{{ t('wikirealms-settings-title') }}</h2>
+        <h2 class="settings__title"><bdi>{{ t('wikirealms-settings-title') }}</bdi></h2>
         <button
           class="settings__close"
           type="button"
@@ -81,11 +81,11 @@ function renderingLabel(preferences) {
     </template>
 
     <fieldset class="settings__group">
-      <legend>{{ t('wikirealms-settings-wikipedia') }}</legend>
+      <legend><bdi>{{ t('wikirealms-settings-wikipedia') }}</bdi></legend>
       <label class="settings__row">
         <span>
-          <strong>{{ t('wikirealms-settings-show-all-wikipedias') }}</strong>
-          <small>{{ t('wikirealms-settings-show-all-wikipedias-help') }}</small>
+          <strong><bdi>{{ t('wikirealms-settings-show-all-wikipedias') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-show-all-wikipedias-help') }}</bdi></small>
         </span>
         <input
           type="checkbox"
@@ -96,11 +96,11 @@ function renderingLabel(preferences) {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>{{ t('wikirealms-settings-rendering') }}</legend>
+      <legend><bdi>{{ t('wikirealms-settings-rendering') }}</bdi></legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ renderingLabel(preferences) }}</strong>
-          <small>{{ t('wikirealms-settings-rendering-help') }}</small>
+          <strong><bdi>{{ renderingLabel(preferences) }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-rendering-help') }}</bdi></small>
         </span>
         <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-rendering-aria')">
           <button
@@ -112,18 +112,18 @@ function renderingLabel(preferences) {
             :class="['settings__segment', { 'is-active': (preferences.rendering ?? 'auto') === option.value }]"
             @click="update('rendering', option.value)"
           >
-            {{ option.label }}
+            <bdi>{{ option.label }}</bdi>
           </button>
         </div>
       </div>
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>{{ t('wikirealms-settings-motion') }}</legend>
+      <legend><bdi>{{ t('wikirealms-settings-motion') }}</bdi></legend>
       <label class="settings__row">
         <span>
-          <strong>{{ t('wikirealms-settings-travel-animation') }}</strong>
-          <small>{{ t('wikirealms-settings-travel-animation-help') }}</small>
+          <strong><bdi>{{ t('wikirealms-settings-travel-animation') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-travel-animation-help') }}</bdi></small>
         </span>
         <input
           type="checkbox"
@@ -134,38 +134,38 @@ function renderingLabel(preferences) {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>{{ t('wikirealms-settings-map-layers') }}</legend>
+      <legend><bdi>{{ t('wikirealms-settings-map-layers') }}</bdi></legend>
       <label class="settings__row">
         <span>
-          <strong>{{ t('wikirealms-settings-sections') }}</strong>
-          <small>{{ t('wikirealms-settings-sections-help') }}</small>
+          <strong><bdi>{{ t('wikirealms-settings-sections') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-sections-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showSections" @change="update('showSections', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>{{ t('wikirealms-settings-portals') }}</strong>
-          <small>{{ t('wikirealms-settings-portals-help') }}</small>
+          <strong><bdi>{{ t('wikirealms-settings-portals') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-portals-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showPortals" @change="update('showPortals', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>{{ t('wikirealms-settings-foliage') }}</strong>
-          <small>{{ t('wikirealms-settings-foliage-help') }}</small>
+          <strong><bdi>{{ t('wikirealms-settings-foliage') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-foliage-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showFoliage" @change="update('showFoliage', $event.target.checked)" />
       </label>
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>{{ t('wikirealms-settings-panels') }}</legend>
+      <legend><bdi>{{ t('wikirealms-settings-panels') }}</bdi></legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ chromeLabel(preferences) }}</strong>
-          <small>{{ t('wikirealms-settings-chrome-help') }}</small>
+          <strong><bdi>{{ chromeLabel(preferences) }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-chrome-help') }}</bdi></small>
         </span>
         <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-chrome-aria')">
           <button
@@ -177,14 +177,14 @@ function renderingLabel(preferences) {
             :class="['settings__segment', { 'is-active': (preferences.chrome ?? 'translucent') === option.value }]"
             @click="update('chrome', option.value)"
           >
-            {{ option.label }}
+            <bdi>{{ option.label }}</bdi>
           </button>
         </div>
       </div>
     </fieldset>
 
     <template #footer>
-      <button type="button" class="settings__reset" @click="reset">{{ t('wikirealms-settings-reset') }}</button>
+      <button type="button" class="settings__reset" @click="reset"><bdi>{{ t('wikirealms-settings-reset') }}</bdi></button>
     </template>
   </Sheet>
 </template>

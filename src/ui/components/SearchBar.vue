@@ -78,7 +78,7 @@ defineExpose({ focus: () => field.value?.focus() })
   <div class="search-bar" :class="`search-bar--${size}`">
     <div class="search-bar__field">
       <label class="search-bar__lang">
-        <span class="visually-hidden">{{ t('wikirealms-search-language') }}</span>
+        <span class="visually-hidden"><bdi>{{ t('wikirealms-search-language') }}</bdi></span>
         <select
           class="search-bar__lang-select"
           :value="language"
@@ -111,10 +111,10 @@ defineExpose({ focus: () => field.value?.focus() })
 
     <p v-if="status === 'error'" class="search-bar__status search-bar__status--error">
       <Icon name="alert" :size="14" />
-      {{ errorMessage }}
+      <bdi>{{ errorMessage }}</bdi>
     </p>
     <p v-else-if="status === 'success' && results.length === 0" class="search-bar__status">
-      {{ t('wikirealms-search-nothing-found', query) }}
+      <bdi>{{ t('wikirealms-search-nothing-found', query) }}</bdi>
     </p>
 
     <ul v-if="results.length > 0" id="search-results" class="search-bar__results" role="listbox">
@@ -130,9 +130,9 @@ defineExpose({ focus: () => field.value?.focus() })
         >
           <strong>
             <span class="search-bar__result-lang">{{ language.toUpperCase() }}</span>
-            {{ result.title }}
+            <bdi>{{ result.title }}</bdi>
           </strong>
-          <span v-if="result.description">{{ result.description }}</span>
+          <span v-if="result.description"><bdi>{{ result.description }}</bdi></span>
         </button>
       </li>
     </ul>

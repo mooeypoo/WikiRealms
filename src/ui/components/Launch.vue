@@ -103,7 +103,7 @@ function chooseEnglish(title) {
              world, the realm in the scrim is the h1 and this is a dialog
              inside it — two h1s would leave a screen reader with two
              answers to "what is this page". -->
-        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark">{{ t('wikirealms-app-name') }}</component>
+        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></component>
         <button
           v-if="dismissible"
           class="launch__close"
@@ -116,7 +116,7 @@ function chooseEnglish(title) {
       </div>
 
       <p class="launch__pitch">
-        {{ t('wikirealms-launch-pitch') }}
+        <bdi>{{ t('wikirealms-launch-pitch') }}</bdi>
       </p>
 
       <SearchBar
@@ -135,15 +135,15 @@ function chooseEnglish(title) {
       />
 
       <div v-if="showSuggestions" class="launch__suggestions">
-        <p class="launch__label">{{ t('wikirealms-launch-suggestions-label') }}</p>
+        <p class="launch__label"><bdi>{{ t('wikirealms-launch-suggestions-label') }}</bdi></p>
         <ul class="launch__realms">
           <li v-for="realm in suggestions" :key="realm.title">
             <button type="button" @click="chooseEnglish(realm.title)">
               <strong>
                 <span class="launch__lang">EN</span>
-                {{ realm.title }}
+                <bdi>{{ realm.title }}</bdi>
               </strong>
-              <span>{{ realm.hint }}</span>
+              <span><bdi>{{ realm.hint }}</bdi></span>
             </button>
           </li>
         </ul>
@@ -155,11 +155,11 @@ function chooseEnglish(title) {
             @click="chooseEnglish(randomRealm(suggestions.map((realm) => realm.title)).title)"
           >
             <Icon name="crosshair" :size="14" />
-            {{ t('wikirealms-launch-surprise') }}
+            <bdi>{{ t('wikirealms-launch-surprise') }}</bdi>
           </button>
           <button class="launch__extra" type="button" @click="$emit('guide')">
             <Icon name="guide" :size="14" />
-            {{ t('wikirealms-launch-how') }}
+            <bdi>{{ t('wikirealms-launch-how') }}</bdi>
           </button>
         </div>
       </div>
