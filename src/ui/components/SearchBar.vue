@@ -3,15 +3,10 @@ import { computed, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Spinner from './Spinner.vue'
 import { getEdition, listEditions } from '../../core/i18n/wikipediaEditions.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * The search field and its results, and nothing else.
- *
- * It used to call useArticleSearch itself, which meant it could not be
- * rendered anywhere — a story or a second caller — without the network
- * coming with it. Both places search now appears (the launch screen and the
- * command palette) own the composable and hand the state down, which is the
- * discipline docs/ux-vision.md §9 asks of every feature component.
  *
  * Language lives here with the query: picking an edition is part of choosing
  * an article, not a global setting that leaves you staring at a mismatch.
@@ -33,15 +28,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:query', 'update:language', 'select'])
 
+const { t } = useI18n()
 const field = ref(null)
 const active = ref(-1)
 
 const edition = computed(() => getEdition(props.language))
 const editions = computed(() => listEditions({ featuredOnly: !props.showAllWikipedias }))
-const placeholder = computed(() => `Search ${edition.value.name} Wikipedia`)
+const placeholder = computed(() => t('wikirealms-search-placeholder', edition.value.name))
 
-// immediate, or a list that is already present at mount has nothing marked
-// and Enter does nothing until the viewer touches an arrow key.
 watch(
   () => props.results,
   () => {
@@ -50,10 +44,6 @@ watch(
   { immediate: true },
 )
 
-/**
- * Arrow keys move through results and Enter takes the marked one, so the
- * whole flow works without the pointer ever being involved.
- */
 function onKeydown(event) {
   if (props.results.length === 0) return
 
@@ -88,11 +78,11 @@ defineExpose({ focus: () => field.value?.focus() })
   <div class="search-bar" :class="`search-bar--${size}`">
     <div class="search-bar__field">
       <label class="search-bar__lang">
-        <span class="visually-hidden">Wikipedia language</span>
+        <span class="visually-hidden">{{ t('wikirealms-search-language') }}</span>
         <select
           class="search-bar__lang-select"
           :value="language"
-          aria-label="Wikipedia language"
+          :aria-label="t('wikirealms-search-language')"
           @change="onLanguageChange"
           @keydown.stop
         >
@@ -108,7 +98,7 @@ defineExpose({ focus: () => field.value?.focus() })
         :value="query"
         :placeholder="placeholder"
         :data-autofocus="autofocus ? '' : undefined"
-        aria-label="Search Wikipedia articles"
+        :aria-label="t('wikirealms-search-articles')"
         role="combobox"
         aria-expanded="true"
         aria-controls="search-results"
@@ -124,7 +114,7 @@ defineExpose({ focus: () => field.value?.focus() })
       {{ errorMessage }}
     </p>
     <p v-else-if="status === 'success' && results.length === 0" class="search-bar__status">
-      Nothing found for “{{ query }}”.
+      {{ t('wikirealms-search-nothing-found', query) }}
     </p>
 
     <ul v-if="results.length > 0" id="search-results" class="search-bar__results" role="listbox">

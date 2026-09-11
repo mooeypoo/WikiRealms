@@ -6,6 +6,7 @@ import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { useOverlays } from '../design/useOverlays.js'
 import { pickRealms, randomRealm } from '../content/realms.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Before there is anywhere to be.
@@ -37,6 +38,7 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'guide', 'close', 'update:language'])
 
+const { t } = useI18n()
 const searchLanguage = ref(props.language || DEFAULT_LANGUAGE)
 
 watch(
@@ -92,7 +94,7 @@ function chooseEnglish(title) {
     class="launch"
     :role="dismissible ? 'dialog' : undefined"
     :aria-modal="dismissible ? 'true' : undefined"
-    :aria-label="dismissible ? 'Opening screen' : undefined"
+    :aria-label="dismissible ? t('wikirealms-launch-dialog-label') : undefined"
   >
     <div class="launch__panel">
       <div class="launch__identity">
@@ -101,12 +103,12 @@ function chooseEnglish(title) {
              world, the realm in the scrim is the h1 and this is a dialog
              inside it — two h1s would leave a screen reader with two
              answers to "what is this page". -->
-        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark">WikiRealms</component>
+        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark">{{ t('wikirealms-app-name') }}</component>
         <button
           v-if="dismissible"
           class="launch__close"
           type="button"
-          aria-label="Back to the world"
+          :aria-label="t('wikirealms-launch-back')"
           @click="$emit('close')"
         >
           <Icon name="close" :size="18" />
@@ -114,8 +116,7 @@ function chooseEnglish(title) {
       </div>
 
       <p class="launch__pitch">
-        Every Wikipedia article is a world. Its sections become mountain ranges, its
-        references grow the forests, and its links are portals out.
+        {{ t('wikirealms-launch-pitch') }}
       </p>
 
       <SearchBar
@@ -134,7 +135,7 @@ function chooseEnglish(title) {
       />
 
       <div v-if="showSuggestions" class="launch__suggestions">
-        <p class="launch__label">Or begin somewhere on English Wikipedia</p>
+        <p class="launch__label">{{ t('wikirealms-launch-suggestions-label') }}</p>
         <ul class="launch__realms">
           <li v-for="realm in suggestions" :key="realm.title">
             <button type="button" @click="chooseEnglish(realm.title)">
@@ -154,11 +155,11 @@ function chooseEnglish(title) {
             @click="chooseEnglish(randomRealm(suggestions.map((realm) => realm.title)).title)"
           >
             <Icon name="crosshair" :size="14" />
-            Surprise me
+            {{ t('wikirealms-launch-surprise') }}
           </button>
           <button class="launch__extra" type="button" @click="$emit('guide')">
             <Icon name="guide" :size="14" />
-            How this works
+            {{ t('wikirealms-launch-how') }}
           </button>
         </div>
       </div>

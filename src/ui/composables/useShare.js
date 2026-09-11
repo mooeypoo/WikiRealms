@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { copyText, shareLink } from '../../adapters/shareTarget.js'
 import { realmUrl } from '../../adapters/urlState.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Sharing, as the UI sees it: a link, and a word about what happened.
@@ -36,20 +37,24 @@ export function useShare() {
     if (!title) return
 
     const outcome = await shareLink({
-      title: 'WikiRealms',
-      text: `Explore ${title} as a world on WikiRealms`,
+      title: t('wikirealms-app-name'),
+      text: t('wikirealms-share-explore', title),
       url: realmUrl(title, { language }),
     })
 
     // A native share sheet already told the viewer what happened; saying so
     // again over the top of it is noise.
-    if (outcome === 'copied') showToast('Link copied')
-    else if (outcome === 'failed') showToast('Could not share that link')
+    if (outcome === 'copied') showToast(t('wikirealms-share-link-copied'))
+    else if (outcome === 'failed') showToast(t('wikirealms-share-link-failed'))
   }
 
   async function copyLink(title, { language = DEFAULT_LANGUAGE } = {}) {
     if (!title) return
-    showToast((await copyText(realmUrl(title, { language }))) ? 'Link copied' : 'Could not copy that link')
+    showToast(
+      (await copyText(realmUrl(title, { language })))
+        ? t('wikirealms-share-link-copied')
+        : t('wikirealms-share-copy-failed'),
+    )
   }
 
   return { toastMessage, toastVisible, shareArticle, copyLink, showToast, hideToast }

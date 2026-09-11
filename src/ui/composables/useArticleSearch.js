@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { searchWikipediaTitles } from '../../adapters/wikipediaSearchAdapter.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Reactive article search state backed by a search function (defaults to
@@ -51,7 +52,7 @@ export function useArticleSearch({
       if (token !== requestToken) return
       results.value = []
       status.value = 'error'
-      errorMessage.value = error?.message ?? 'Search failed'
+      errorMessage.value = error?.message ?? t('wikirealms-search-failed')
     }
   }
 

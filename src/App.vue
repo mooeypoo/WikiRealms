@@ -38,6 +38,7 @@ import {
   normalizeLanguage,
 } from './core/i18n/wikipediaEditions.js'
 import { journeyForLanguage } from './core/traversal/visitGraph.js'
+import { setUiLocale, t } from './ui/i18n/banana.js'
 
 // three.js is heavy; only load it once a 3D view is actually rendered.
 const WorldView3D = defineAsyncComponent(() => import('./ui/components/WorldView3D.vue'))
@@ -128,6 +129,7 @@ function applyDocumentLanguage(code) {
   const edition = getEdition(code)
   document.documentElement.lang = edition.bcp47 || edition.code
   document.documentElement.dir = edition.dir
+  void setUiLocale(edition.code)
 }
 
 /**
@@ -379,7 +381,7 @@ function onTrailClear() {
   // Replace the address-bar entry so Back does not try to replay a graph
   // we just erased (unknown node ids already fall through to jumpTo).
   pushRealm(current.value, currentNodeId.value, { replace: true, language })
-  showToast('Trail cleared')
+  showToast(t('wikirealms-trail-cleared'))
 }
 
 // Every shortcut in the app is declared here, in one registry. The Field

@@ -1,6 +1,8 @@
 <script setup>
+import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Ported onto <Sheet>. The settings themselves are untouched here; they get
@@ -13,18 +15,19 @@ defineProps({
 })
 
 const emit = defineEmits(['update:preferences', 'close'])
+const { t } = useI18n()
 
-const CHROME = [
-  { value: 'solid', label: 'Solid' },
-  { value: 'translucent', label: 'Translucent' },
-  { value: 'minimal', label: 'Minimal' },
-]
+const CHROME = computed(() => [
+  { value: 'solid', label: t('wikirealms-settings-chrome-solid') },
+  { value: 'translucent', label: t('wikirealms-settings-chrome-translucent') },
+  { value: 'minimal', label: t('wikirealms-settings-chrome-minimal') },
+])
 
-const RENDERING = [
-  { value: 'high', label: 'High' },
-  { value: 'auto', label: 'Auto' },
-  { value: 'low', label: 'Low' },
-]
+const RENDERING = computed(() => [
+  { value: 'high', label: t('wikirealms-settings-rendering-high') },
+  { value: 'auto', label: t('wikirealms-settings-rendering-auto') },
+  { value: 'low', label: t('wikirealms-settings-rendering-low') },
+])
 
 function update(key, value) {
   emit('update:preferences', { [key]: value })
@@ -44,28 +47,45 @@ function reset() {
     autoHideHUD: false,
   })
 }
+
+function chromeLabel(preferences) {
+  return CHROME.value.find((option) => option.value === (preferences.chrome ?? 'translucent')).label
+}
+
+function renderingLabel(preferences) {
+  return RENDERING.value.find((option) => option.value === (preferences.rendering ?? 'auto')).label
+}
 </script>
 
 <template>
-  <Sheet id="settings" :open="show" label="Settings" :snap-points="[0.5, 0.92]" :snap="1" @close="$emit('close')">
+  <Sheet
+    id="settings"
+    :open="show"
+    :label="t('wikirealms-settings-title')"
+    :snap-points="[0.5, 0.92]"
+    :snap="1"
+    @close="$emit('close')"
+  >
     <template #header>
       <div class="settings__bar">
-        <h2 class="settings__title">Settings</h2>
-        <button class="settings__close" type="button" aria-label="Close settings" @click="$emit('close')">
+        <h2 class="settings__title">{{ t('wikirealms-settings-title') }}</h2>
+        <button
+          class="settings__close"
+          type="button"
+          :aria-label="t('wikirealms-settings-close')"
+          @click="$emit('close')"
+        >
           <Icon name="close" :size="18" />
         </button>
       </div>
     </template>
 
     <fieldset class="settings__group">
-      <legend>Wikipedia</legend>
+      <legend>{{ t('wikirealms-settings-wikipedia') }}</legend>
       <label class="settings__row">
         <span>
-          <strong>Show all Wikipedias in search</strong>
-          <small>
-            Language is chosen when you search. Turn this on to list every open
-            edition in that picker, not only the featured set.
-          </small>
+          <strong>{{ t('wikirealms-settings-show-all-wikipedias') }}</strong>
+          <small>{{ t('wikirealms-settings-show-all-wikipedias-help') }}</small>
         </span>
         <input
           type="checkbox"
@@ -76,16 +96,13 @@ function reset() {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Rendering</legend>
+      <legend>{{ t('wikirealms-settings-rendering') }}</legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ RENDERING.find((option) => option.value === (preferences.rendering ?? 'auto')).label }}</strong>
-          <small>
-            High always draws the world in 3D. Low uses the flat canvas, which asks less of the
-            device. Auto picks by what the browser can do.
-          </small>
+          <strong>{{ renderingLabel(preferences) }}</strong>
+          <small>{{ t('wikirealms-settings-rendering-help') }}</small>
         </span>
-        <div class="settings__segmented" role="radiogroup" aria-label="Rendering quality">
+        <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-rendering-aria')">
           <button
             v-for="option in RENDERING"
             :key="option.value"
@@ -102,14 +119,11 @@ function reset() {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Motion</legend>
+      <legend>{{ t('wikirealms-settings-motion') }}</legend>
       <label class="settings__row">
         <span>
-          <strong>Travel animation</strong>
-          <small>
-            The dive between worlds. Turn it off for an immediate arrival — the system's
-            reduced-motion setting already does this on its own.
-          </small>
+          <strong>{{ t('wikirealms-settings-travel-animation') }}</strong>
+          <small>{{ t('wikirealms-settings-travel-animation-help') }}</small>
         </span>
         <input
           type="checkbox"
@@ -120,43 +134,40 @@ function reset() {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Map layers</legend>
+      <legend>{{ t('wikirealms-settings-map-layers') }}</legend>
       <label class="settings__row">
         <span>
-          <strong>Sections</strong>
-          <small>Section halos and energy walls. Subsections reveal on hover.</small>
+          <strong>{{ t('wikirealms-settings-sections') }}</strong>
+          <small>{{ t('wikirealms-settings-sections-help') }}</small>
         </span>
         <input type="checkbox" :checked="preferences.showSections" @change="update('showSections', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>Portals</strong>
-          <small>Links to related Wikipedia articles.</small>
+          <strong>{{ t('wikirealms-settings-portals') }}</strong>
+          <small>{{ t('wikirealms-settings-portals-help') }}</small>
         </span>
         <input type="checkbox" :checked="preferences.showPortals" @change="update('showPortals', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>Foliage</strong>
-          <small>Trees, grass, and scrub matching each biome.</small>
+          <strong>{{ t('wikirealms-settings-foliage') }}</strong>
+          <small>{{ t('wikirealms-settings-foliage-help') }}</small>
         </span>
         <input type="checkbox" :checked="preferences.showFoliage" @change="update('showFoliage', $event.target.checked)" />
       </label>
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Panels</legend>
+      <legend>{{ t('wikirealms-settings-panels') }}</legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ CHROME.find((option) => option.value === (preferences.chrome ?? 'translucent')).label }}</strong>
-          <small>
-            How present the panels are over the world. Text stays at full contrast in all
-            three — the old opacity slider dimmed the words along with the panel.
-          </small>
+          <strong>{{ chromeLabel(preferences) }}</strong>
+          <small>{{ t('wikirealms-settings-chrome-help') }}</small>
         </span>
-        <div class="settings__segmented" role="radiogroup" aria-label="Panel presence">
+        <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-chrome-aria')">
           <button
             v-for="option in CHROME"
             :key="option.value"
@@ -173,11 +184,10 @@ function reset() {
     </fieldset>
 
     <template #footer>
-      <button type="button" class="settings__reset" @click="reset">Reset defaults</button>
+      <button type="button" class="settings__reset" @click="reset">{{ t('wikirealms-settings-reset') }}</button>
     </template>
   </Sheet>
 </template>
-
 <style scoped>
 .settings__bar {
   display: flex;

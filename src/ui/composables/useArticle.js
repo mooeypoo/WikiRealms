@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { fetchWikipediaArticle } from '../../adapters/wikipediaArticleAdapter.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Reactive article-loading state backed by a fetch function (defaults to
@@ -29,7 +30,7 @@ export function useArticle({ fetchFn = fetchWikipediaArticle } = {}) {
       if (token !== requestToken) return
       article.value = null
       status.value = 'error'
-      errorMessage.value = error?.message ?? 'Failed to load article'
+      errorMessage.value = error?.message ?? t('wikirealms-load-article-failed')
     }
   }
 

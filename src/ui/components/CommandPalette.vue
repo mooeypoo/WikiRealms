@@ -5,6 +5,7 @@ import Sheet from '../design/Sheet.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Search, once there is somewhere to be.
@@ -28,6 +29,7 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'close', 'update:language'])
 
+const { t } = useI18n()
 const searchLanguage = ref(props.language || DEFAULT_LANGUAGE)
 
 watch(
@@ -69,7 +71,7 @@ function onSelect(result) {
   <Sheet
     id="search"
     :open="show"
-    label="Search Wikipedia"
+    :label="t('wikirealms-search-sheet-label')"
     presentation="dialog"
     :snap-points="[0.5, 0.9]"
     :snap="0"
@@ -77,8 +79,8 @@ function onSelect(result) {
   >
     <template #header>
       <div class="palette__bar">
-        <p class="palette__label">Travel to another realm</p>
-        <button class="palette__close" type="button" aria-label="Close search" @click="$emit('close')">
+        <p class="palette__label">{{ t('wikirealms-search-travel-label') }}</p>
+        <button class="palette__close" type="button" :aria-label="t('wikirealms-search-close')" @click="$emit('close')">
           <Icon name="close" :size="18" />
         </button>
       </div>
@@ -98,8 +100,7 @@ function onSelect(result) {
     />
 
     <p v-if="results.length === 0 && status === 'idle'" class="palette__hint">
-      Searching leaves the world you are in and starts a new journey. To carry on
-      from here, take a portal. Press <kbd>Esc</kbd> to stay.
+      {{ t('wikirealms-search-hint', 'Esc') }}
     </p>
   </Sheet>
 </template>
