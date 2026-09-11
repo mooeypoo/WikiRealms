@@ -83,13 +83,57 @@ describe('generateSectionPortals', () => {
     expect(distance).toBeLessThanOrEqual(4)
   })
 
-  it('caps the total number of portals', () => {
+  it('caps portals per top-level section before the world ceiling matters', () => {
     const links = Array.from({ length: 100 }, (_, i) => `Link ${i}`)
     const tree = { lead: { links: [] }, sections: [{ title: 'Purpose', anchor: 'Purpose', links, children: [] }] }
 
     const portals = generateSectionPortals(tree, peaks, createRng(1), { width, height })
 
+    expect(portals).toHaveLength(PORTAL_LIMITS.maxPerTopLevelSection)
     expect(portals.length).toBeLessThan(links.length)
+  })
+
+  it('caps lead portals separately from section ranges', () => {
+    const links = Array.from({ length: 20 }, (_, i) => `Lead ${i}`)
+    const tree = { lead: { links }, sections: [] }
+
+    const portals = generateSectionPortals(tree, [], createRng(1), { width, height })
+
+    expect(portals).toHaveLength(PORTAL_LIMITS.maxLeadPortals)
+  })
+
+  it('lets many ranges keep a few portals each until the world ceiling', () => {
+    const sections = Array.from({ length: 16 }, (_, i) => ({
+      title: `Range ${i}`,
+      anchor: `Range_${i}`,
+      links: Array.from({ length: 10 }, (_, j) => `R${i}L${j}`),
+      children: [],
+    }))
+    const manyPeaks = sections.map((section, i) => ({
+      x: 2 + (i % 4) * 8,
+      y: 2 + Math.floor(i / 4) * 8,
+      radius: 3,
+      title: section.title,
+      depth: 1,
+    }))
+
+    const portals = generateSectionPortals(
+      { lead: { links: [] }, sections },
+      manyPeaks,
+      createRng(1),
+      { width, height },
+    )
+
+    expect(portals.length).toBe(PORTAL_LIMITS.maxPortals)
+    const byRange = new Map()
+    for (const portal of portals) {
+      byRange.set(portal.sectionTitle, (byRange.get(portal.sectionTitle) ?? 0) + 1)
+    }
+    for (const count of byRange.values()) {
+      expect(count).toBeLessThanOrEqual(PORTAL_LIMITS.maxPerTopLevelSection)
+    }
+    // Round-robin still reaches every range before any takes a second.
+    expect(byRange.size).toBe(16)
   })
 
   it('tags each portal with the peaks-array index of its owning top-level section', () => {
@@ -159,6 +203,8 @@ describe('generateSectionPortals', () => {
     const tree = { lead: { links: [] }, sections: [{ title: 'Purpose', anchor: 'Purpose', links, children: [] }] }
 
     const portals = generateSectionPortals(tree, peaks, createRng(3), { width, height })
+    expect(portals).toHaveLength(PORTAL_LIMITS.maxPerTopLevelSection)
+
     const cells = new Set(portals.map((p) => `${p.gridX},${p.gridY}`))
     const distances = portals.map((p) => Math.hypot(p.gridX - 16, p.gridY - 16))
     const outer =
@@ -172,20 +218,18 @@ describe('generateSectionPortals', () => {
 
     // No two portals land on the same grid cell.
     expect(cells.size).toBe(portals.length)
-    // Spread by area, not piled at the summit: the set reaches the outer
-    // band and still clears the middle where the section marker sits.
-    expect(Math.max(...distances)).toBeGreaterThan(10 * 0.7)
+    // Spread by area, not piled at the summit: the set reaches outward
+    // and still clears the middle where the section marker sits.
+    expect(Math.max(...distances)).toBeGreaterThan(10 * 0.4)
     expect(Math.min(...distances)).toBeGreaterThan(0)
-    // Dense sections may spill slightly past the peak rim.
     for (const distance of distances) expect(distance).toBeLessThanOrEqual(outer + 0.6)
-    expect(Math.max(...distances)).toBeGreaterThan(10 * PORTAL_LIMITS.maxFootprintFraction)
   })
 
   it('gives every linked section a portal before any section gets a second', () => {
     const tree = {
       lead: { links: [] },
       sections: [
-        // Enough links to swallow the whole cap in document order.
+        // Enough links to swallow the whole per-range budget alone.
         { title: 'Purpose', anchor: 'Purpose', links: Array.from({ length: 40 }, (_, i) => `P${i}`), children: [] },
         { title: 'Features', anchor: 'Features', links: ['Chemistry'], children: [] },
       ],
@@ -193,8 +237,11 @@ describe('generateSectionPortals', () => {
 
     const portals = generateSectionPortals(tree, peaks, createRng(1), { width, height })
 
-    expect(portals).toHaveLength(PORTAL_LIMITS.maxPortals)
+    expect(portals).toHaveLength(PORTAL_LIMITS.maxPerTopLevelSection + 1)
     expect(portals.some((p) => p.targetArticleId === 'Chemistry')).toBe(true)
+    expect(portals.filter((p) => p.sectionTitle === 'Purpose')).toHaveLength(
+      PORTAL_LIMITS.maxPerTopLevelSection,
+    )
   })
 
   it('places lead links in the middle of the map, not in the folded-sections aggregate', () => {

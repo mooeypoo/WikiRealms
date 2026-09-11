@@ -209,10 +209,14 @@ falling into spokes or rings. Every portal lands between
 it clears the section's summit marker and still reads as inside that
 section's land.
 
-The `maxPortals` cap is applied to a round-robin over sections rather than
-to document order, so every linked section places its first portal before
-any section places its second. In document order a link-heavy opening
-section would otherwise swallow the entire budget.
+The portal budget is hybrid. Each top-level mountain range may keep at most
+`maxPerTopLevelSection` portals (subsections share their ancestor's budget);
+lead links have `maxLeadPortals` of their own in the centre of the map; and
+`maxPortals` is a world-wide ceiling so a sixteen-range article cannot become
+a field of markers. Within those caps, selection round-robins over sections
+rather than document order, so every linked section places its first portal
+before any section places its second — otherwise a link-heavy opening section
+would swallow the entire budget.
 
 Citation counts remain on peaks (own and subtree totals), alongside the
 sentence counts and the derived `lushness` scalar, but are no longer

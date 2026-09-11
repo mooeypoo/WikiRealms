@@ -205,9 +205,20 @@ export const FEATURE_SOFT_CAPS = Object.freeze({
 
 /**
  * Outbound portal generation limits.
+ *
+ * Hybrid budget: each top-level mountain range (and the lead region) may
+ * only keep a few portals so density tracks the map, and a global ceiling
+ * keeps a sixteen-range article from becoming a field of markers. Selection
+ * still round-robins across sections so a link-heavy opener cannot starve
+ * later ranges within those caps.
  */
 export const PORTAL_LIMITS = Object.freeze({
-  maxPortals: 24,
+  /** World-wide ceiling — render/readability budget. */
+  maxPortals: 36,
+  /** Cap per top-level section / mountain range (subsections share it). */
+  maxPerTopLevelSection: 3,
+  /** Cap for lead links, which sit in the central region rather than a peak. */
+  maxLeadPortals: 3,
   // Portals sit between these fractions of their region's footprint
   // radius: far enough out to clear the section's summit marker, far
   // enough in to still read as "inside this section's land".

@@ -101,9 +101,9 @@ describe('Legend', () => {
     // without "some of them" overclaims.
     mountLegend()
 
-    expect(document.querySelector('.legend__features').textContent).toContain(
-      `Up to ${PORTAL_LIMITS.maxPortals}`,
-    )
+    const text = document.querySelector('.legend__features').textContent
+    expect(text).toContain(`Up to ${PORTAL_LIMITS.maxPortals}`)
+    expect(text).toContain(`at most ${PORTAL_LIMITS.maxPerTopLevelSection} per mountain range`)
   })
 
   it('explains foliage as citation-driven growth', () => {
