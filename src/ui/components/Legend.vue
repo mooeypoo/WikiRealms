@@ -294,14 +294,14 @@ function featureSwatch(id) {
 
 .legend__note {
   margin: var(--spacing-sm) 0 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-xs);
   line-height: 1.45;
 }
 
 .legend__dismiss {
   margin: 0;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-xs);
 }
 

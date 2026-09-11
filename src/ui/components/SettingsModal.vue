@@ -176,10 +176,10 @@ function reset() {
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
 }
 
 .settings__close:hover {
@@ -195,7 +195,7 @@ function reset() {
 
 .settings__group legend {
   padding: 0 0 var(--spacing-xs);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -209,7 +209,7 @@ function reset() {
   gap: var(--spacing-md);
   min-height: var(--hit);
   padding: var(--spacing-sm) 0;
-  border-bottom: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-line);
 }
 
 .settings__row > span {
@@ -224,7 +224,7 @@ function reset() {
 }
 
 .settings__row small {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-size: var(--text-xs);
   line-height: 1.45;
 }
@@ -245,9 +245,9 @@ function reset() {
   grid-auto-columns: 1fr;
   gap: 3px;
   padding: 3px;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--surface-2);
 }
 
 .settings__segment {
@@ -259,7 +259,7 @@ function reset() {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font: inherit;
   font-size: var(--text-sm);
 }
@@ -270,17 +270,18 @@ function reset() {
 
 .settings__segment.is-active {
   border-color: var(--edge-accent);
-  background: var(--accent-wash);
+  background: rgba(var(--accent-rgb), 0.28);
   color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
 }
 
 .settings__reset {
   min-height: var(--hit);
   padding: 0 var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
   font-size: var(--text-sm);
 }
 

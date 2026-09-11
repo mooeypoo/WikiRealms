@@ -115,10 +115,10 @@ const { shortcuts } = useKeymap()
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-2);
+  color: var(--ink-1);
 }
 
 .guide__close:hover {
@@ -130,7 +130,7 @@ const { shortcuts } = useKeymap()
   display: flex;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-md);
-  border-bottom: 1px solid var(--edge-hair);
+  border-bottom: 1px solid var(--edge-line);
   overflow-x: auto;
 }
 
@@ -143,7 +143,7 @@ const { shortcuts } = useKeymap()
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -167,9 +167,9 @@ const { shortcuts } = useKeymap()
 }
 
 .guide__keys dt {
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
@@ -286,7 +286,7 @@ const { shortcuts } = useKeymap()
 
 .guide__prose :deep(.info-hub__feature) {
   padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   color: var(--ink-2);
   font-size: var(--text-sm);

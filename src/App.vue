@@ -844,10 +844,10 @@ watch([graph, articleCache], () => {
 .hud {
   position: absolute;
   background: var(--surface-1);
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-panel);
   padding: var(--spacing-lg) var(--spacing-xl);
   z-index: var(--z-stage-notice);
   transition: opacity var(--dur-2) ease-out;

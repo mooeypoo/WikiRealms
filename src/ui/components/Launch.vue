@@ -199,7 +199,7 @@ function choose(title) {
 
 .launch__label {
   margin: 0 0 var(--spacing-sm);
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
