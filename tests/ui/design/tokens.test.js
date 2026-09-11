@@ -102,7 +102,7 @@ describe('design tokens', () => {
     expect(TOKENS).not.toMatch(/^\s*--breakpoint-[a-z]+\s*:/m)
   })
 
-  const LADDER = ['stage', 'stage-notice', 'stage-label', 'stage-portal', 'instruments', 'sheets', 'overlays', 'toast']
+  const LADDER = ['stage', 'stage-notice', 'stage-label', 'stage-portal', 'instruments', 'sheets', 'instruments-raised', 'overlays', 'toast']
 
   it('defines one z-index ladder, in order', () => {
     for (const layer of LADDER) expect(() => token(`z-${layer}`)).not.toThrow()

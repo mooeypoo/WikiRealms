@@ -192,14 +192,12 @@ describe('Ledger', () => {
 
     it('keeps the legend at peek, and holds back the rest of the actions', () => {
       // Peek is where you are and four readouts — Wikipedia / Share wait
-      // for open. The legend stays: it answers what the world means, which
-      // is the question peek is for. Compact sizing keeps it under the
-      // stats instead of across a hollow gap.
+      // for open. The legend stays as a quiet backup to the Helm control.
       mountLedger({ state: 'peek' })
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).toContain('Legend')
       expect(footer.textContent).not.toContain('View on Wikipedia')
       expect(footer.textContent).not.toContain('Share')
       expect(document.querySelector('.sheet--compact')).not.toBeNull()
@@ -210,7 +208,7 @@ describe('Ledger', () => {
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).toContain('Legend')
       expect(footer.textContent).toContain('View on Wikipedia')
       expect(footer.textContent).toContain('Share')
       const legend = footer.querySelector('.ledger__legend')
@@ -223,7 +221,7 @@ describe('Ledger', () => {
 
       const footer = document.querySelector('.ledger__footer')
       expect(footer).not.toBeNull()
-      expect(footer.textContent).toContain('What am I looking at?')
+      expect(footer.textContent).toContain('Legend')
       expect(footer.textContent).not.toContain('Share')
     })
 
@@ -734,7 +732,7 @@ describe('Ledger', () => {
     const wrapper = mountLedger()
 
     ;[...document.querySelectorAll('button')]
-      .find((button) => button.textContent.includes('What am I looking at?'))
+      .find((button) => button.textContent.includes('Legend'))
       .dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await wrapper.vm.$nextTick()
 

@@ -44,13 +44,13 @@ describe('InfoHub', () => {
   })
 
   it('renders every tab and marks the current one', async () => {
-    const wrapper = mountGuide({ currentTab: 'how-it-works' })
+    const wrapper = mountGuide({ currentTab: 'how-worlds' })
     const tabs = document.querySelectorAll('[role="tab"]')
 
     expect(tabs.length).toBeGreaterThan(1)
     const active = [...tabs].filter((tab) => tab.getAttribute('aria-selected') === 'true')
     expect(active).toHaveLength(1)
-    expect(active[0].textContent).toContain('How it works')
+    expect(active[0].textContent).toContain('How worlds form')
     wrapper.unmount()
   })
 
@@ -95,9 +95,9 @@ describe('InfoHub', () => {
   })
 
   it('renders the guide prose', () => {
-    const wrapper = mountGuide({ currentTab: 'what-is-this' })
+    const wrapper = mountGuide({ currentTab: 'start-here' })
 
-    expect(document.querySelector('.guide__prose').textContent).toContain('explorable landscape')
+    expect(document.querySelector('.guide__prose').textContent).toContain('place you can explore')
     wrapper.unmount()
   })
 })

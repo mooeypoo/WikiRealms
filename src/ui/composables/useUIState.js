@@ -11,7 +11,7 @@ export const useUIState = () => {
   // ===== MODAL / PANEL STATE =====
   const showInfoHub = ref(false);
   const showSettings = ref(false);
-  const currentInfoTab = ref('what-is-this'); // what-is-this, how-it-works, about, shortcuts
+  const currentInfoTab = ref('start-here'); // start-here, journey, how-worlds, about, shortcuts
 
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';

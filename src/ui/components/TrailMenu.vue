@@ -198,7 +198,7 @@ function pathFor(link) {
         </button>
         <button type="button" :disabled="!canShare" @click="$emit('share')">
           <Icon name="share" :size="15" />
-          <span>Postcard</span>
+          <span>Share trail</span>
         </button>
         <button type="button" :disabled="!canClear" @click="$emit('clear')">
           <Icon name="renew" :size="15" />

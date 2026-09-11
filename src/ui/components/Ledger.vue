@@ -626,10 +626,9 @@ watch(
       </template>
     </div>
 
-    <!-- Legend stays on every state — including peek and collapsed — so
-         "what does this mean" is never only a keyboard secret or a
-         deep-open action. Wikipedia / Share still wait for open+: peek
-         has no room for a row of actions above the legend. -->
+    <!-- Share opens a menu (realm vs trail). Legend on the Helm is the
+         primary key; this footer link is a quiet backup so peek/collapsed
+         still teaches the map without competing as a second cyan CTA. -->
     <template #footer>
       <div class="ledger__footer">
         <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
@@ -640,7 +639,7 @@ watch(
             </a>
             <button class="ledger__link" type="button" @click="$emit('share')">
               <Icon name="share" :size="13" />
-              Share
+              Share…
             </button>
           </div>
           <WikipediaFieldTask
@@ -654,7 +653,7 @@ watch(
         </div>
         <button class="ledger__legend" type="button" @click="$emit('legend')">
           <Icon name="legend" :size="13" />
-          What am I looking at?
+          Legend
         </button>
       </div>
     </template>
@@ -1126,12 +1125,13 @@ button.ledger__cells:hover .ledger__row-title {
   justify-content: center;
   gap: var(--spacing-sm);
   width: 100%;
-  min-height: var(--hit);
+  min-height: calc(var(--hit) * 0.85);
   padding: 0 var(--spacing-md);
-  border: 1px solid var(--edge-hair);
-  border-radius: var(--radius-md);
+  border: none;
+  border-top: 1px solid var(--edge-hair);
+  border-radius: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: 0.1em;
@@ -1139,7 +1139,6 @@ button.ledger__cells:hover .ledger__row-title {
 }
 
 .ledger__legend:hover {
-  border-color: var(--edge-accent);
-  background: var(--accent-wash);
+  color: var(--accent);
 }
 </style>

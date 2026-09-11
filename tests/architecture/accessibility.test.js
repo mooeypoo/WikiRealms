@@ -185,12 +185,14 @@ describe('the phone bottom-right', () => {
     expect(helm.attributes('style')).not.toContain('--helm-lift: 0px')
   })
 
-  it('stands the helm down once the sheet is most of the screen', async () => {
+  it('keeps the helm above an open sheet so Legend stays reachable', async () => {
     phone()
     localStorage.setItem('wikirealms:preferences', JSON.stringify({ ledgerState: 'full' }))
     const wrapper = await inAWorld()
 
-    expect(wrapper.find('.helm').exists()).toBe(false)
+    const helm = wrapper.find('.helm')
+    expect(helm.exists()).toBe(true)
+    expect(helm.attributes('style')).toContain('--helm-lift: 88dvh')
   })
 
   it('never lifts on a desktop, where they are on opposite sides', async () => {

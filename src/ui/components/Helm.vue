@@ -106,7 +106,7 @@ const SHAPES = [
   display: flex;
   gap: 3px;
   padding: 3px;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   backdrop-filter: blur(14px);
@@ -122,7 +122,7 @@ const SHAPES = [
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink-3);
+  color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   letter-spacing: var(--tracking-label);
@@ -135,8 +135,9 @@ const SHAPES = [
 
 .helm__shape--active {
   border-color: var(--edge-accent);
-  background: var(--accent-wash);
+  background: rgba(var(--accent-rgb), 0.28);
   color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
 }
 
 .helm__shape:disabled,
@@ -153,12 +154,12 @@ const SHAPES = [
   min-width: var(--hit);
   height: var(--hit);
   padding: 0;
-  border: 1px solid var(--edge-hair);
+  border: 1px solid var(--edge-line);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   backdrop-filter: blur(14px);
   box-shadow: var(--shadow-float);
-  color: var(--ink-2);
+  color: var(--ink-1);
 }
 
 .helm__legend {
@@ -180,8 +181,13 @@ const SHAPES = [
 
 /* Below md the labels go and the buttons square up: the control has to
    clear the Ledger sheet beside it, and an icon pair reads fine once the
-   two shapes are the only choice there is. */
+   two shapes are the only choice there is. Sit above the sheet in paint
+   order so the strip stays hittable when the ledger is open or full. */
 @media (max-width: 767px) {
+  .helm {
+    z-index: var(--z-instruments-raised);
+  }
+
   .helm__label {
     display: none;
   }

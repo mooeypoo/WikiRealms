@@ -45,10 +45,11 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
         <button
           class="scrim__trail"
           type="button"
-          :aria-label="`Your trail, ${trailLength} realms`"
+          :aria-label="`Your trail, ${trailLength} realms — path kept and shareable`"
+          title="Your trail — the path you have walked. Open to revisit stops or share it."
           @click="$emit('trail')"
         >
-          <Icon name="trail" :size="13" />
+          <Icon name="trail" :size="15" />
           <span class="scrim__trail-label">Your trail</span>
           <span class="scrim__trail-count tabular">{{ trailLength }}</span>
         </button>
@@ -187,20 +188,22 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
   flex: none;
   align-items: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 var(--spacing-sm);
-  border: 1px solid rgba(var(--trail-rgb), 0.35);
+  min-height: var(--hit);
+  height: auto;
+  padding: 0 var(--spacing-md);
+  border: 1px solid rgba(var(--trail-rgb), 0.55);
   border-radius: var(--radius-md);
-  background: transparent;
+  background: rgba(var(--trail-rgb), 0.12);
   color: var(--trail);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .scrim__trail:hover {
   background: var(--trail-wash);
+  border-color: rgba(var(--trail-rgb), 0.75);
 }
 
 .scrim__trail-label {
@@ -212,10 +215,12 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
   align-items: center;
   justify-content: center;
   min-width: 1.35em;
-  padding: 0 4px;
+  min-height: 1.35em;
+  padding: 0 5px;
   border-radius: var(--radius-sm);
-  background: rgba(var(--trail-rgb), 0.18);
+  background: rgba(var(--trail-rgb), 0.28);
   letter-spacing: 0;
+  font-weight: 600;
 }
 
 .scrim__travel,

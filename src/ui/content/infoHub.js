@@ -1,39 +1,50 @@
 export const infoHubContent = {
-  whatIsThis: {
-    id: 'what-is-this',
-    title: 'What is this?',
+  startHere: {
+    id: 'start-here',
+    title: 'Start here',
     icon: 'map',
     content: `
-      <p>WikiRealms turns a Wikipedia article's structure into an explorable landscape.</p>
-      <div class="info-hub__features">
-        <div class="info-hub__feature"><strong>Section peaks:</strong> top-level sections form mountain ranges; their subsections form smaller peaks within them.</div>
-        <div class="info-hub__feature"><strong>Peak size:</strong> a section's own text makes its peak taller, while its full subtree makes the surrounding range broader.</div>
-        <div class="info-hub__feature"><strong>Water:</strong> short articles have a higher sea level and less exposed land. Longer, more detailed articles lower the sea level and reveal more terrain.</div>
-        <div class="info-hub__feature"><strong>Portals:</strong> each distinct outbound Wikipedia link becomes a route to another article's world.</div>
-      </div>
-      <p>Search for any English Wikipedia article to generate its world.</p>
-      <p>To see what the colours and markers of a world mean, open the legend from
-      <em>Legend</em> beside the view controls, from <em>What am I looking at?</em>
-      in the Ledger, or press <kbd>L</kbd>.</p>
+      <p>WikiRealms turns a Wikipedia article into a place you can explore.</p>
+      <ul class="info-hub__bullets">
+        <li><strong>Peaks</strong> are sections. Taller means more of that section's own text; broader means a larger subsection tree.</li>
+        <li><strong>Water</strong> rises on short articles and falls as the article grows — stubs flood; detailed pages expose more land.</li>
+        <li><strong>Portals</strong> are outbound Wikipedia links. Step through one to travel to another article's world.</li>
+        <li><strong>Your trail</strong> remembers the path you walked. Open it from the top bar; share a realm or the whole trail from Share.</li>
+      </ul>
+      <p class="info-hub__callout">Open <em>Legend</em> beside the view controls (or press <kbd>L</kbd>) to see what the colours and markers mean.</p>
     `,
   },
-  howItWorks: {
-    id: 'how-it-works',
-    title: 'How it works',
+  journey: {
+    id: 'journey',
+    title: 'Journey',
+    icon: 'trail',
+    content: `
+      <p>Every portal you take is kept on your trail — a map of the part of Wikipedia you have walked.</p>
+      <ul class="info-hub__bullets">
+        <li>Use back and forward (or the arrow keys) to retrace steps without losing the branch you came from.</li>
+        <li>Open <em>Your trail</em> in the top bar to jump to any stop you have already visited.</li>
+        <li><em>Share this realm</em> sends a link to the world underfoot. <em>Share my trail</em> makes a postcard of the path.</li>
+      </ul>
+    `,
+  },
+  howWorlds: {
+    id: 'how-worlds',
+    title: 'How worlds form',
     icon: 'layers',
     content: `
-      <h3>How a world is formed</h3>
-      <ol>
-        <li><strong>Read the outline:</strong> the article's section tree is turned into a nested set of peaks. Top-level sections are separate mountain systems; child sections layer smaller summits on their parent range.</li>
-        <li><strong>Scale the terrain:</strong> each section's own prose controls its peak height. The total text in that section and its descendants controls the peak's radius.</li>
-        <li><strong>Add natural detail:</strong> seeded fractal noise roughens the structural terrain, so the same article always produces the same world while still looking organic.</li>
-        <li><strong>Set sea level:</strong> total article length shifts the effective waterline. Stub-like articles sit lower beneath the water; detailed articles expose more land.</li>
-        <li><strong>Paint the ground:</strong> elevation decides where the sea and the shore are. Everything above the shore is how well that section cites, compared against the article it belongs to: bare dunes for a section with no references at all, then dry ground, meadow, woodland and closed canopy as a section's citations per sentence rise above the article's own rate. An article that cites little stays dry throughout, however uneven it is.</li>
-        <li><strong>Weather the heights:</strong> rock and then snow come in gradually over the high ground, on top of whatever colour it already had rather than instead of it. So a well-sourced section's peak is damp, mossy stone and a poorly-sourced one's is dry scree, and trees climb further up the better-sourced range before giving out.</li>
-      </ol>
-      <h3>Portals and navigation</h3>
-      <p>Every distinct outbound link in the article's lead or sections can become a portal. Portals from a section are placed within that section's top-level mountain range; repeated links within one section are combined, while the same destination can appear in different ranges.</p>
-      <p>Choose a portal to travel to its article, then use the back and forward controls or arrow keys to retrace your route. Your trail is a map of the part of Wikipedia you have walked — share it as a postcard when you want someone else to start from where you are.</p>
+      <p>Each world is generated from the article's outline, prose length, and citations — the same article always produces the same place.</p>
+      <details class="info-hub__details">
+        <summary>How a world is built</summary>
+        <ol>
+          <li><strong>Read the outline:</strong> the section tree becomes nested peaks. Top-level sections are separate mountain systems.</li>
+          <li><strong>Scale the terrain:</strong> a section's own prose sets peak height; its full subtree sets how broad the range is.</li>
+          <li><strong>Add natural detail:</strong> seeded noise roughens the structure so the map looks organic without changing between visits.</li>
+          <li><strong>Set sea level:</strong> total article length shifts the waterline. Stubs sit lower under water; detailed articles expose more land.</li>
+          <li><strong>Paint the ground:</strong> above the shore, citation density vs the article's own rate decides bare dunes through closed canopy.</li>
+          <li><strong>Weather the heights:</strong> rock and snow layer over high ground on top of that colour, so well-sourced peaks read damp and mossy.</li>
+        </ol>
+      </details>
+      <p>Portals from a section sit in that section's top-level range. Repeated links in one section combine; the same destination can appear in different ranges.</p>
     `,
   },
   about: {
@@ -41,23 +52,21 @@ export const infoHubContent = {
     title: 'About',
     icon: 'mark',
     content: `
-      <h3>Created by Moriel Schottlender</h3>
-      <p>WikiRealms explores knowledge networks through procedural worlds and game design.</p>
-      <p>It asks the question: What would a Wikipedia article look like if it were a physical place you could explore? How would an article be represented through geography?</p>
-      <p>Now you can explore Wikipedia articles as landscapes, where each section is a peak and every link is a portal to another world. Barren slopes and flooded maps are invitations to grow the public record — citations and prose still live on Wikipedia.</p>
-      <ul>
+      <p>Created by <strong>Moriel Schottlender</strong> — an experiment in seeing knowledge networks as places.</p>
+      <p>What would a Wikipedia article look like as a landscape you could walk? Barren slopes and flooded maps are invitations to grow the public record; citations and prose still live on Wikipedia.</p>
+      <ul class="info-hub__links">
         <li><a href="https://github.com/mooeypoo/WikiRealms" target="_blank" rel="noopener noreferrer">Source code</a></li>
-        <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">Personal website</a></li>
+        <li><a href="https://moriel.tech" target="_blank" rel="noopener noreferrer">moriel.tech</a></li>
       </ul>
       <h3>Credits</h3>
       <p>
-        Fish models are from the
+        Fish models from the
         <a href="https://quaternius.com" target="_blank" rel="noopener noreferrer">Cute Fish Pack</a>
         by <a href="https://www.patreon.com/quaternius" target="_blank" rel="noopener noreferrer">Quaternius</a>
-        (Creative Commons CC0). Portal fountains use pieces from
+        (CC0). Portal fountains use
         <a href="https://kenney.nl/assets/fantasy-town-kit" target="_blank" rel="noopener noreferrer">Fantasy Town Kit</a>
         by <a href="https://kenney.nl" target="_blank" rel="noopener noreferrer">Kenney</a>
-        (also CC0).
+        (CC0).
       </p>
     `,
   },
