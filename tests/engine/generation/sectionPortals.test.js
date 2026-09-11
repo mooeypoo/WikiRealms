@@ -218,11 +218,12 @@ describe('generateSectionPortals', () => {
 
     // No two portals land on the same grid cell.
     expect(cells.size).toBe(portals.length)
-    // Spread by area, not piled at the summit: the set reaches outward
-    // and still clears the middle where the section marker sits.
-    expect(Math.max(...distances)).toBeGreaterThan(10 * 0.4)
+    // Spread by area, not piled at the summit: a full per-range budget
+    // reaches the outer band / foothills and still clears the middle.
+    expect(Math.max(...distances)).toBeGreaterThan(10 * 0.7)
     expect(Math.min(...distances)).toBeGreaterThan(0)
     for (const distance of distances) expect(distance).toBeLessThanOrEqual(outer + 0.6)
+    expect(Math.max(...distances)).toBeGreaterThan(10 * PORTAL_LIMITS.maxFootprintFraction * 0.85)
   })
 
   it('gives every linked section a portal before any section gets a second', () => {

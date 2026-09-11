@@ -216,7 +216,9 @@ lead links have `maxLeadPortals` of their own in the centre of the map; and
 a field of markers. Within those caps, selection round-robins over sections
 rather than document order, so every linked section places its first portal
 before any section places its second — otherwise a link-heavy opening section
-would swallow the entire budget.
+would swallow the entire budget. Crowded ranges also spill a little past the
+peak rim so the extra markers spread into the foothills instead of stacking
+near the summit.
 
 Citation counts remain on peaks (own and subtree totals), alongside the
 sentence counts and the derived `lushness` scalar, but are no longer

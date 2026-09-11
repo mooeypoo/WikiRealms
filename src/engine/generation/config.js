@@ -206,17 +206,20 @@ export const FEATURE_SOFT_CAPS = Object.freeze({
 /**
  * Outbound portal generation limits.
  *
- * Hybrid budget: each top-level mountain range (and the lead region) may
- * only keep a few portals so density tracks the map, and a global ceiling
- * keeps a sixteen-range article from becoming a field of markers. Selection
- * still round-robins across sections so a link-heavy opener cannot starve
- * later ranges within those caps.
+ * Hybrid budget: each top-level mountain range may keep a small handful of
+ * portals (roomy enough for foothills, not a carpet), the lead region has
+ * its own smaller share, and a global ceiling keeps a sixteen-range article
+ * from becoming a field of markers. Selection still round-robins across
+ * sections so a link-heavy opener cannot starve later ranges within those
+ * caps. Placement fans by area and starts spilling past the rim once a
+ * range is busy, so the extra markers use the foothills rather than
+ * stacking near the summit.
  */
 export const PORTAL_LIMITS = Object.freeze({
   /** World-wide ceiling — render/readability budget. */
   maxPortals: 36,
   /** Cap per top-level section / mountain range (subsections share it). */
-  maxPerTopLevelSection: 3,
+  maxPerTopLevelSection: 5,
   /** Cap for lead links, which sit in the central region rather than a peak. */
   maxLeadPortals: 3,
   // Portals sit between these fractions of their region's footprint
@@ -224,12 +227,14 @@ export const PORTAL_LIMITS = Object.freeze({
   // enough in to still read as "inside this section's land".
   minFootprintFraction: 0.22,
   maxFootprintFraction: 0.95,
-  // Link-heavy sections may spill slightly past the peak rim so portals
-  // stay pickable and leave summit / subsection markers clear. Outer
-  // fraction = maxFootprintFraction + overflow, capped by maxOverflowFraction.
-  overflowStartCount: 4,
-  overflowPerExtraPortal: 0.05,
-  maxOverflowFraction: 0.4,
+  // Crowded ranges spill slightly past the peak rim so portals stay
+  // pickable and leave summit / subsection markers clear. Starts early
+  // enough that a full per-range budget fans into the foothills rather
+  // than clustering mid-slope. Outer = maxFootprintFraction + overflow,
+  // capped by maxOverflowFraction.
+  overflowStartCount: 2,
+  overflowPerExtraPortal: 0.08,
+  maxOverflowFraction: 0.45,
   // Lead-section links belong to the article as a whole rather than to
   // any one mountain, so they get a central region sized to this
   // fraction of the smaller grid axis.
