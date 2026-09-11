@@ -139,9 +139,9 @@ describe('useTraversal', () => {
     clearTrail()
 
     expect(current.value).toBe('Rings of Saturn')
-    expect(Object.keys(graph.value.realms)).toEqual(['r:Rings of Saturn'])
+    expect(Object.keys(graph.value.realms)).toEqual(['r:en:Rings of Saturn'])
     expect(graph.value.edges).toEqual([])
-    expect(graph.value.history).toEqual(['r:Rings of Saturn'])
+    expect(graph.value.history).toEqual(['r:en:Rings of Saturn'])
   })
 
   it('restore() hydrates state directly, bypassing navigateTo push semantics', () => {

@@ -32,6 +32,8 @@ function update(key, value) {
 
 function reset() {
   emit('update:preferences', {
+    language: 'en',
+    showAllWikipedias: false,
     worldShape: 'flat',
     rendering: 'auto',
     travelAnimation: true,
@@ -54,6 +56,24 @@ function reset() {
         </button>
       </div>
     </template>
+
+    <fieldset class="settings__group">
+      <legend>Wikipedia</legend>
+      <label class="settings__row">
+        <span>
+          <strong>Show all Wikipedias in search</strong>
+          <small>
+            Language is chosen when you search. Turn this on to list every open
+            edition in that picker, not only the featured set.
+          </small>
+        </span>
+        <input
+          type="checkbox"
+          :checked="preferences.showAllWikipedias === true"
+          @change="update('showAllWikipedias', $event.target.checked)"
+        />
+      </label>
+    </fieldset>
 
     <fieldset class="settings__group">
       <legend>Rendering</legend>
@@ -273,6 +293,18 @@ function reset() {
   background: rgba(var(--accent-rgb), 0.28);
   color: var(--accent-ink);
   box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+.settings__select {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 var(--spacing-md);
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--text-sm);
 }
 
 .settings__reset {

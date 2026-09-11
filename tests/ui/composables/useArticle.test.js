@@ -15,7 +15,7 @@ describe('useArticle', () => {
 
     await loadArticle('Einstein')
 
-    expect(fetchFn).toHaveBeenCalledWith('Einstein')
+    expect(fetchFn).toHaveBeenCalledWith('Einstein', undefined)
     expect(status.value).toBe('success')
     expect(article.value).toEqual({ title: 'Einstein' })
   })

@@ -6,6 +6,7 @@ import {
 import { fetchWikipediaSectionsHtml } from './wikipediaSectionsAdapter.js'
 import { fetchArticlePageviews } from './wikipediaPageviewsAdapter.js'
 import { parseSectionTree } from '../core/article/parseSectionTree.js'
+import { DEFAULT_LANGUAGE, getEdition, normalizeLanguage } from '../core/i18n/wikipediaEditions.js'
 import { wikimediaFetchInit } from './wikimediaFetch.js'
 
 export class WikipediaArticleError extends Error {
@@ -19,10 +20,10 @@ export class WikipediaArticleError extends Error {
 export { ArticleNotFoundError }
 
 /**
- * Fetches and normalizes a single English Wikipedia article by title,
- * resolving its identity and latest revision information, and attaching
- * its parsed section tree (article.sections) for section-driven world
- * generation — see docs/generation.md.
+ * Fetches and normalizes a single Wikipedia article by title for a given
+ * language edition, resolving its identity and latest revision information,
+ * and attaching its parsed section tree (article.sections) for section-driven
+ * world generation — see docs/generation.md.
  *
  * Three requests: the action API (identity/revision/categories/links),
  * the REST `with_html` endpoint (section structure), and AQS pageviews
@@ -30,16 +31,20 @@ export { ArticleNotFoundError }
  * outage never blocks arriving in a realm.
  *
  * @param {string} title
- * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal, language?: string }} [options]
  * @returns {Promise<object>} Article
  */
-export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal } = {}) {
+export async function fetchWikipediaArticle(
+  title,
+  { fetchImpl = fetch, signal, language = DEFAULT_LANGUAGE } = {},
+) {
   const trimmed = title?.trim() ?? ''
   if (!trimmed) {
     throw new WikipediaArticleError('An article title is required')
   }
 
-  const url = buildArticleQueryUrl(trimmed)
+  const edition = normalizeLanguage(language)
+  const url = buildArticleQueryUrl(trimmed, { language: edition })
 
   let response
   try {
@@ -58,15 +63,17 @@ export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal }
   }
 
   const raw = await response.json()
-  const article = normalizeArticleResponse(raw)
+  const article = normalizeArticleResponse(raw, { language: edition })
+  const editionMeta = getEdition(edition)
+  const sentenceModel = editionMeta.sentenceModel
 
   // Sections are required for terrain; pageviews are atmosphere. Run them
   // together, then only hard-fail if the section tree did not arrive.
   const [sectionsResult, pageviews] = await Promise.all([
-    fetchWikipediaSectionsHtml(article.title, { fetchImpl, signal })
+    fetchWikipediaSectionsHtml(article.title, { fetchImpl, signal, language: edition })
       .then((html) => ({ ok: true, html }))
       .catch((error) => ({ ok: false, error })),
-    fetchArticlePageviews(article.title, { fetchImpl, signal, language: article.language }),
+    fetchArticlePageviews(article.title, { fetchImpl, signal, language: edition }),
   ])
 
   if (!sectionsResult.ok) {
@@ -80,7 +87,8 @@ export async function fetchWikipediaArticle(title, { fetchImpl = fetch, signal }
 
   return {
     ...article,
+    lushnessSupport: editionMeta.lushnessSupport,
     pageviews,
-    sections: parseSectionTree(sectionsResult.html),
+    sections: parseSectionTree(sectionsResult.html, { language: edition, sentenceModel }),
   }
 }

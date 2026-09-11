@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "og:render": "node scripts/og/render.mjs",
+    "editions:update": "node scripts/update-wikipedia-editions.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm test && npm run build",

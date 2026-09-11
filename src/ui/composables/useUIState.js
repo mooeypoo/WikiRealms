@@ -16,6 +16,12 @@ export const useUIState = () => {
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';
   const preferences = reactive({
+    // Wikipedia language edition to search and load (e.g. 'en', 'de', 'he').
+    // The seeded catalog lists every open Wikipedia; the picker may show a
+    // featured subset until the viewer opts into all editions.
+    language: 'en',
+    // When false, the language picker lists featured editions only.
+    showAllWikipedias: false,
     // How the 3D view presents the world: 'flat' (a map you fly over) or
     // 'sphere' (a planet you orbit). Purely a rendering choice — both
     // views show the identical generated world, so switching never
@@ -72,6 +78,13 @@ export const useUIState = () => {
         // a future build, or hand-edited storage) silently disabling the
         // 3D view — fall back to the flat map.
         if (parsed.worldShape !== 'flat' && parsed.worldShape !== 'sphere') delete parsed.worldShape;
+        if (typeof parsed.language === 'string') {
+          // Unknown codes fall back at use-sites via normalizeLanguage;
+          // keep the string so a later catalog refresh can revive it.
+        } else {
+          delete parsed.language;
+        }
+        if (typeof parsed.showAllWikipedias !== 'boolean') delete parsed.showAllWikipedias;
         if (!['high', 'auto', 'low'].includes(parsed.rendering)) delete parsed.rendering;
         if (!['collapsed', 'peek', 'open', 'full'].includes(parsed.ledgerState)) delete parsed.ledgerState;
         if (typeof parsed.travelAnimation !== 'boolean') delete parsed.travelAnimation;

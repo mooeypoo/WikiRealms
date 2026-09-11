@@ -476,7 +476,10 @@ watch(
     <!-- Minimised: a bar that names where you are and takes you back in. -->
     <template #collapsed>
       <button class="ledger__restore" type="button" @click="setState('peek')">
-        <span class="ledger__restore-title">{{ article.title }}</span>
+        <span class="ledger__restore-title">
+          <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+          {{ article.title }}
+        </span>
         <span class="ledger__restore-stats tabular">
           {{ stats[0].value }} sections · {{ stats[2].value }} portals
         </span>
@@ -487,9 +490,12 @@ watch(
     <template #header>
       <div class="ledger__head" :class="{ 'ledger__head--clear-helm': clearHelm }">
         <div class="ledger__identity">
-          <h2 class="ledger__title">{{ article.title }}</h2>
+          <h2 class="ledger__title">
+            <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+            {{ article.title }}
+          </h2>
           <p class="ledger__origin tabular">
-            EN.WIKIPEDIA · REV {{ article.latestRevisionId }}
+            {{ (article.language || 'en').toUpperCase() }}.WIKIPEDIA · REV {{ article.latestRevisionId }}
           </p>
         </div>
 
@@ -736,7 +742,10 @@ watch(
 }
 
 .ledger__restore-title {
+  display: inline-flex;
   flex: 1;
+  align-items: baseline;
+  gap: 0;
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-md);
@@ -764,6 +773,17 @@ watch(
 
 .ledger__identity {
   min-width: 0;
+}
+
+.ledger__lang {
+  flex: none;
+  margin-right: var(--spacing-sm);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  vertical-align: 0.05em;
 }
 
 .ledger__title {

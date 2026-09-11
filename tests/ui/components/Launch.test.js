@@ -27,9 +27,14 @@ describe('Launch', () => {
   it('offers a handful to begin from, not the whole shelf', () => {
     const wrapper = mount(Launch)
     const chips = wrapper.findAll('.launch__realms button')
+    const firstTitle = chips[0]
+      .find('strong')
+      .text()
+      .replace(/^\s*EN\s+/, '')
+      .trim()
 
     expect(chips).toHaveLength(SUGGESTION_COUNT)
-    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(chips[0].find('strong').text())
+    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(firstTitle)
   })
 
   it('shows somewhere new each time it is opened', () => {
@@ -45,24 +50,35 @@ describe('Launch', () => {
     expect(seen.size).toBeGreaterThan(SUGGESTION_COUNT)
   })
 
-  it('starts a journey from a suggestion', async () => {
+  it('starts a journey from a suggestion on English Wikipedia', async () => {
     const wrapper = mount(Launch)
     const chosen = wrapper.findAll('.launch__realms button')[2]
 
     await chosen.trigger('click')
 
+    expect(wrapper.emitted('select')[0][0]).toMatchObject({
+      title: expect.any(String),
+      language: 'en',
+    })
     expect(chosen.text()).toContain(wrapper.emitted('select')[0][0].title)
   })
 
   it('picks somewhere for the undecided, from beyond what is on screen', async () => {
     const wrapper = mount(Launch)
-    const shown = wrapper.findAll('.launch__realms button').map((chip) => chip.find('strong').text())
+    const shown = wrapper.findAll('.launch__realms button').map((chip) =>
+      chip
+        .find('strong')
+        .text()
+        .replace(/^\s*EN\s+/, '')
+        .trim(),
+    )
 
     await wrapper.findAll('.launch__extra')[0].trigger('click')
 
-    const picked = wrapper.emitted('select')[0][0].title
-    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(picked)
-    expect(shown).not.toContain(picked)
+    const picked = wrapper.emitted('select')[0][0]
+    expect(picked.language).toBe('en')
+    expect(CURATED_REALMS.map((realm) => realm.title)).toContain(picked.title)
+    expect(shown).not.toContain(picked.title)
   })
 
   it('offers the guide, for someone who wants to know first', async () => {

@@ -11,10 +11,13 @@
  * composable, since it is a browser concern rather than a domain one.
  */
 
-const PARAM = 'realm'
+import { DEFAULT_LANGUAGE, isKnownEdition, normalizeLanguage } from '../core/i18n/wikipediaEditions.js'
+
+const REALM_PARAM = 'realm'
+const LANG_PARAM = 'lang'
 
 /**
- * Reads the realm from a URL.
+ * Reads the realm title from a URL.
  *
  * `article` is also accepted because that is what the broken share links
  * said. They never worked, so nobody can be relying on the behaviour — but
@@ -23,14 +26,49 @@ const PARAM = 'realm'
  */
 export function readRealm(search = window.location.search) {
   const params = new URLSearchParams(search)
-  const title = params.get(PARAM) ?? params.get('article')
+  const title = params.get(REALM_PARAM) ?? params.get('article')
   return title?.trim() || null
 }
 
-/** The canonical link to a realm, for sharing. */
-export function realmUrl(title, origin = window.location.origin, pathname = window.location.pathname) {
-  const params = new URLSearchParams({ [PARAM]: title })
-  return `${origin}${pathname}?${params.toString()}`
+/**
+ * Reads the Wikipedia language edition from a URL.
+ * Unknown or missing codes return null so the caller can fall back to prefs.
+ */
+export function readLanguage(search = window.location.search) {
+  const params = new URLSearchParams(search)
+  const code = params.get(LANG_PARAM)?.trim()
+  if (!code || !isKnownEdition(code)) return null
+  return code
+}
+
+/**
+ * The canonical link to a realm, for sharing.
+ *
+ * Call as `realmUrl(title, { language, origin, pathname })`.
+ * Older call sites used positional `(title, origin, pathname)` — still accepted.
+ *
+ * @param {string} title
+ * @param {string | { language?: string, origin?: string, pathname?: string }} [originOrOptions]
+ * @param {string} [pathname]
+ */
+export function realmUrl(title, originOrOptions, pathname) {
+  let language = DEFAULT_LANGUAGE
+  let origin = typeof window !== 'undefined' ? window.location.origin : ''
+  let path = typeof window !== 'undefined' ? window.location.pathname : '/'
+
+  if (typeof originOrOptions === 'string') {
+    origin = originOrOptions
+    path = pathname ?? '/'
+  } else if (originOrOptions && typeof originOrOptions === 'object') {
+    language = originOrOptions.language ?? language
+    origin = originOrOptions.origin ?? origin
+    path = originOrOptions.pathname ?? path
+  }
+
+  const params = new URLSearchParams({ [REALM_PARAM]: title })
+  const code = normalizeLanguage(language)
+  if (code !== DEFAULT_LANGUAGE) params.set(LANG_PARAM, code)
+  return `${origin}${path}?${params.toString()}`
 }
 
 /**
@@ -40,20 +78,30 @@ export function realmUrl(title, origin = window.location.origin, pathname = wind
  * return to that exact point in the journey, rather than re-deriving one
  * from the title — which would be ambiguous the moment a realm is visited
  * twice by different routes.
+ *
+ * @param {string|null} title
+ * @param {string|null} nodeId
+ * @param {{ replace?: boolean, language?: string }} [options]
  */
-export function pushRealm(title, nodeId, { replace = false } = {}) {
+export function pushRealm(title, nodeId, { replace = false, language = DEFAULT_LANGUAGE } = {}) {
   if (typeof history === 'undefined') return
-  const url = title ? `?${new URLSearchParams({ [PARAM]: title })}` : window.location.pathname
+  const code = normalizeLanguage(language)
+  let url = window.location.pathname
+  if (title) {
+    const params = new URLSearchParams({ [REALM_PARAM]: title })
+    if (code !== DEFAULT_LANGUAGE) params.set(LANG_PARAM, code)
+    url = `?${params.toString()}`
+  }
   const method = replace ? 'replaceState' : 'pushState'
-  history[method]({ nodeId, title }, '', url)
+  history[method]({ nodeId, title, language: code }, '', url)
 }
 
 /**
- * @param {(state: {nodeId?: string, title?: string}, realm: string|null) => void} handler
+ * @param {(state: {nodeId?: string, title?: string, language?: string}, realm: string|null, language: string|null) => void} handler
  * @returns {() => void} unsubscribe
  */
 export function onHistoryPop(handler) {
-  const listener = (event) => handler(event.state ?? {}, readRealm())
+  const listener = (event) => handler(event.state ?? {}, readRealm(), readLanguage())
   window.addEventListener('popstate', listener)
   return () => window.removeEventListener('popstate', listener)
 }

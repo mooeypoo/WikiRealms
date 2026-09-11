@@ -6,9 +6,17 @@ import { searchWikipediaTitles } from '../../adapters/wikipediaSearchAdapter.js'
  * the Wikipedia OpenSearch adapter). Debounces input changes before
  * triggering a search, and tracks loading/error status.
  *
- * @param {{ searchFn?: typeof searchWikipediaTitles, debounceMs?: number }} [options]
+ * @param {{
+ *   searchFn?: typeof searchWikipediaTitles,
+ *   debounceMs?: number,
+ *   language?: string | (() => string),
+ * }} [options]
  */
-export function useArticleSearch({ searchFn = searchWikipediaTitles, debounceMs = 250 } = {}) {
+export function useArticleSearch({
+  searchFn = searchWikipediaTitles,
+  debounceMs = 250,
+  language = 'en',
+} = {}) {
   const query = ref('')
   const results = ref([])
   const status = ref('idle') // 'idle' | 'loading' | 'success' | 'error'
@@ -16,6 +24,10 @@ export function useArticleSearch({ searchFn = searchWikipediaTitles, debounceMs 
 
   let debounceTimer = null
   let requestToken = 0
+
+  function resolveLanguage() {
+    return typeof language === 'function' ? language() : language
+  }
 
   async function runSearch(value) {
     const trimmed = value.trim()
@@ -31,7 +43,7 @@ export function useArticleSearch({ searchFn = searchWikipediaTitles, debounceMs 
     errorMessage.value = null
 
     try {
-      const found = await searchFn(trimmed)
+      const found = await searchFn(trimmed, { language: resolveLanguage() })
       if (token !== requestToken) return // a newer search superseded this one
       results.value = found
       status.value = 'success'

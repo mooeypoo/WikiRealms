@@ -2,7 +2,8 @@
  * Trail postcard model — structured expedition letter for text share and
  * the graphic postcard surface. Pure; URL building is injected.
  */
-import { currentTitle, realmsOf } from '../../core/traversal/visitGraph.js'
+import { currentLanguage, currentTitle, realmsOf } from '../../core/traversal/visitGraph.js'
+import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
 
 const MAX_PATH_TITLES = 8
 
@@ -70,7 +71,7 @@ export function postcardStops(titles, maxTitles = MAX_PATH_TITLES) {
 
 /**
  * @param {import('../../core/traversal/visitGraph.js').Journey | null | undefined} journey
- * @param {{ realmUrl: (title: string) => string }} options
+ * @param {{ realmUrl: (title: string, options?: { language?: string }) => string }} options
  * @returns {TrailPostcardModel | null}
  */
 export function buildTrailPostcard(journey, options) {
@@ -81,7 +82,8 @@ export function buildTrailPostcard(journey, options) {
   }
 
   const here = currentTitle(journey) ?? path[path.length - 1]
-  const url = options.realmUrl(here)
+  const language = currentLanguage(journey) ?? DEFAULT_LANGUAGE
+  const url = options.realmUrl(here, { language })
   const realmCount = realmsOf(journey).length
   const portalCount = journey.edges?.length ?? 0
   const stops = postcardStops(path)

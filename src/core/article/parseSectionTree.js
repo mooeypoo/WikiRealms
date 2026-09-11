@@ -1,6 +1,7 @@
-import { EXCLUDED_SECTION_TITLES } from '../../engine/generation/config.js'
+import { isExcludedSectionTitle } from './excludedSections.js'
 import { CITATION_MARKER_SELECTOR } from './citationMarkers.js'
 import { countSentenceUnits } from './countSentences.js'
+import { DEFAULT_LANGUAGE } from '../i18n/wikipediaEditions.js'
 
 const HEADING_SELECTOR = ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6'
 const NON_PROSE_SELECTOR = '.mw-references-wrap, .reflist, .navbox, .infobox, style, script'
@@ -69,9 +70,10 @@ function citationDensity(citationCount, ownSize) {
  * peak height, so it must stay a count of characters an author wrote.
  *
  * @param {Element} sectionEl
+ * @param {{ sentenceModel?: string }} [options]
  * @returns {{ text: string, ownSize: number, sentenceCount: number }}
  */
-function measureOwnText(sectionEl) {
+function measureOwnText(sectionEl, { sentenceModel = 'latin-punct' } = {}) {
   const clone = sectionEl.cloneNode(true)
   for (const el of clone.querySelectorAll(NON_PROSE_SELECTOR)) {
     el.remove()
@@ -83,15 +85,15 @@ function measureOwnText(sectionEl) {
   return {
     text,
     ownSize: text.length,
-    sentenceCount: countSentenceUnits(clone, text.length),
+    sentenceCount: countSentenceUnits(clone, text.length, { sentenceModel }),
   }
 }
 
-function isInsideExcludedSection(sectionEl) {
+function isInsideExcludedSection(sectionEl, language) {
   let parent = sectionEl.parentElement?.closest('section')
   while (parent) {
     const heading = parent.querySelector(HEADING_SELECTOR)
-    if (heading && EXCLUDED_SECTION_TITLES.includes(heading.textContent.trim().toLowerCase())) return true
+    if (heading && isExcludedSectionTitle(heading.textContent, language)) return true
     parent = parent.parentElement?.closest('section')
   }
   return false
@@ -165,11 +167,13 @@ function countTreeCitations(nodes) {
  * Pure and deterministic: the same HTML always produces the same tree.
  *
  * @param {string} html
- * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number, sentenceCount: number }}
+ * @param {{ language?: string, sentenceModel?: string }} [options]
+ * @returns {{ lead: object, sections: object[], totalSize: number, citationCount: number, sentenceCount: number, language: string, sentenceModel: string }}
  */
-export function parseSectionTree(html) {
+export function parseSectionTree(html, { language = DEFAULT_LANGUAGE, sentenceModel = 'latin-punct' } = {}) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const articleSections = doc.body.querySelectorAll('section')
+  const measureOptions = { sentenceModel }
 
   let lead = { ownSize: 0, links: [], citationCount: 0, citationDensity: 0 }
   const flatSections = []
@@ -179,7 +183,7 @@ export function parseSectionTree(html) {
 
     if (!heading) {
       // The lead section (before the first heading) has no heading of its own.
-      const { ownSize, sentenceCount } = measureOwnText(sectionEl)
+      const { ownSize, sentenceCount } = measureOwnText(sectionEl, measureOptions)
       const citations = countCitations(sectionEl)
       lead = {
         ownSize,
@@ -193,9 +197,9 @@ export function parseSectionTree(html) {
     }
 
     const title = heading.textContent.trim()
-  if (EXCLUDED_SECTION_TITLES.includes(title.toLowerCase()) || isInsideExcludedSection(sectionEl)) continue
+    if (isExcludedSectionTitle(title, language) || isInsideExcludedSection(sectionEl, language)) continue
 
-    const { ownSize, sentenceCount } = measureOwnText(sectionEl)
+    const { ownSize, sentenceCount } = measureOwnText(sectionEl, measureOptions)
     const citations = countCitations(sectionEl)
     flatSections.push({
       title,
@@ -223,5 +227,13 @@ export function parseSectionTree(html) {
   const sentenceCount =
     (lead.sentenceCount ?? 0) + sections.reduce((sum, section) => sum + section.subtreeSentenceCount, 0)
 
-  return { lead, sections, totalSize: lead.ownSize + sectionsTotal, citationCount, sentenceCount }
+  return {
+    lead,
+    sections,
+    totalSize: lead.ownSize + sectionsTotal,
+    citationCount,
+    sentenceCount,
+    language,
+    sentenceModel,
+  }
 }

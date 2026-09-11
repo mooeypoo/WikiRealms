@@ -24,13 +24,20 @@ import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
 import { useKeymap } from './ui/design/useKeymap.js'
-import { onHistoryPop, pushRealm, readRealm } from './adapters/urlState.js'
+import { onHistoryPop, pushRealm, readLanguage, readRealm } from './adapters/urlState.js'
 import { supportsWebGL } from './ui/rendering/webglSupport.js'
 import { useViewport } from './ui/design/useViewport.js'
 import { useTravel } from './ui/design/useTravel.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 import { APP_NAME } from './appInfo.js'
+import {
+  articleCacheKey,
+  DEFAULT_LANGUAGE,
+  getEdition,
+  normalizeLanguage,
+} from './core/i18n/wikipediaEditions.js'
+import { journeyForLanguage } from './core/traversal/visitGraph.js'
 
 // three.js is heavy; only load it once a 3D view is actually rendered.
 const WorldView3D = defineAsyncComponent(() => import('./ui/components/WorldView3D.vue'))
@@ -46,6 +53,7 @@ const {
 const {
   graph,
   current,
+  currentLanguage,
   currentNodeId,
   canGoBack,
   canGoForward,
@@ -108,6 +116,20 @@ const announcement = computed(() => {
 
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
+/** Active Wikipedia edition: preference, overridden by the realm underfoot. */
+const activeLanguage = computed(() =>
+  normalizeLanguage(currentLanguage.value ?? preferences.language ?? DEFAULT_LANGUAGE),
+)
+
+/** Trail UI shows one language at a time so editions do not mix on the map. */
+const trailGraph = computed(() => journeyForLanguage(graph.value, activeLanguage.value))
+
+function applyDocumentLanguage(code) {
+  const edition = getEdition(code)
+  document.documentElement.lang = edition.bcp47 || edition.code
+  document.documentElement.dir = edition.dir
+}
+
 /**
  * ONE view axis (docs/ux-vision.md D1). Planet and Flat are two renderings
  * of the identical world; switching never re-rolls terrain.
@@ -138,9 +160,12 @@ const rendersInWebGL = computed(() => {
 function onSelect(result) {
   isSearchOpen.value = false
   showLaunch.value = false
-  // A search is not travel: it starts a journey rather than pretending the
-  // result was reached from wherever the viewer happened to be standing.
-  jumpTo(result.title)
+  // Language rides with the choice: the search field's edition, or English
+  // for curated suggestions. Remember it only as the next search default —
+  // it does not retitle the realm already underfoot until we jump.
+  const language = result.language ?? preferences.language ?? DEFAULT_LANGUAGE
+  if (language !== preferences.language) updatePreferences({ language })
+  jumpTo(result.title, { language })
 }
 
 function onPortalClick({ portal, anchor }) {
@@ -202,7 +227,7 @@ function confirmTravel(portal) {
     onDive: () => worldViewRef.value?.diveTo?.(portal),
     // Behind the wash: navigateTo triggers the fetch and the ~120ms
     // synchronous generate, which would stutter anything still moving.
-    onArrive: () => navigateTo(portal.targetArticleId),
+    onArrive: () => navigateTo(portal.targetArticleId, { language: activeLanguage.value }),
   })
 }
 
@@ -258,7 +283,7 @@ function toggleHideHud() {
  * Everywhere visited, not the depth of the branch you happen to be on: the
  * badge and the panel it opens should be counting the same thing.
  */
-const trailSize = computed(() => Object.keys(graph.value.realms).length)
+const trailSize = computed(() => Object.keys(trailGraph.value.realms).length)
 
 function toggleLegend() {
   if (showLegend.value) {
@@ -321,7 +346,7 @@ function onShareClick() {
 function onShareRealm() {
   showShareMenu.value = false
   if (article.value?.title) {
-    shareArticle(article.value.title)
+    shareArticle(article.value.title, { language: article.value.language ?? activeLanguage.value })
   }
 }
 
@@ -343,15 +368,17 @@ function onTrailPostcard() {
  */
 function onTrailClear() {
   const title = current.value
+  const language = activeLanguage.value
+  const key = title ? articleCacheKey(language, title) : null
   clearTrail()
-  if (title && articleCache.value[title]) {
-    articleCache.value = { [title]: articleCache.value[title] }
+  if (key && articleCache.value[key]) {
+    articleCache.value = { [key]: articleCache.value[key] }
   } else {
     articleCache.value = {}
   }
   // Replace the address-bar entry so Back does not try to replay a graph
   // we just erased (unknown node ids already fall through to jumpTo).
-  pushRealm(current.value, currentNodeId.value, { replace: true })
+  pushRealm(current.value, currentNodeId.value, { replace: true, language })
   showToast('Trail cleared')
 }
 
@@ -430,15 +457,25 @@ onMounted(() => {
 
   // A shared link wins over the restored session: someone following one
   // means to land where it points, not where they last were.
+  const sharedLanguage = readLanguage()
   const sharedRealm = readRealm()
-  if (sharedRealm && sharedRealm !== current.value) jumpTo(sharedRealm)
+  if (sharedLanguage) updatePreferences({ language: sharedLanguage })
+  const language = normalizeLanguage(sharedLanguage ?? preferences.language ?? DEFAULT_LANGUAGE)
+  applyDocumentLanguage(language)
+  if (sharedRealm && (sharedRealm !== current.value || language !== currentLanguage.value)) {
+    jumpTo(sharedRealm, { language })
+  }
 
-  pushRealm(current.value, currentNodeId.value, { replace: true })
+  pushRealm(current.value, currentNodeId.value, {
+    replace: true,
+    language: currentLanguage.value ?? language,
+  })
 
-  stopHistoryListener = onHistoryPop((state, realm) => {
+  stopHistoryListener = onHistoryPop((state, realm, lang) => {
     replayingHistory = true
+    if (lang) updatePreferences({ language: lang })
     if (state.nodeId && graph.value.realms[state.nodeId]) goToNode(state.nodeId)
-    else if (realm) jumpTo(realm)
+    else if (realm) jumpTo(realm, { language: lang ?? preferences.language })
     replayingHistory = false
   })
 })
@@ -449,23 +486,31 @@ onUnmounted(() => stopHistoryListener?.())
 // back button retraces the journey instead of leaving the app.
 watch(currentNodeId, (nodeId) => {
   if (replayingHistory) return
-  pushRealm(current.value, nodeId)
+  pushRealm(current.value, nodeId, { language: currentLanguage.value ?? preferences.language })
 })
+
+watch(
+  activeLanguage,
+  (code) => {
+    applyDocumentLanguage(code)
+  },
+)
 
 watch(
   current,
   (title) => {
     document.title = title ? `${title} · ${APP_NAME}` : APP_NAME
-    if (title) loadArticle(title)
+    if (title) loadArticle(title, { language: currentLanguage.value ?? preferences.language })
   },
   { immediate: true },
 )
 
 watch(article, (newArticle) => {
   if (newArticle) {
-    const previous = articleCache.value[newArticle.title]
+    const key = articleCacheKey(newArticle.language ?? DEFAULT_LANGUAGE, newArticle.title)
+    const previous = articleCache.value[key]
     isStale.value = previous ? isWorldStale(previous.latestRevisionId, newArticle.latestRevisionId) : false
-    articleCache.value = { ...articleCache.value, [newArticle.title]: newArticle }
+    articleCache.value = { ...articleCache.value, [key]: newArticle }
     buildWorld(newArticle)
   } else {
     clearWorld()
@@ -608,12 +653,22 @@ watch([graph, articleCache], () => {
     <Launch
       v-if="!current || showLaunch"
       :dismissible="Boolean(current)"
+      :language="preferences.language ?? 'en'"
+      :show-all-wikipedias="preferences.showAllWikipedias === true"
       @select="onSelect"
+      @update:language="updatePreferences({ language: $event })"
       @guide="showInfoHub = true"
       @close="showLaunch = false"
     />
 
-    <CommandPalette :show="isSearchOpen" @select="onSelect" @close="isSearchOpen = false" />
+    <CommandPalette
+      :show="isSearchOpen"
+      :language="preferences.language ?? 'en'"
+      :show-all-wikipedias="preferences.showAllWikipedias === true"
+      @select="onSelect"
+      @update:language="updatePreferences({ language: $event })"
+      @close="isSearchOpen = false"
+    />
 
     <ToolsMenu
       :show="showTools"
@@ -627,7 +682,7 @@ watch([graph, articleCache], () => {
 
     <TrailMenu
       :show="showTrail"
-      :graph="graph"
+      :graph="trailGraph"
       :can-share="Boolean(article)"
       @select="onTrailSelect"
       @home="onHomeClick"
@@ -650,7 +705,7 @@ watch([graph, articleCache], () => {
 
     <TrailPostcard
       :show="showTrailPostcard"
-      :graph="graph"
+      :graph="trailGraph"
       @toast="showToast"
       @close="showTrailPostcard = false"
     />

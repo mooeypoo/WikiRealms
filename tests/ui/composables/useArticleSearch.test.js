@@ -31,7 +31,7 @@ describe('useArticleSearch', () => {
     await vi.advanceTimersByTimeAsync(200)
 
     expect(searchFn).toHaveBeenCalledTimes(1)
-    expect(searchFn).toHaveBeenCalledWith('Ein')
+    expect(searchFn).toHaveBeenCalledWith('Ein', { language: 'en' })
     expect(status.value).toBe('success')
   })
 

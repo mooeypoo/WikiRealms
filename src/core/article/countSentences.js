@@ -72,8 +72,16 @@ const CHARS_PER_SENTENCE = 110
  * which is at least as common in article prose, so a guard trades one
  * error for another. The overcount is roughly uniform across a section
  * and lands in the denominator, where it makes lushness conservative.
+ *
+ * For languages without capital sentence starts (Arabic, Hebrew, …) use
+ * `unicode-punct` via countProseSentences(..., { sentenceModel }). For
+ * CJK / Thai-family scripts use `char-estimate`, which prefers the length
+ * fallback over Latin punctuation matches.
  */
-const SENTENCE_END = /[.!?]+(?=\s*\n|\s+\p{Lu}|\s*$)/gu
+const SENTENCE_END_LATIN = /[.!?]+(?=\s*\n|\s+\p{Lu}|\s*$)/gu
+
+/** Broader terminator set; does not require a following capital letter. */
+const SENTENCE_END_UNICODE = /[.!?。．؟！…]+(?=\s*\n|\s+|\s*$)/gu
 
 /**
  * The element's text, with inline citation markers removed and block
@@ -103,14 +111,21 @@ export function blockSeparatedText(el) {
  * already be newlines — see blockSeparatedText.
  *
  * @param {string} text
+ * @param {{ sentenceModel?: 'latin-punct' | 'unicode-punct' | 'char-estimate' }} [options]
  * @returns {number}
  */
-export function countProseSentences(text) {
+export function countProseSentences(text, { sentenceModel = 'latin-punct' } = {}) {
   if (!text || text.trim().length === 0) return 0
+  if (sentenceModel === 'char-estimate') {
+    // Latin punctuation is rare in these scripts; trust length estimation
+    // in countSentenceUnits rather than a handful of false matches.
+    return 0
+  }
   // `match` with a global regex resets lastIndex before it starts, so the
   // shared pattern is safe here. `test` and `exec` would NOT be — they
   // advance lastIndex and would make consecutive calls disagree.
-  const matches = text.match(SENTENCE_END)
+  const pattern = sentenceModel === 'unicode-punct' ? SENTENCE_END_UNICODE : SENTENCE_END_LATIN
+  const matches = text.match(pattern)
   return matches ? matches.length : 0
 }
 
@@ -118,9 +133,10 @@ export function countProseSentences(text) {
  * Counts structural items that are not already counted as prose.
  *
  * @param {Element} el
+ * @param {{ sentenceModel?: 'latin-punct' | 'unicode-punct' | 'char-estimate' }} [options]
  * @returns {number}
  */
-export function countStructuralItems(el) {
+export function countStructuralItems(el, { sentenceModel = 'latin-punct' } = {}) {
   let count = 0
 
   for (const item of el.querySelectorAll(ITEM_SELECTOR)) {
@@ -139,7 +155,7 @@ export function countStructuralItems(el) {
     // must not count twice. Tested through the same normalization the
     // prose counter uses, or an item ending "…sentence.[1]" would read as
     // unpunctuated here and be counted a second time.
-    if (countProseSentences(blockSeparatedText(item)) > 0) continue
+    if (countProseSentences(blockSeparatedText(item), { sentenceModel }) > 0) continue
 
     count++
   }
@@ -160,10 +176,13 @@ export function countStructuralItems(el) {
  * @param {Element} el section element, already stripped of non-prose
  *   wrappers and nested sections by the caller
  * @param {number} proseLength the section's own prose length in characters
+ * @param {{ sentenceModel?: 'latin-punct' | 'unicode-punct' | 'char-estimate' }} [options]
  * @returns {number}
  */
-export function countSentenceUnits(el, proseLength) {
-  const counted = countProseSentences(blockSeparatedText(el)) + countStructuralItems(el)
+export function countSentenceUnits(el, proseLength, { sentenceModel = 'latin-punct' } = {}) {
+  const counted =
+    countProseSentences(blockSeparatedText(el), { sentenceModel }) +
+    countStructuralItems(el, { sentenceModel })
   if (counted > 0) return counted
   if (proseLength <= 0) return 0
   return Math.max(1, Math.round(proseLength / CHARS_PER_SENTENCE))

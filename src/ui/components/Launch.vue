@@ -1,10 +1,11 @@
 <script setup>
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { useOverlays } from '../design/useOverlays.js'
 import { pickRealms, randomRealm } from '../content/realms.js'
+import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
 
 /**
  * Before there is anywhere to be.
@@ -17,6 +18,10 @@ import { pickRealms, randomRealm } from '../content/realms.js'
  *
  * Search is the hero here and only here. Once a realm exists it steps aside
  * into the command palette, because from then on the way onward is portals.
+ *
+ * Curated suggestions are always English Wikipedia articles — the shelf is
+ * vetted for what those pages generate. Searching another edition uses the
+ * language control on the search field itself.
  */
 const props = defineProps({
   /**
@@ -25,17 +30,38 @@ const props = defineProps({
    * choosing — which is the point of it.
    */
   dismissible: { type: Boolean, default: false },
+  /** Last-used search language (does not change the realm underfoot). */
+  language: { type: String, default: DEFAULT_LANGUAGE },
+  showAllWikipedias: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'guide', 'close'])
+const emit = defineEmits(['select', 'guide', 'close', 'update:language'])
 
-const { query, results, status, errorMessage, setQuery } = useArticleSearch()
+const searchLanguage = ref(props.language || DEFAULT_LANGUAGE)
+
+watch(
+  () => props.language,
+  (code) => {
+    if (code && code !== searchLanguage.value) searchLanguage.value = code
+  },
+)
+
+const { query, results, status, errorMessage, setQuery } = useArticleSearch({
+  language: () => searchLanguage.value,
+})
+
+watch(searchLanguage, () => {
+  if (query.value.trim()) setQuery(query.value)
+})
+
 const overlays = useOverlays()
 
 // Sampled once per mount rather than per render, so the grid does not
 // reshuffle under the pointer — and freshly each time the screen is
 // summoned, so coming back shows somewhere new.
 const suggestions = ref(pickRealms())
+
+const showSuggestions = computed(() => results.value.length === 0)
 
 // Summoned over a live world it is a surface like any other: Escape closes
 // it, and it takes its turn in the stack rather than inventing a dismissal.
@@ -50,8 +76,14 @@ watch(
 
 onBeforeUnmount(() => overlays.close('launch'))
 
-function choose(title) {
-  emit('select', { title })
+function onLanguage(code) {
+  searchLanguage.value = code
+  emit('update:language', code)
+}
+
+/** Curated shelf is English-only. */
+function chooseEnglish(title) {
+  emit('select', { title, language: DEFAULT_LANGUAGE })
 }
 </script>
 
@@ -90,21 +122,26 @@ function choose(title) {
         class="launch__search"
         size="lg"
         autofocus
-        placeholder="Name a realm…"
+        :language="searchLanguage"
+        :show-all-wikipedias="showAllWikipedias"
         :query="query"
         :results="results"
         :status="status"
         :error-message="errorMessage"
         @update:query="setQuery"
+        @update:language="onLanguage"
         @select="$emit('select', $event)"
       />
 
-      <div v-if="results.length === 0" class="launch__suggestions">
-        <p class="launch__label">Or begin somewhere</p>
+      <div v-if="showSuggestions" class="launch__suggestions">
+        <p class="launch__label">Or begin somewhere on English Wikipedia</p>
         <ul class="launch__realms">
           <li v-for="realm in suggestions" :key="realm.title">
-            <button type="button" @click="choose(realm.title)">
-              <strong>{{ realm.title }}</strong>
+            <button type="button" @click="chooseEnglish(realm.title)">
+              <strong>
+                <span class="launch__lang">EN</span>
+                {{ realm.title }}
+              </strong>
               <span>{{ realm.hint }}</span>
             </button>
           </li>
@@ -114,7 +151,7 @@ function choose(title) {
           <button
             class="launch__extra"
             type="button"
-            @click="choose(randomRealm(suggestions.map((realm) => realm.title)).title)"
+            @click="chooseEnglish(randomRealm(suggestions.map((realm) => realm.title)).title)"
           >
             <Icon name="crosshair" :size="14" />
             Surprise me
@@ -128,7 +165,6 @@ function choose(title) {
     </div>
   </div>
 </template>
-
 <style scoped>
 .launch {
   position: fixed;
@@ -234,12 +270,24 @@ function choose(title) {
   background: var(--accent-wash);
 }
 
+.launch__lang {
+  flex: none;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
 .launch__realms strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
   font-size: var(--text-sm);
   font-weight: 500;
 }
 
-.launch__realms span {
+.launch__realms button > span {
   color: var(--ink-3);
   font-size: var(--text-xs);
 }

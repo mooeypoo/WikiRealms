@@ -84,7 +84,11 @@ function firstResult() {
 }
 
 function ledgerTitle() {
-  return document.querySelector('.ledger__title')?.textContent ?? null
+  const el = document.querySelector('.ledger__title')
+  if (!el) return null
+  const lang = el.querySelector('.ledger__lang')
+  if (!lang) return el.textContent.trim()
+  return el.textContent.replace(lang.textContent, '').replace(/\s+/g, ' ').trim()
 }
 
 function sectionRow(title) {
@@ -156,7 +160,7 @@ describe('App', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein', { language: 'en' })
     expect(ledgerTitle()).toBe('Albert Einstein')
     expect(document.body.textContent).toContain('German-born theoretical physicist.')
     expect(document.body.textContent).toContain('1234')
@@ -228,7 +232,7 @@ describe('App', () => {
     travelButton().dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await settleTravel()
 
-    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics')
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Physics', { language: 'en' })
     expect(ledgerTitle()).toBe('Physics')
 
     const backButton = wrapper.find('button[aria-label="Back"]')
@@ -264,7 +268,7 @@ describe('App', () => {
     expect(saveSnapshotToStorage).toHaveBeenCalled()
     const [snapshot] = saveSnapshotToStorage.mock.calls.at(-1)
     expect(currentTitle(snapshot.navigation.graph)).toBe('Albert Einstein')
-    expect(snapshot.articleCache['Albert Einstein'].title).toBe('Albert Einstein')
+    expect(snapshot.articleCache['en:Albert Einstein'].title).toBe('Albert Einstein')
   })
 
   it('restores traversal and article cache from a persisted snapshot on mount', async () => {
@@ -292,7 +296,7 @@ describe('App', () => {
     const wrapper = mount(App, { attachTo: document.body })
     await flushPromises()
 
-    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein')
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Albert Einstein', { language: 'en' })
     expect(ledgerTitle()).toBe('Albert Einstein')
     const backButton = wrapper.find('button[aria-label="Back"]')
     expect(backButton.attributes('disabled')).toBeUndefined() // backstack restored non-empty
@@ -630,7 +634,7 @@ describe('App URL state', () => {
     mount(App, { attachTo: document.body })
     await flushPromises()
 
-    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Saturn')
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('Saturn', { language: 'en' })
   })
 
   it('prefers a shared link over the session it would otherwise restore', async () => {
@@ -660,7 +664,7 @@ describe('App URL state', () => {
     mount(App, { attachTo: document.body })
     await flushPromises()
 
-    expect(fetchWikipediaArticle).toHaveBeenLastCalledWith('Saturn')
+    expect(fetchWikipediaArticle).toHaveBeenLastCalledWith('Saturn', { language: 'en' })
   })
 
   it('writes each move into browser history so Back retraces the journey', async () => {

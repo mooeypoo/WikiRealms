@@ -5,6 +5,8 @@ import { resetKeymap } from '../../../src/ui/design/useKeymap.js'
 import { resetOverlays, useOverlays } from '../../../src/ui/design/useOverlays.js'
 
 const PREFERENCES = {
+  language: 'en',
+  showAllWikipedias: false,
   worldShape: 'sphere',
   showSections: true,
   showPortals: true,
@@ -93,7 +95,9 @@ describe('SettingsModal', () => {
     // Not everyone wants a camera dive every time they take a portal, and
     // some people cannot comfortably watch one.
     const wrapper = mountSettings()
-    const checkbox = document.querySelectorAll('input[type="checkbox"]')[0]
+    const checkbox = [...document.querySelectorAll('label')].find((label) =>
+      label.textContent.includes('Travel animation'),
+    )?.querySelector('input[type="checkbox"]')
 
     checkbox.checked = false
     checkbox.dispatchEvent(new Event('change', { bubbles: true }))
@@ -105,13 +109,29 @@ describe('SettingsModal', () => {
 
   it('toggles a map layer', async () => {
     const wrapper = mountSettings()
-    const checkbox = document.querySelectorAll('input[type="checkbox"]')[2]
+    const checkbox = [...document.querySelectorAll('label')].find((label) =>
+      label.textContent.includes('Portals'),
+    )?.querySelector('input[type="checkbox"]')
 
     checkbox.checked = false
     checkbox.dispatchEvent(new Event('change', { bubbles: true }))
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ showPortals: false }])
+    wrapper.unmount()
+  })
+
+  it('offers show-all Wikipedias for the search language picker', async () => {
+    const wrapper = mountSettings()
+    const checkbox = [...document.querySelectorAll('label')].find((label) =>
+      label.textContent.includes('Show all Wikipedias'),
+    )?.querySelector('input[type="checkbox"]')
+
+    checkbox.checked = true
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:preferences')?.at(-1)).toEqual([{ showAllWikipedias: true }])
     wrapper.unmount()
   })
 
