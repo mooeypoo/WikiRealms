@@ -20,8 +20,8 @@ export const Annotated = {
     h(Legend, {
       show: true,
       anchors: {
-        range: { x: 320, y: 380, label: 'Structure is a section' },
-        portal: { x: 620, y: 260, label: 'A portal to Saturn' },
+        range: { x: 500, y: 400, name: 'Structure' },
+        portal: { x: 520, y: 410, name: 'Saturn' },
       },
     }),
   ),

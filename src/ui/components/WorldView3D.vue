@@ -2033,14 +2033,14 @@ function legendAnchors() {
   if (range) {
     const point = screenPositionOf(range.userData.summitLocal)
     const peak = props.world?.terrain?.peaks?.[range.userData.peakIndex]
-    if (point) anchors.range = { ...point, label: peak?.title ? `${peak.title} is a section` : undefined }
+    if (point) anchors.range = { ...point, name: peak?.title || undefined }
   }
 
   const portal = portalTargets().find((marker) => marker.visible && !isOccluded(marker.position))
   if (portal) {
     const point = screenPositionOf(portal.position)
     const title = portal.userData.portal?.targetTitle
-    if (point) anchors.portal = { ...point, label: title ? `A portal to ${title}` : undefined }
+    if (point) anchors.portal = { ...point, name: title || undefined }
   }
 
   return anchors

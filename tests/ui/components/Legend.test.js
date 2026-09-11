@@ -123,17 +123,32 @@ describe('Legend', () => {
   })
 
   it('points at features that are actually on screen', () => {
+    window.innerWidth = 1280
+    window.innerHeight = 800
     mountLegend({
       anchors: {
-        range: { x: 400, y: 300, label: 'Structure is a section' },
-        portal: { x: 700, y: 500 },
+        range: { x: 400, y: 300, name: 'Structure' },
+        portal: { x: 420, y: 310, name: 'Physics' },
       },
     })
 
     const pins = [...document.querySelectorAll('.legend__pin')]
     expect(pins).toHaveLength(2)
-    expect(pins[0].textContent).toContain('Structure is a section')
+    expect(pins[0].textContent).toContain('Structure')
+    expect(pins[0].textContent).toContain('is a section')
+    expect(pins[0].querySelector('em')?.textContent).toBe('Structure')
+    expect(pins[1].textContent).toContain('A portal to')
+    expect(pins[1].querySelector('em')?.textContent).toBe('Physics')
     expect(document.querySelectorAll('.legend__leaders line')).toHaveLength(2)
+    expect(document.querySelectorAll('.legend__leaders circle')).toHaveLength(2)
+
+    // Boxes sit apart even when the anchors are nearly on top of each other.
+    const [a, b] = pins.map((pin) => {
+      const match = pin.getAttribute('style')?.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/)
+      return { x: Number(match[1]), y: Number(match[2]) }
+    })
+    const farEnough = Math.hypot(a.x - b.x, a.y - b.y) > 40
+    expect(farEnough).toBe(true)
   })
 
   it('explains an unpointable feature in the key instead', () => {

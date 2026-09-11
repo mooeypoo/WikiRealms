@@ -96,8 +96,11 @@ describe('InfoHub', () => {
 
   it('renders the guide prose', () => {
     const wrapper = mountGuide({ currentTab: 'start-here' })
+    const prose = document.querySelector('.guide__prose').textContent
 
-    expect(document.querySelector('.guide__prose').textContent).toContain('place you can explore')
+    expect(prose).toContain('place you can explore')
+    expect(prose).toContain('Fish')
+    expect(prose).toContain('pageviews')
     wrapper.unmount()
   })
 })

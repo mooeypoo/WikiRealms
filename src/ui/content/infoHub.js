@@ -8,6 +8,7 @@ export const infoHubContent = {
       <ul class="info-hub__bullets">
         <li><strong>Peaks</strong> are sections. Taller means more of that section's own text; broader means a larger subsection tree.</li>
         <li><strong>Water</strong> rises on short articles and falls as the article grows — stubs flood; detailed pages expose more land.</li>
+        <li><strong>Fish</strong> are pageviews. Quieter articles stay sparse; heavily read ones fill the seas (hover a fish to see the count).</li>
         <li><strong>Portals</strong> are outbound Wikipedia links. Step through one to travel to another article's world.</li>
         <li><strong>Your trail</strong> remembers the path you walked. Open it from the top bar; share a realm or the whole trail from Share.</li>
       </ul>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import { useOverlays } from '../design/useOverlays.js'
 import { useViewport } from '../design/useViewport.js'
@@ -12,6 +12,7 @@ import {
   SNOW_SWATCH,
   WATER_SWATCH,
 } from '../content/legend.js'
+import { legendKeyReserves, placeLegendPins } from '../rendering/legendPinPlacement.js'
 
 /**
  * The world, annotated.
@@ -22,12 +23,16 @@ import {
  * are actually visible get pointed at where they sit, and the colour
  * semantics — which are everywhere at once and cannot be pointed at — get
  * a key down the side.
+ *
+ * Callout pins float beside their markers with leaders back to a ring on
+ * the feature, and placement spreads them when two anchors project near
+ * each other — stacking the boxes on the markers made them unreadable.
  */
 const props = defineProps({
   show: Boolean,
   /**
    * Screen anchors for features currently visible, from the renderer:
-   * `{ range: {x, y, label}, portal: {x, y, label} }`. Absent entries
+   * `{ range: {x, y, name}, portal: {x, y, name} }`. Absent entries
    * simply go unannotated — pointing at something off-screen is worse
    * than not pointing.
    */
@@ -38,6 +43,18 @@ const emit = defineEmits(['close'])
 
 const overlays = useOverlays()
 const viewport = useViewport()
+const frame = ref({ width: 0, height: 0 })
+
+function measureFrame() {
+  frame.value = { width: window.innerWidth, height: window.innerHeight }
+}
+
+onMounted(() => {
+  measureFrame()
+  window.addEventListener('resize', measureFrame)
+})
+
+onUnmounted(() => window.removeEventListener('resize', measureFrame))
 
 const dismissCopy = computed(() =>
   viewport.atLeast('md')
@@ -51,20 +68,44 @@ const dismissCopy = computed(() =>
 watch(
   () => props.show,
   (open) => {
-    if (open) overlays.open('legend', { onClose: () => emit('close') })
-    else overlays.close('legend')
+    if (open) {
+      measureFrame()
+      overlays.open('legend', { onClose: () => emit('close') })
+    } else overlays.close('legend')
   },
   { immediate: true },
 )
 
 onBeforeUnmount(() => overlays.close('legend'))
 
-const annotations = computed(() =>
+const annotated = computed(() =>
   FEATURE_LEGEND.filter((entry) => props.anchors[entry.id]).map((entry) => ({
     ...entry,
     anchor: props.anchors[entry.id],
   })),
 )
+
+const placedPins = computed(() => {
+  const reserves = legendKeyReserves(frame.value)
+  const placements = placeLegendPins({
+    anchors: annotated.value.map((item) => ({
+      id: item.id,
+      x: item.anchor.x,
+      y: item.anchor.y,
+    })),
+    viewport: frame.value,
+    ...reserves,
+  })
+  const byId = new Map(placements.map((placement) => [placement.id, placement]))
+
+  return annotated.value
+    .map((item) => {
+      const placement = byId.get(item.id)
+      if (!placement) return null
+      return { ...item, placement, title: pinTitle(item) }
+    })
+    .filter(Boolean)
+})
 
 const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[entry.id]))
 
@@ -75,27 +116,53 @@ function featureSwatch(id) {
   if (id === 'creatures') return CREATURE_SWATCH
   return 'var(--accent)'
 }
+
+/** Title line for a pin: name in italics, role in plain words. */
+function pinTitle(item) {
+  const name = item.anchor?.name
+  if (item.id === 'range' && name) {
+    return { kind: 'section', name }
+  }
+  if (item.id === 'portal' && name) {
+    return { kind: 'portal', name }
+  }
+  // Legacy string labels (stories / older callers) still render.
+  return { kind: 'plain', text: item.anchor?.label ?? item.label }
+}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="legend">
       <div v-if="show" class="legend" role="dialog" aria-label="What you are looking at" @click="$emit('close')">
-        <!-- Labels pinned to real features, with a line back to each. -->
+        <!-- Leaders from each callout to a ring on the real feature. -->
         <svg class="legend__leaders" aria-hidden="true">
-          <template v-for="item in annotations" :key="item.id">
-            <line :x1="item.anchor.x" :y1="item.anchor.y" :x2="item.anchor.x" :y2="item.anchor.y - 26" />
-            <circle :cx="item.anchor.x" :cy="item.anchor.y" r="3.5" />
+          <template v-for="item in placedPins" :key="item.id">
+            <line
+              :x1="item.placement.leader.x1"
+              :y1="item.placement.leader.y1"
+              :x2="item.placement.leader.x2"
+              :y2="item.placement.leader.y2"
+            />
+            <circle :cx="item.placement.anchor.x" :cy="item.placement.anchor.y" r="4" />
           </template>
         </svg>
 
         <p
-          v-for="item in annotations"
+          v-for="item in placedPins"
           :key="item.id"
           class="legend__pin"
-          :style="{ transform: `translate(${item.anchor.x}px, ${item.anchor.y - 30}px)` }"
+          :style="{ transform: `translate(${item.placement.pin.x}px, ${item.placement.pin.y}px)` }"
         >
-          <strong>{{ item.anchor.label ?? item.label }}</strong>
+          <strong>
+            <template v-if="item.title.kind === 'section'">
+              <em>{{ item.title.name }}</em> is a section
+            </template>
+            <template v-else-if="item.title.kind === 'portal'">
+              A portal to <em>{{ item.title.name }}</em>
+            </template>
+            <template v-else>{{ item.title.text }}</template>
+          </strong>
           <span>{{ item.detail }}</span>
         </p>
 
@@ -162,13 +229,14 @@ function featureSwatch(id) {
 
 .legend__leaders line {
   stroke: var(--accent);
-  stroke-width: 1;
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
 }
 
 .legend__leaders circle {
-  fill: none;
+  fill: rgba(var(--accent-rgb), 0.2);
   stroke: var(--accent);
-  stroke-width: 1.5;
+  stroke-width: 1.75;
 }
 
 .legend__pin {
@@ -176,14 +244,15 @@ function featureSwatch(id) {
   top: 0;
   left: 0;
   display: grid;
-  gap: 1px;
+  gap: 2px;
   margin: 0;
+  width: max-content;
   max-width: 220px;
   padding: var(--spacing-sm) var(--spacing-md);
   border: 1px solid var(--edge-accent);
   border-radius: var(--radius-md);
   background: var(--surface-1-solid);
-  transform-origin: bottom left;
+  box-shadow: var(--shadow-float);
   pointer-events: none;
 }
 
@@ -191,6 +260,13 @@ function featureSwatch(id) {
   color: var(--ink-1);
   font-size: var(--text-sm);
   font-weight: 500;
+  line-height: 1.35;
+}
+
+.legend__pin em {
+  font-style: italic;
+  font-weight: 500;
+  color: var(--accent-ink);
 }
 
 .legend__pin span {
