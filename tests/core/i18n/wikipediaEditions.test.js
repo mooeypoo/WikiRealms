@@ -15,11 +15,12 @@ describe('wikipediaEditions catalog', () => {
     const featured = listEditions({ featuredOnly: true })
 
     expect(all.length).toBeGreaterThan(300)
-    expect(featured.map((edition) => edition.code).sort()).toEqual(['ar', 'de', 'en', 'es', 'fr', 'he'])
+    expect(featured.map((edition) => edition.code).sort()).toEqual(['de', 'en', 'es', 'fa', 'fr', 'he'])
   })
 
   it('knows RTL and sentence-model metadata', () => {
     expect(getEdition('he')).toMatchObject({ dir: 'rtl', sentenceModel: 'unicode-punct', lushnessSupport: 'relative' })
+    expect(getEdition('fa')).toMatchObject({ dir: 'rtl', sentenceModel: 'unicode-punct', lushnessSupport: 'relative' })
     expect(getEdition('zh')).toMatchObject({ sentenceModel: 'char-estimate', lushnessSupport: 'experimental' })
     expect(getEdition('en')).toMatchObject({ dir: 'ltr', sentenceModel: 'latin-punct', lushnessSupport: 'full' })
   })

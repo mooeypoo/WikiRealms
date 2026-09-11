@@ -64,7 +64,7 @@ const NO_CAPS = new Set([
  * Featured in the MVP language picker. The catalog still contains every
  * open Wikipedia; this only affects default picker prominence.
  */
-const FEATURED = new Set(['en', 'de', 'fr', 'es', 'he', 'ar'])
+const FEATURED = new Set(['en', 'de', 'fr', 'es', 'he', 'fa'])
 
 function sentenceModel(code, dir) {
   if (CJK.has(code) || code.startsWith('zh')) return 'char-estimate'

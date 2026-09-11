@@ -20,12 +20,13 @@ const banana = shallowRef(createBanana(DEFAULT_LANGUAGE))
 
 /**
  * Locale modules keyed for dynamic import (Vite needs static paths).
- * Starter pack: featured editions that ship a message file today.
+ * Starter pack: featured RTL editions that ship a message file today
+ * (Hebrew, Persian). Arabic and others wait for translatewiki.
  */
 const LOCALE_LOADERS = {
   en: () => Promise.resolve({ default: en }),
   he: () => import('../../../i18n/he.json'),
-  ar: () => import('../../../i18n/ar.json'),
+  fa: () => import('../../../i18n/fa.json'),
 }
 
 const loadedLocales = new Set(['en'])

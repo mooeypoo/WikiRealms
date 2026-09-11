@@ -188,7 +188,7 @@
       "dbname": "arwiki",
       "sentenceModel": "unicode-punct",
       "lushnessSupport": "relative",
-      "featured": true
+      "featured": false
     },
     {
       "code": "arc",
@@ -1295,7 +1295,7 @@
       "dbname": "fawiki",
       "sentenceModel": "unicode-punct",
       "lushnessSupport": "relative",
-      "featured": false
+      "featured": true
     },
     {
       "code": "fat",

@@ -26,14 +26,17 @@ describe('banana-i18n UI messages', () => {
     expect(t('wikirealms-search-placeholder', 'עברית')).toContain('עברית')
   })
 
-  it('loads Arabic starter messages', async () => {
-    await setUiLocale('ar')
-    expect(t('wikirealms-settings-title')).toBe('الإعدادات')
-    expect(t('wikirealms-share')).toBe('مشاركة')
+  it('loads Persian starter messages for featured RTL editions', async () => {
+    await setUiLocale('fa')
+    expect(t('wikirealms-settings-title')).toBe('تنظیمات')
+    expect(t('wikirealms-share')).toBe('اشتراک‌گذاری')
+    expect(t('wikirealms-scrim-search')).toBe('جستجو')
   })
 
   it('falls back to English for locales without a message file yet', async () => {
     await setUiLocale('de')
+    expect(t('wikirealms-settings-title')).toBe('Settings')
+    await setUiLocale('ar')
     expect(t('wikirealms-settings-title')).toBe('Settings')
   })
 
@@ -45,8 +48,9 @@ describe('banana-i18n UI messages', () => {
 })
 
 describe('document direction from Wikipedia editions', () => {
-  it('marks Hebrew and Arabic as RTL for the document dir attribute', () => {
+  it('marks Hebrew and Persian as RTL for the document dir attribute', () => {
     expect(getEdition('he').dir).toBe('rtl')
+    expect(getEdition('fa').dir).toBe('rtl')
     expect(getEdition('ar').dir).toBe('rtl')
     expect(getEdition('en').dir).toBe('ltr')
     expect(getEdition('de').dir).toBe('ltr')
