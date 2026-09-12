@@ -5,6 +5,7 @@ import {
   WIKIPEDIA_CTA_SURFACES,
   resolveWikipediaCta,
 } from '../content/wikipediaCtas.js'
+import { formatSubsections } from '../rendering/sectionStats.js'
 
 const props = defineProps({
   /** @type {{ title: string, subsectionCount: number, wordsLabel: string, densityBand: number | null, sourcesLabel: string } | null} */
@@ -21,6 +22,8 @@ const props = defineProps({
  * renderer's own, and this component is the layer allowed to see both.
  */
 const band = computed(() => describeBand(props.model?.densityBand))
+
+const subsectionLabel = computed(() => formatSubsections(props.model?.subsectionCount ?? 0))
 
 /** Diegetic hint only — tooltip stays non-interactive. */
 const ctaNotice = computed(
@@ -41,12 +44,12 @@ const ctaNotice = computed(
   >
     <div class="section-tooltip__body" :class="{ 'has-cta': Boolean(ctaNotice) }">
       <div class="section-tooltip__main">
-        <h3 class="section-tooltip__title">{{ model.title }}</h3>
+        <h3 class="section-tooltip__title"><bdi>{{ model.title }}</bdi></h3>
         <ul class="section-tooltip__meta">
-          <li v-if="model.subsectionCount > 0" class="section-tooltip__chip">
-            {{ model.subsectionCount }} subsection<span v-if="model.subsectionCount !== 1">s</span>
+          <li v-if="subsectionLabel" class="section-tooltip__chip">
+            <bdi>{{ subsectionLabel }}</bdi>
           </li>
-          <li class="section-tooltip__chip">{{ model.wordsLabel }}</li>
+          <li class="section-tooltip__chip"><bdi>{{ model.wordsLabel }}</bdi></li>
           <li v-if="band" class="section-tooltip__chip section-tooltip__chip--density">
             <!-- Colour comes from the terrain renderer's own biomeColor, so
                  the dot is literally the shade of the ground below. -->
@@ -55,20 +58,21 @@ const ctaNotice = computed(
               :style="{ background: band.swatch, color: band.swatch }"
               aria-hidden="true"
             ></span>
-            <span class="section-tooltip__density-label">{{ band.name }}</span>
+            <span class="section-tooltip__density-label"><bdi>{{ band.name }}</bdi></span>
           </li>
-          <li v-if="model.sourcesLabel" class="section-tooltip__chip">{{ model.sourcesLabel }}</li>
+          <li v-if="model.sourcesLabel" class="section-tooltip__chip">
+            <bdi>{{ model.sourcesLabel }}</bdi>
+          </li>
         </ul>
       </div>
-      <p v-if="ctaNotice" class="section-tooltip__cta">{{ ctaNotice }}</p>
+      <p v-if="ctaNotice" class="section-tooltip__cta"><bdi>{{ ctaNotice }}</bdi></p>
     </div>
   </div>
 </template>
-
 <style scoped>
 .section-tooltip {
-  /* translate() from the reactive props positions the top-left anchor of
-     the tooltip; the caret sits below it via the ::before pseudo-element. */
+  /* Screen-space placement from JS (exception 2): top-left is the summit
+     anchor in canvas pixels; margins nudge the card up/center over it. */
   position: absolute;
   top: 0;
   left: 0;
@@ -103,6 +107,7 @@ const ctaNotice = computed(
   content: '';
   position: absolute;
   bottom: -6px;
+  /* Physical center of the tooltip box — exception (1); not reading-order. */
   left: 50%;
   transform: translateX(-50%) rotate(45deg);
   width: 10px;

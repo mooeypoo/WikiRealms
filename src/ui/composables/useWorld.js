@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { generateWorld } from '../../engine/generation/world.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Reactive world-generation state, wrapping the pure `generateWorld` engine
@@ -24,7 +25,7 @@ export function useWorld({ generateWorldFn = generateWorld } = {}) {
     } catch (error) {
       world.value = null
       status.value = 'error'
-      errorMessage.value = error?.message ?? 'Failed to generate world'
+      errorMessage.value = error?.message ?? t('wikirealms-error-generate-world')
     }
   }
 

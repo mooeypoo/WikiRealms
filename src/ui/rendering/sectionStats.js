@@ -5,15 +5,35 @@
  * Two places describe a section: the tooltip that appears when you hover
  * its summit, and the Ledger row you get when you click it. They were
  * computing the same figures separately and phrasing them differently —
- * the tooltip said "1,240 words" and "46 refs in 38 sentences" while the
- * Ledger said "1.2K W" and "46 C" for the same section, and both divided
- * character counts by 5.5 in their own copy of the arithmetic.
+ * the tooltip said "1,240 words" and the Ledger said "1.2K W" for the
+ * same section, and both divided character counts by 5.5 in their own
+ * copy of the arithmetic.
  *
  * A reader who hovers a mountain and then clicks it should be reading the
  * same sentence twice, in more detail the second time. Not two dialects.
  *
- * Pure and framework-free.
+ * Phrasing goes through banana-i18n so the tooltip and Ledger stay on one
+ * vocabulary when the UI locale changes. Number grouping follows the UI
+ * locale's BCP-47 tag (via getEdition).
  */
+import { getEdition } from '../../core/i18n/wikipediaEditions.js'
+import { getUiLocale, t } from '../i18n/banana.js'
+
+/** Engine id for the folded leftover-sections peak — keep for lookups. */
+export const AGGREGATE_SECTION_TITLE = 'Miscellaneous'
+
+/**
+ * Localised label for a section title. Engine ids stay English; only the
+ * synthetic aggregate is rewritten for display.
+ *
+ * @param {string | null | undefined} title
+ * @returns {string}
+ */
+export function displaySectionTitle(title) {
+  if (!title) return t('wikirealms-section-untitled')
+  if (title === AGGREGATE_SECTION_TITLE) return t('wikirealms-section-miscellaneous')
+  return title
+}
 
 /**
  * Rough "words" estimate from own-size (character count). Wikipedia's
@@ -29,33 +49,29 @@ export function estimateWordCount(ownSizeChars) {
 }
 
 /**
+ * Thousands separators for the active UI locale (e.g. en → 1,200, de → 1.200).
+ * @param {number} n
+ * @returns {string}
+ */
+export function formatInteger(n) {
+  const int = Math.max(0, Math.round(Number(n) || 0))
+  const locale = getEdition(getUiLocale()).bcp47 || 'en'
+  return int.toLocaleString(locale)
+}
+
+/**
  * Formats an integer with thousands separators (e.g. 1200 -> "1,200
- * words"). Pure so tests don't depend on Intl.NumberFormat being
- * English-locale-only on every runner.
+ * words" in English UI).
  *
  * @param {number} n
  */
 export function formatWords(n) {
   const int = Math.max(0, Math.round(Number(n) || 0))
-  return `${int.toLocaleString('en-US')} word${int === 1 ? '' : 's'}`
+  return t('wikirealms-stat-words', formatInteger(int), int)
 }
 
 /**
  * Formats a section's evidence as something a reader can go and check.
- *
- * This is the only number either surface states about citations, and that
- * is deliberate. The band comes from a scalar built out of a shrinkage
- * estimator, a log-ratio against the article's own rate and a smooth
- * ceiling (see lushness.js); printing THAT as a percentage would be a
- * figure nobody can verify and the engine does not use, which is what got
- * an earlier version's percentages deleted. Two counts can be verified by
- * opening the article and counting.
- *
- * They also carry something the band cannot: the SIZE of the evidence.
- * One reference in one sentence and forty-six in thirty-eight are very
- * different claims, and the scale treats them differently — the first is
- * shrunk hard toward the article's own rate — so showing the counts shows
- * why a short section reads as ordinary.
  *
  * @param {number} citations
  * @param {number} sentences
@@ -64,9 +80,12 @@ export function formatWords(n) {
 export function formatSources(citations, sentences) {
   const refCount = Math.max(0, Math.round(Number(citations) || 0))
   const sentenceCount = Math.max(0, Math.round(Number(sentences) || 0))
-  const refs = refCount === 0 ? 'no refs' : `${refCount} ref${refCount === 1 ? '' : 's'}`
-  if (sentenceCount === 0) return refs
-  return `${refs} in ${sentenceCount} sentence${sentenceCount === 1 ? '' : 's'}`
+  if (refCount === 0 && sentenceCount === 0) return t('wikirealms-stat-no-refs')
+  if (refCount === 0) {
+    return t('wikirealms-stat-no-refs-in-sentences', sentenceCount)
+  }
+  if (sentenceCount === 0) return t('wikirealms-stat-refs', refCount)
+  return t('wikirealms-stat-sources', refCount, sentenceCount)
 }
 
 /**
@@ -78,28 +97,23 @@ export function formatSources(citations, sentences) {
 export function formatSubsections(count) {
   const n = Math.max(0, Math.round(Number(count) || 0))
   if (n === 0) return ''
-  return `${n} subsection${n === 1 ? '' : 's'}`
+  return t('wikirealms-stat-subsections', n)
 }
 
 /**
  * "4 portals leave here", or an empty string for a section none leave.
- *
- * Spelled as a direction rather than a quantity because the count is only
- * interesting as a reason to go and look: the header's Portals readout
- * already gives the world's total, and what a row adds is that this
- * particular range is where some of them are.
  *
  * @param {number} count
  */
 export function formatPortals(count) {
   const n = Math.max(0, Math.round(Number(count) || 0))
   if (n === 0) return ''
-  return n === 1 ? '1 portal leaves here' : `${n} portals leave here`
+  return t('wikirealms-stat-portals-leave', n)
 }
 
 /** A bare integer with thousands separators, for a column that carries its own heading. */
 export function formatCount(n) {
-  return Math.max(0, Math.round(Number(n) || 0)).toLocaleString('en-US')
+  return formatInteger(n)
 }
 
 /**

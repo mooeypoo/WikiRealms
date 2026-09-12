@@ -184,7 +184,8 @@ describe('Ledger', () => {
       // The point of peek: know where you are while still seeing the world.
       mountLedger({ state: 'peek' })
 
-      expect(document.querySelector('.ledger__title').textContent).toBe('Cassini Division')
+      expect(document.querySelector('.ledger__title').textContent).toContain('Cassini Division')
+      expect(document.querySelector('.ledger__title .ledger__lang').textContent).toBe('EN')
       expect(document.querySelectorAll('.ledger__stats dd')).toHaveLength(5)
       expect(rows()).toHaveLength(0)
       expect(document.querySelector('.ledger__summary')).toBeNull()

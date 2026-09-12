@@ -74,6 +74,7 @@ import { preloadFountainAsset } from '../rendering/fountainAssets.js'
 import { updateCreatureLayer } from '../rendering/creatureMotion.js'
 import { useHoverState } from '../composables/useHoverState.js'
 import { formatPageviews } from '../rendering/sectionStats.js'
+import { t } from '../i18n/banana.js'
 import { ALTITUDE, BIOME_THRESHOLDS } from '../../engine/generation/config.js'
 
 const props = defineProps({
@@ -1518,8 +1519,8 @@ function onPointerMove(event) {
     hoveredMarker.value = tryHoverCreature(event.clientX, event.clientY, rect)
       ? {
           type: 'creature',
-          title: `${formatPageviews(props.pageviews)} views`,
-          detail: 'Last 30 days — fish track how busy this page is',
+          title: t('wikirealms-creature-views', formatPageviews(props.pageviews)),
+          detail: t('wikirealms-creature-detail'),
         }
       : null
   }
@@ -2066,7 +2067,9 @@ watch(
 
 <template>
   <div ref="containerRef" class="world-view-3d">
-    <p v-if="!isWebGLSupported" class="world-view-3d__fallback">3D view isn't supported in this browser.</p>
+    <p v-if="!isWebGLSupported" class="world-view-3d__fallback">
+      <bdi>{{ t('wikirealms-webgl-unsupported') }}</bdi>
+    </p>
     <div
       v-if="hoveredMarker"
       class="world-view-3d__tooltip"
@@ -2074,12 +2077,12 @@ watch(
       :style="{ left: `${tooltipX}px`, top: `${tooltipY}px` }"
     >
       <template v-if="hoveredMarker.type === 'portal'">
-        <strong>Portal to {{ hoveredMarker.title }}</strong>
-        <span>Click to travel</span>
+        <strong><bdi>{{ t('wikirealms-portal-to') }}</bdi> <bdi>{{ hoveredMarker.title }}</bdi></strong>
+        <span><bdi>{{ t('wikirealms-portal-click') }}</bdi></span>
       </template>
       <template v-else-if="hoveredMarker.type === 'creature'">
-        <strong>{{ hoveredMarker.title }}</strong>
-        <span>{{ hoveredMarker.detail }}</span>
+        <strong><bdi>{{ hoveredMarker.title }}</bdi></strong>
+        <span><bdi>{{ hoveredMarker.detail }}</bdi></span>
       </template>
     </div>
     <SectionTooltip

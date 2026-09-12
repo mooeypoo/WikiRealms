@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BIOME, LUSHNESS_BANDS, lushnessBand } from '../../../src/engine/generation/terrain.js'
 import { biomeColor } from '../../../src/ui/rendering/biomeColor.js'
 import { LUSHNESS_BAND_COPY, describeBand } from '../../../src/ui/content/lushnessBands.js'
-import { GROUND_LEGEND } from '../../../src/ui/content/legend.js'
+import { groundLegend } from '../../../src/ui/content/legend.js'
 import { buildTooltipModel } from '../../../src/ui/rendering/sectionTooltip.js'
 
 describe('LUSHNESS_BAND_COPY', () => {
@@ -101,7 +101,7 @@ describe('one vocabulary', () => {
    * was meadow.
    */
   it('sends the tooltip to the same band the legend row describes', () => {
-    for (const entry of GROUND_LEGEND) {
+    for (const entry of groundLegend()) {
       const model = buildTooltipModel({ title: 'x', lushness: midpointOf(entry.biome) }, [])
 
       expect(model.densityBand).toBe(entry.biome)
@@ -111,7 +111,7 @@ describe('one vocabulary', () => {
   })
 
   it('orders the legend the way the engine orders the bands', () => {
-    expect(GROUND_LEGEND.map((entry) => entry.biome)).toEqual([...LUSHNESS_BANDS])
+    expect(groundLegend().map((entry) => entry.biome)).toEqual([...LUSHNESS_BANDS])
   })
 })
 

@@ -1,4 +1,5 @@
-const WIKIPEDIA_OPENSEARCH_ENDPOINT = 'https://en.wikipedia.org/w/api.php'
+import { actionApiEndpoint } from '../i18n/wikipediaHosts.js'
+import { DEFAULT_LANGUAGE, normalizeLanguage } from '../i18n/wikipediaEditions.js'
 
 /**
  * Normalizes a Wikipedia OpenSearch API response into a flat list of results.
@@ -27,10 +28,10 @@ export function normalizeOpenSearchResponse(raw) {
 /**
  * Builds the OpenSearch request URL for a given query.
  * @param {string} query
- * @param {{ limit?: number }} [options]
+ * @param {{ limit?: number, language?: string }} [options]
  */
-export function buildOpenSearchUrl(query, { limit = 10 } = {}) {
-  const url = new URL(WIKIPEDIA_OPENSEARCH_ENDPOINT)
+export function buildOpenSearchUrl(query, { limit = 10, language = DEFAULT_LANGUAGE } = {}) {
+  const url = new URL(actionApiEndpoint(normalizeLanguage(language)))
   url.searchParams.set('action', 'opensearch')
   url.searchParams.set('format', 'json')
   url.searchParams.set('formatversion', '2')

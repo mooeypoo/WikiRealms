@@ -31,12 +31,21 @@ describe('SearchBar', () => {
     expect(wrapper.emitted('update:query')).toEqual([['Sat']])
   })
 
-  it('emits the chosen result', async () => {
-    const wrapper = mountSearch()
+  it('emits the chosen result with the search language', async () => {
+    const wrapper = mountSearch({ language: 'de' })
 
     await wrapper.findAll('[role="option"]')[1].trigger('click')
 
-    expect(wrapper.emitted('select')[0][0].title).toBe('Einsteinium')
+    expect(wrapper.emitted('select')[0][0]).toMatchObject({ title: 'Einsteinium', language: 'de' })
+  })
+
+  it('lets the viewer pick a Wikipedia edition with the query', async () => {
+    const wrapper = mountSearch({ language: 'en' })
+    const select = wrapper.find('select[aria-label="Wikipedia language"]')
+
+    await select.setValue('he')
+
+    expect(wrapper.emitted('update:language')).toEqual([['he']])
   })
 
   describe('the keyboard', () => {
@@ -66,7 +75,7 @@ describe('SearchBar', () => {
       await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
       await wrapper.find('input').trigger('keydown', { key: 'Enter' })
 
-      expect(wrapper.emitted('select')[0][0].title).toBe('Einsteinium')
+      expect(wrapper.emitted('select')[0][0]).toMatchObject({ title: 'Einsteinium', language: 'en' })
     })
 
     it('leaves Enter alone when there is nothing to take', async () => {

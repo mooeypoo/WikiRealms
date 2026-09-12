@@ -19,7 +19,7 @@ defineProps({
     target="_blank"
     rel="noopener noreferrer"
   >
-    {{ label }}
+    <bdi>{{ label }}</bdi>
     <Icon name="external" :size="12" />
   </a>
 </template>
@@ -36,7 +36,7 @@ defineProps({
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-decoration: none;
-  text-align: left;
+  text-align: start;
 }
 
 .wikipedia-cta:hover {

@@ -5,13 +5,14 @@ import { useOverlays } from '../design/useOverlays.js'
 import { useViewport } from '../design/useViewport.js'
 import {
   CREATURE_SWATCH,
-  FEATURE_LEGEND,
   FOLIAGE_SWATCH,
-  GROUND_LEGEND,
-  LUSHNESS_CEILING_NOTE,
   SNOW_SWATCH,
   WATER_SWATCH,
+  featureLegend,
+  groundLegend,
+  lushnessCeilingNote,
 } from '../content/legend.js'
+import { useI18n } from '../i18n/banana.js'
 import { legendKeyReserves, placeLegendPins } from '../rendering/legendPinPlacement.js'
 
 /**
@@ -41,9 +42,14 @@ const props = defineProps({
 
 const emit = defineEmits(['close'])
 
+const { t } = useI18n()
 const overlays = useOverlays()
 const viewport = useViewport()
 const frame = ref({ width: 0, height: 0 })
+
+const groundRows = computed(() => groundLegend())
+const features = computed(() => featureLegend())
+const ceilingNote = computed(() => lushnessCeilingNote())
 
 function measureFrame() {
   frame.value = { width: window.innerWidth, height: window.innerHeight }
@@ -58,8 +64,8 @@ onUnmounted(() => window.removeEventListener('resize', measureFrame))
 
 const dismissCopy = computed(() =>
   viewport.atLeast('md')
-    ? 'Press L or click the world to put this away.'
-    : 'Tap the world or close to put this away.',
+    ? t('wikirealms-legend-dismiss-desktop')
+    : t('wikirealms-legend-dismiss-mobile'),
 )
 
 // It is a summon like any other, so it takes its turn in the stack: Escape
@@ -79,7 +85,7 @@ watch(
 onBeforeUnmount(() => overlays.close('legend'))
 
 const annotated = computed(() =>
-  FEATURE_LEGEND.filter((entry) => props.anchors[entry.id]).map((entry) => ({
+  features.value.filter((entry) => props.anchors[entry.id]).map((entry) => ({
     ...entry,
     anchor: props.anchors[entry.id],
   })),
@@ -107,7 +113,7 @@ const placedPins = computed(() => {
     .filter(Boolean)
 })
 
-const keyed = computed(() => FEATURE_LEGEND.filter((entry) => !props.anchors[entry.id]))
+const keyed = computed(() => features.value.filter((entry) => !props.anchors[entry.id]))
 
 function featureSwatch(id) {
   if (id === 'water') return WATER_SWATCH
@@ -134,7 +140,13 @@ function pinTitle(item) {
 <template>
   <Teleport to="body">
     <Transition name="legend">
-      <div v-if="show" class="legend" role="dialog" aria-label="What you are looking at" @click="$emit('close')">
+      <div
+        v-if="show"
+        class="legend"
+        role="dialog"
+        :aria-label="t('wikirealms-legend-title')"
+        @click="$emit('close')"
+      >
         <!-- Leaders from each callout to a ring on the real feature. -->
         <svg class="legend__leaders" aria-hidden="true">
           <template v-for="item in placedPins" :key="item.id">
@@ -156,52 +168,52 @@ function pinTitle(item) {
         >
           <strong>
             <template v-if="item.title.kind === 'section'">
-              <em>{{ item.title.name }}</em> is a section
+              <em><bdi>{{ item.title.name }}</bdi></em><bdi>{{ t('wikirealms-legend-pin-section-suffix') }}</bdi>
             </template>
             <template v-else-if="item.title.kind === 'portal'">
-              A portal to <em>{{ item.title.name }}</em>
+              <bdi>{{ t('wikirealms-legend-pin-portal-prefix') }}</bdi><em><bdi>{{ item.title.name }}</bdi></em>
             </template>
             <template v-else>{{ item.title.text }}</template>
           </strong>
-          <span>{{ item.detail }}</span>
+          <span><bdi>{{ item.detail }}</bdi></span>
         </p>
 
         <aside class="legend__key" @click.stop>
           <header class="legend__head">
-            <h2>What you are looking at</h2>
-            <button type="button" aria-label="Close the legend" @click="$emit('close')">
+            <h2><bdi>{{ t('wikirealms-legend-title') }}</bdi></h2>
+            <button type="button" :aria-label="t('wikirealms-legend-close')" @click="$emit('close')">
               <Icon name="close" :size="16" />
             </button>
           </header>
 
           <section>
-            <h3>The ground is how well each section cites</h3>
+            <h3><bdi>{{ t('wikirealms-legend-ground-heading') }}</bdi></h3>
             <ul class="legend__ground">
-              <li v-for="entry in GROUND_LEGEND" :key="entry.biome">
+              <li v-for="entry in groundRows" :key="entry.biome">
                 <span class="legend__swatch" :style="{ background: entry.swatch }" />
                 <span class="legend__text">
-                  <strong>{{ entry.name }}</strong>
-                  <span>{{ entry.detail }}</span>
+                  <strong><bdi>{{ entry.name }}</bdi></strong>
+                  <span><bdi>{{ entry.detail }}</bdi></span>
                 </span>
               </li>
             </ul>
-            <p class="legend__note">{{ LUSHNESS_CEILING_NOTE }}</p>
+            <p class="legend__note"><bdi>{{ ceilingNote }}</bdi></p>
           </section>
 
           <section v-if="keyed.length">
-            <h3>And the rest</h3>
+            <h3><bdi>{{ t('wikirealms-legend-rest-heading') }}</bdi></h3>
             <ul class="legend__features">
               <li v-for="entry in keyed" :key="entry.id">
                 <span class="legend__swatch" :style="{ background: featureSwatch(entry.id) }" />
                 <span class="legend__text">
-                  <strong>{{ entry.label }}</strong>
-                  <span>{{ entry.detail }}</span>
+                  <strong><bdi>{{ entry.label }}</bdi></strong>
+                  <span><bdi>{{ entry.detail }}</bdi></span>
                 </span>
               </li>
             </ul>
           </section>
 
-          <p class="legend__dismiss">{{ dismissCopy }}</p>
+          <p class="legend__dismiss"><bdi>{{ dismissCopy }}</bdi></p>
         </aside>
       </div>
     </Transition>
@@ -276,9 +288,10 @@ function pinTitle(item) {
 }
 
 .legend__key {
+  /* Dock to the inline end; safe-area env() is physical (exception 3). */
   position: absolute;
   top: 50%;
-  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   display: grid;
   gap: var(--spacing-md);
   width: min(320px, calc(100vw - 24px));
@@ -291,6 +304,10 @@ function pinTitle(item) {
   box-shadow: var(--shadow-panel);
   transform: translateY(-50%);
   cursor: default;
+}
+
+[dir='rtl'] .legend__key {
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-left, 0px));
 }
 
 .legend__head {
@@ -401,13 +418,17 @@ function pinTitle(item) {
 @media (max-width: 767px) {
   .legend__key {
     top: auto;
-    right: var(--spacing-sm);
     /* Sit above the phone helm strip so Legend stays readable and closable. */
     bottom: calc(var(--hit) + var(--spacing-lg) + env(safe-area-inset-bottom, 0px));
-    left: var(--spacing-sm);
+    inset-inline: var(--spacing-sm);
     width: auto;
     max-height: 56dvh;
     transform: none;
+  }
+
+  [dir='rtl'] .legend__key {
+    /* inset-inline already mirrored; reset desktop safe-area override. */
+    inset-inline-end: var(--spacing-sm);
   }
 }
 </style>

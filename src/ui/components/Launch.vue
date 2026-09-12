@@ -1,10 +1,12 @@
 <script setup>
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { useOverlays } from '../design/useOverlays.js'
 import { pickRealms, randomRealm } from '../content/realms.js'
+import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Before there is anywhere to be.
@@ -17,6 +19,10 @@ import { pickRealms, randomRealm } from '../content/realms.js'
  *
  * Search is the hero here and only here. Once a realm exists it steps aside
  * into the command palette, because from then on the way onward is portals.
+ *
+ * Curated suggestions are always English Wikipedia articles — the shelf is
+ * vetted for what those pages generate. The section label, EN chips, and
+ * aria names say so even when search is set to another edition.
  */
 const props = defineProps({
   /**
@@ -25,17 +31,39 @@ const props = defineProps({
    * choosing — which is the point of it.
    */
   dismissible: { type: Boolean, default: false },
+  /** Last-used search language (does not change the realm underfoot). */
+  language: { type: String, default: DEFAULT_LANGUAGE },
+  showAllWikipedias: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'guide', 'close'])
+const emit = defineEmits(['select', 'guide', 'close', 'update:language'])
 
-const { query, results, status, errorMessage, setQuery } = useArticleSearch()
+const { t } = useI18n()
+const searchLanguage = ref(props.language || DEFAULT_LANGUAGE)
+
+watch(
+  () => props.language,
+  (code) => {
+    if (code && code !== searchLanguage.value) searchLanguage.value = code
+  },
+)
+
+const { query, results, status, errorMessage, setQuery } = useArticleSearch({
+  language: () => searchLanguage.value,
+})
+
+watch(searchLanguage, () => {
+  if (query.value.trim()) setQuery(query.value)
+})
+
 const overlays = useOverlays()
 
 // Sampled once per mount rather than per render, so the grid does not
 // reshuffle under the pointer — and freshly each time the screen is
 // summoned, so coming back shows somewhere new.
 const suggestions = ref(pickRealms())
+
+const showSuggestions = computed(() => results.value.length === 0)
 
 // Summoned over a live world it is a surface like any other: Escape closes
 // it, and it takes its turn in the stack rather than inventing a dismissal.
@@ -50,8 +78,14 @@ watch(
 
 onBeforeUnmount(() => overlays.close('launch'))
 
-function choose(title) {
-  emit('select', { title })
+function onLanguage(code) {
+  searchLanguage.value = code
+  emit('update:language', code)
+}
+
+/** Curated shelf is English-only. */
+function chooseEnglish(title) {
+  emit('select', { title, language: DEFAULT_LANGUAGE })
 }
 </script>
 
@@ -60,7 +94,7 @@ function choose(title) {
     class="launch"
     :role="dismissible ? 'dialog' : undefined"
     :aria-modal="dismissible ? 'true' : undefined"
-    :aria-label="dismissible ? 'Opening screen' : undefined"
+    :aria-label="dismissible ? t('wikirealms-launch-dialog-label') : undefined"
   >
     <div class="launch__panel">
       <div class="launch__identity">
@@ -69,12 +103,12 @@ function choose(title) {
              world, the realm in the scrim is the h1 and this is a dialog
              inside it — two h1s would leave a screen reader with two
              answers to "what is this page". -->
-        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark">WikiRealms</component>
+        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></component>
         <button
           v-if="dismissible"
           class="launch__close"
           type="button"
-          aria-label="Back to the world"
+          :aria-label="t('wikirealms-launch-back')"
           @click="$emit('close')"
         >
           <Icon name="close" :size="18" />
@@ -82,30 +116,40 @@ function choose(title) {
       </div>
 
       <p class="launch__pitch">
-        Every Wikipedia article is a world. Its sections become mountain ranges, its
-        references grow the forests, and its links are portals out.
+        <bdi>{{ t('wikirealms-launch-pitch') }}</bdi>
       </p>
 
       <SearchBar
         class="launch__search"
         size="lg"
         autofocus
-        placeholder="Name a realm…"
+        :language="searchLanguage"
+        :show-all-wikipedias="showAllWikipedias"
         :query="query"
         :results="results"
         :status="status"
         :error-message="errorMessage"
         @update:query="setQuery"
+        @update:language="onLanguage"
         @select="$emit('select', $event)"
       />
 
-      <div v-if="results.length === 0" class="launch__suggestions">
-        <p class="launch__label">Or begin somewhere</p>
+      <div v-if="showSuggestions" class="launch__suggestions">
+        <p class="launch__label"><bdi>{{ t('wikirealms-launch-suggestions-label') }}</bdi></p>
         <ul class="launch__realms">
           <li v-for="realm in suggestions" :key="realm.title">
-            <button type="button" @click="choose(realm.title)">
-              <strong>{{ realm.title }}</strong>
-              <span>{{ realm.hint }}</span>
+            <button
+              type="button"
+              :aria-label="t('wikirealms-launch-suggestion-aria', realm.title)"
+              @click="chooseEnglish(realm.title)"
+            >
+              <strong>
+                <span class="launch__lang" aria-hidden="true">
+                  <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+                </span>
+                <bdi>{{ realm.title }}</bdi>
+              </strong>
+              <span aria-hidden="true"><bdi>{{ realm.hint }}</bdi></span>
             </button>
           </li>
         </ul>
@@ -114,21 +158,24 @@ function choose(title) {
           <button
             class="launch__extra"
             type="button"
-            @click="choose(randomRealm(suggestions.map((realm) => realm.title)).title)"
+            :aria-label="t('wikirealms-launch-surprise-aria')"
+            @click="chooseEnglish(randomRealm(suggestions.map((realm) => realm.title)).title)"
           >
             <Icon name="crosshair" :size="14" />
-            Surprise me
+            <span class="launch__lang" aria-hidden="true">
+              <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+            </span>
+            <bdi>{{ t('wikirealms-launch-surprise') }}</bdi>
           </button>
           <button class="launch__extra" type="button" @click="$emit('guide')">
             <Icon name="guide" :size="14" />
-            How this works
+            <bdi>{{ t('wikirealms-launch-how') }}</bdi>
           </button>
         </div>
       </div>
     </div>
   </div>
 </template>
-
 <style scoped>
 .launch {
   position: fixed;
@@ -165,7 +212,7 @@ function choose(title) {
   place-items: center;
   width: var(--hit);
   height: var(--hit);
-  margin-left: auto;
+  margin-inline-start: auto;
   border: 1px solid var(--edge-line);
   border-radius: var(--radius-md);
   background: transparent;
@@ -226,7 +273,7 @@ function choose(title) {
   background: transparent;
   color: var(--ink-1);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .launch__realms button:hover {
@@ -234,12 +281,31 @@ function choose(title) {
   background: var(--accent-wash);
 }
 
+.launch__lang {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, transparent);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+}
+
 .launch__realms strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
   font-size: var(--text-sm);
   font-weight: 500;
 }
 
-.launch__realms span {
+.launch__realms button > span {
   color: var(--ink-3);
   font-size: var(--text-xs);
 }

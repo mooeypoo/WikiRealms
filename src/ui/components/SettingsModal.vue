@@ -1,6 +1,8 @@
 <script setup>
+import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Ported onto <Sheet>. The settings themselves are untouched here; they get
@@ -13,18 +15,19 @@ defineProps({
 })
 
 const emit = defineEmits(['update:preferences', 'close'])
+const { t } = useI18n()
 
-const CHROME = [
-  { value: 'solid', label: 'Solid' },
-  { value: 'translucent', label: 'Translucent' },
-  { value: 'minimal', label: 'Minimal' },
-]
+const CHROME = computed(() => [
+  { value: 'solid', label: t('wikirealms-settings-chrome-solid') },
+  { value: 'translucent', label: t('wikirealms-settings-chrome-translucent') },
+  { value: 'minimal', label: t('wikirealms-settings-chrome-minimal') },
+])
 
-const RENDERING = [
-  { value: 'high', label: 'High' },
-  { value: 'auto', label: 'Auto' },
-  { value: 'low', label: 'Low' },
-]
+const RENDERING = computed(() => [
+  { value: 'high', label: t('wikirealms-settings-rendering-high') },
+  { value: 'auto', label: t('wikirealms-settings-rendering-auto') },
+  { value: 'low', label: t('wikirealms-settings-rendering-low') },
+])
 
 function update(key, value) {
   emit('update:preferences', { [key]: value })
@@ -32,6 +35,8 @@ function update(key, value) {
 
 function reset() {
   emit('update:preferences', {
+    language: 'en',
+    showAllWikipedias: false,
     worldShape: 'flat',
     rendering: 'auto',
     travelAnimation: true,
@@ -42,30 +47,62 @@ function reset() {
     autoHideHUD: false,
   })
 }
+
+function chromeLabel(preferences) {
+  return CHROME.value.find((option) => option.value === (preferences.chrome ?? 'translucent')).label
+}
+
+function renderingLabel(preferences) {
+  return RENDERING.value.find((option) => option.value === (preferences.rendering ?? 'auto')).label
+}
 </script>
 
 <template>
-  <Sheet id="settings" :open="show" label="Settings" :snap-points="[0.5, 0.92]" :snap="1" @close="$emit('close')">
+  <Sheet
+    id="settings"
+    :open="show"
+    :label="t('wikirealms-settings-title')"
+    :snap-points="[0.5, 0.92]"
+    :snap="1"
+    @close="$emit('close')"
+  >
     <template #header>
       <div class="settings__bar">
-        <h2 class="settings__title">Settings</h2>
-        <button class="settings__close" type="button" aria-label="Close settings" @click="$emit('close')">
+        <h2 class="settings__title"><bdi>{{ t('wikirealms-settings-title') }}</bdi></h2>
+        <button
+          class="settings__close"
+          type="button"
+          :aria-label="t('wikirealms-settings-close')"
+          @click="$emit('close')"
+        >
           <Icon name="close" :size="18" />
         </button>
       </div>
     </template>
 
     <fieldset class="settings__group">
-      <legend>Rendering</legend>
+      <legend><bdi>{{ t('wikirealms-settings-wikipedia') }}</bdi></legend>
+      <label class="settings__row">
+        <span>
+          <strong><bdi>{{ t('wikirealms-settings-show-all-wikipedias') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-show-all-wikipedias-help') }}</bdi></small>
+        </span>
+        <input
+          type="checkbox"
+          :checked="preferences.showAllWikipedias === true"
+          @change="update('showAllWikipedias', $event.target.checked)"
+        />
+      </label>
+    </fieldset>
+
+    <fieldset class="settings__group">
+      <legend><bdi>{{ t('wikirealms-settings-rendering') }}</bdi></legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ RENDERING.find((option) => option.value === (preferences.rendering ?? 'auto')).label }}</strong>
-          <small>
-            High always draws the world in 3D. Low uses the flat canvas, which asks less of the
-            device. Auto picks by what the browser can do.
-          </small>
+          <strong><bdi>{{ renderingLabel(preferences) }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-rendering-help') }}</bdi></small>
         </span>
-        <div class="settings__segmented" role="radiogroup" aria-label="Rendering quality">
+        <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-rendering-aria')">
           <button
             v-for="option in RENDERING"
             :key="option.value"
@@ -75,21 +112,18 @@ function reset() {
             :class="['settings__segment', { 'is-active': (preferences.rendering ?? 'auto') === option.value }]"
             @click="update('rendering', option.value)"
           >
-            {{ option.label }}
+            <bdi>{{ option.label }}</bdi>
           </button>
         </div>
       </div>
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Motion</legend>
+      <legend><bdi>{{ t('wikirealms-settings-motion') }}</bdi></legend>
       <label class="settings__row">
         <span>
-          <strong>Travel animation</strong>
-          <small>
-            The dive between worlds. Turn it off for an immediate arrival — the system's
-            reduced-motion setting already does this on its own.
-          </small>
+          <strong><bdi>{{ t('wikirealms-settings-travel-animation') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-travel-animation-help') }}</bdi></small>
         </span>
         <input
           type="checkbox"
@@ -100,43 +134,40 @@ function reset() {
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Map layers</legend>
+      <legend><bdi>{{ t('wikirealms-settings-map-layers') }}</bdi></legend>
       <label class="settings__row">
         <span>
-          <strong>Sections</strong>
-          <small>Section halos and energy walls. Subsections reveal on hover.</small>
+          <strong><bdi>{{ t('wikirealms-settings-sections') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-sections-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showSections" @change="update('showSections', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>Portals</strong>
-          <small>Links to related Wikipedia articles.</small>
+          <strong><bdi>{{ t('wikirealms-settings-portals') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-portals-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showPortals" @change="update('showPortals', $event.target.checked)" />
       </label>
 
       <label class="settings__row">
         <span>
-          <strong>Foliage</strong>
-          <small>Trees, grass, and scrub matching each biome.</small>
+          <strong><bdi>{{ t('wikirealms-settings-foliage') }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-foliage-help') }}</bdi></small>
         </span>
         <input type="checkbox" :checked="preferences.showFoliage" @change="update('showFoliage', $event.target.checked)" />
       </label>
     </fieldset>
 
     <fieldset class="settings__group">
-      <legend>Panels</legend>
+      <legend><bdi>{{ t('wikirealms-settings-panels') }}</bdi></legend>
       <div class="settings__row settings__row--stacked">
         <span>
-          <strong>{{ CHROME.find((option) => option.value === (preferences.chrome ?? 'translucent')).label }}</strong>
-          <small>
-            How present the panels are over the world. Text stays at full contrast in all
-            three — the old opacity slider dimmed the words along with the panel.
-          </small>
+          <strong><bdi>{{ chromeLabel(preferences) }}</bdi></strong>
+          <small><bdi>{{ t('wikirealms-settings-chrome-help') }}</bdi></small>
         </span>
-        <div class="settings__segmented" role="radiogroup" aria-label="Panel presence">
+        <div class="settings__segmented" role="radiogroup" :aria-label="t('wikirealms-settings-chrome-aria')">
           <button
             v-for="option in CHROME"
             :key="option.value"
@@ -146,18 +177,17 @@ function reset() {
             :class="['settings__segment', { 'is-active': (preferences.chrome ?? 'translucent') === option.value }]"
             @click="update('chrome', option.value)"
           >
-            {{ option.label }}
+            <bdi>{{ option.label }}</bdi>
           </button>
         </div>
       </div>
     </fieldset>
 
     <template #footer>
-      <button type="button" class="settings__reset" @click="reset">Reset defaults</button>
+      <button type="button" class="settings__reset" @click="reset"><bdi>{{ t('wikirealms-settings-reset') }}</bdi></button>
     </template>
   </Sheet>
 </template>
-
 <style scoped>
 .settings__bar {
   display: flex;
@@ -273,6 +303,18 @@ function reset() {
   background: rgba(var(--accent-rgb), 0.28);
   color: var(--accent-ink);
   box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+.settings__select {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 var(--spacing-md);
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink-1);
+  font: inherit;
+  font-size: var(--text-sm);
 }
 
 .settings__reset {

@@ -21,7 +21,7 @@ WikiRealms should support portable session state so a user can:
 
 ```json
 {
-  "schemaVersion": "3.0",
+  "schemaVersion": "4.0",
   "createdAt": "2026-08-31T12:00:00Z",
   "appVersion": "0.1.0",
   "engineVersion": "gen-v1",
@@ -46,20 +46,22 @@ The journey: a graph of realms, plus the order you moved between them.
 "navigation": {
   "graph": {
     "realms": {
-      "r:Saturn": { "id": "r:Saturn", "title": "Saturn", "order": 1 },
-      "r:Titan":  { "id": "r:Titan",  "title": "Titan",  "order": 2 }
+      "r:en:Saturn": { "id": "r:en:Saturn", "title": "Saturn", "language": "en", "order": 1 },
+      "r:en:Titan":  { "id": "r:en:Titan",  "title": "Titan",  "language": "en", "order": 2 }
     },
-    "edges": [{ "from": "r:Saturn", "to": "r:Titan" }],
-    "history": ["r:Saturn", "r:Titan"],
+    "edges": [{ "from": "r:en:Saturn", "to": "r:en:Titan" }],
+    "history": ["r:en:Saturn", "r:en:Titan"],
     "cursor": 1,
     "nextOrder": 3
   }
 }
 ```
 
-A realm's identity is its title, because that is what determines the world:
-`worldId` derives from articleId, revision and engine version, so reaching an
-article twice generates the byte-identical world. Two arrivals are one place.
+A realm's identity is its Wikipedia language edition and title, because that
+is what determines the world: `worldId` derives from articleId (which already
+includes language), revision and engine version. The same title on German and
+English Wikipedia are different realms. The UI typically shows one language's
+trail at a time.
 
 There are two structures here, which is the split a browser makes. The GRAPH
 records where you have been and how those places connect — cycles are ordinary,
@@ -71,11 +73,9 @@ An `edge` means a portal was actually taken. A jump — a search, a shared link 
 adds a realm but no edge, because claiming a connection that does not exist
 would put a road on the map where there is none.
 
-Schema 2.0 stored a tree of ARRIVALS: one node per visit, merged only when a
-realm was re-entered from the same parent. That duplicated a realm reached by
-two routes and could not represent a loop at all. Schema 1.0 stored `current`,
-`backstack` and `forwardstack`. Both are still read: 2.0 merges its nodes by
-title and turns parent links into edges, and 1.0 replays its flat history.
+Schema 3.0 used title-only realm ids (`r:Saturn`) and is migrated to
+`r:en:Saturn` on read. Schema 2.0 stored a tree of ARRIVALS; schema 1.0 stored
+`current`, `backstack` and `forwardstack`. All are still read.
 
 ### `articleCache`
 Fetched article metadata, revision information, and normalized article records.

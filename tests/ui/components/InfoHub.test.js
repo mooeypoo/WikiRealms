@@ -15,7 +15,9 @@ beforeEach(() => {
   window.dispatchEvent(new Event('resize'))
 })
 
-afterEach(() => {
+afterEach(async () => {
+  const { setUiLocale } = await import('../../../src/ui/i18n/banana.js')
+  await setUiLocale('en')
   resetOverlays()
   resetKeymap()
   document.body.innerHTML = ''
@@ -76,6 +78,19 @@ describe('InfoHub', () => {
     expect(about?.innerHTML).toContain('Fantasy Town Kit')
     expect(about?.innerHTML).toContain('https://kenney.nl/assets/fantasy-town-kit')
     wrapper.unmount()
+  })
+
+  it('sets prose direction from the UI locale', async () => {
+    const { setUiLocale } = await import('../../../src/ui/i18n/banana.js')
+    await setUiLocale('he')
+    const heGuide = mountGuide({ currentTab: 'start-here' })
+    expect(document.querySelector('.guide__prose')?.getAttribute('dir')).toBe('rtl')
+    heGuide.unmount()
+
+    await setUiLocale('en')
+    const enGuide = mountGuide({ currentTab: 'start-here' })
+    expect(document.querySelector('.guide__prose')?.getAttribute('dir')).toBe('ltr')
+    enGuide.unmount()
   })
 
   it('lists shortcuts from the registry rather than from a copy of them', async () => {

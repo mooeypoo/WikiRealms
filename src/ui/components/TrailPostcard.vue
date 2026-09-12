@@ -22,6 +22,7 @@ import {
   POSTCARD_WIDTH,
   buildTrailPostcard,
 } from '../content/trailPostcard.js'
+import { useI18n } from '../i18n/banana.js'
 
 const props = defineProps({
   show: Boolean,
@@ -29,6 +30,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'toast'])
+const { t } = useI18n()
 
 const svgRef = ref(null)
 const busy = ref(false)
@@ -38,7 +40,7 @@ const model = computed(() => buildTrailPostcard(props.graph, { realmUrl }))
 const statsLine = computed(() => {
   if (!model.value) return ''
   const { realmCount, portalCount } = model.value
-  return `${realmCount} realm${realmCount === 1 ? '' : 's'}  ·  ${portalCount} portal${portalCount === 1 ? '' : 's'} walked`
+  return t('wikirealms-postcard-stats', realmCount, portalCount)
 })
 
 /** Vertical rhythm for stacked stops inside the artboard. */
@@ -78,7 +80,7 @@ async function withBlob(run) {
     const blob = await pngBlobFromSvg(svgRef.value, { scale: 2 })
     await run(blob)
   } catch {
-    emit('toast', 'Could not make that image')
+    emit('toast', t('wikirealms-postcard-toast-image-fail'))
   } finally {
     busy.value = false
   }
@@ -88,27 +90,30 @@ async function onCopyImage() {
   await withBlob(async (blob) => {
     const outcome = await copyImageBlob(blob)
     if (outcome === 'copied') {
-      emit('toast', 'Postcard image copied')
+      emit('toast', t('wikirealms-postcard-toast-image-copied'))
       return
     }
     // Clipboard image is spotty on some browsers / insecure origins —
     // fall through to a download so the viewer still gets the graphic.
     downloadBlob(blob, filename())
-    emit('toast', 'Image downloaded — clipboard copy unavailable here')
+    emit('toast', t('wikirealms-postcard-toast-image-downloaded'))
   })
 }
 
 async function onDownload() {
   await withBlob(async (blob) => {
     downloadBlob(blob, filename())
-    emit('toast', 'Postcard downloaded')
+    emit('toast', t('wikirealms-postcard-toast-downloaded'))
   })
 }
 
 async function onCopyLetter() {
   if (!model.value) return
   const ok = await copyText(model.value.clipboardText)
-  emit('toast', ok ? 'Letter copied' : 'Could not copy that letter')
+  emit(
+    'toast',
+    ok ? t('wikirealms-postcard-toast-letter-copied') : t('wikirealms-postcard-toast-letter-fail'),
+  )
 }
 
 async function onShare() {
@@ -125,8 +130,8 @@ async function onShare() {
       },
       shareLink,
     )
-    if (outcome === 'copied') emit('toast', 'Postcard copied')
-    else if (outcome === 'failed') emit('toast', 'Could not share that postcard')
+    if (outcome === 'copied') emit('toast', t('wikirealms-postcard-toast-copied'))
+    else if (outcome === 'failed') emit('toast', t('wikirealms-postcard-toast-share-fail'))
   })
 }
 
@@ -145,21 +150,26 @@ function truncate(title, max = 36) {
   <Sheet
     id="trail-postcard"
     :open="show"
-    label="Trail postcard"
+    :label="t('wikirealms-postcard-title')"
     :snap-points="[0.72, 0.94]"
     :snap="1"
     @close="$emit('close')"
   >
     <template #header>
       <div class="postcard__bar">
-        <h2 class="postcard__title">Trail postcard</h2>
-        <button class="postcard__close" type="button" aria-label="Close" @click="$emit('close')">
+        <h2 class="postcard__title"><bdi>{{ t('wikirealms-postcard-title') }}</bdi></h2>
+        <button
+          class="postcard__close"
+          type="button"
+          :aria-label="t('wikirealms-postcard-close')"
+          @click="$emit('close')"
+        >
           <Icon name="close" :size="18" />
         </button>
       </div>
     </template>
 
-    <p v-if="!model" class="postcard__empty">Nowhere to write from yet.</p>
+    <p v-if="!model" class="postcard__empty"><bdi>{{ t('wikirealms-postcard-empty') }}</bdi></p>
 
     <div v-else class="postcard__stage">
       <svg
@@ -169,7 +179,7 @@ function truncate(title, max = 36) {
         :width="POSTCARD_WIDTH"
         :height="POSTCARD_HEIGHT"
         role="img"
-        :aria-label="`Expedition postcard for ${model.here}`"
+        :aria-label="t('wikirealms-postcard-aria', model.here)"
       >
         <defs>
           <linearGradient id="pc-sky" x1="0" y1="0" x2="1" y2="1">
@@ -260,7 +270,7 @@ function truncate(title, max = 36) {
           font-size="34"
           font-weight="600"
         >
-          Your trail
+          {{ t('wikirealms-trail-title') }}
         </text>
 
         <!-- Spine -->
@@ -326,7 +336,7 @@ function truncate(title, max = 36) {
           font-size="26"
           font-weight="500"
         >
-          Every Wikipedia article is a world.
+          {{ t('wikirealms-postcard-tagline-1') }}
         </text>
         <text
           x="420"
@@ -336,7 +346,7 @@ function truncate(title, max = 36) {
           font-family="Space Grotesk, Helvetica Neue, Arial, sans-serif"
           font-size="20"
         >
-          Explore knowledge as landscape.
+          {{ t('wikirealms-postcard-tagline-2') }}
         </text>
 
         <text
@@ -356,19 +366,19 @@ function truncate(title, max = 36) {
       <div class="postcard__actions">
         <button type="button" :disabled="!model || busy" @click="onCopyImage">
           <Icon name="share" :size="15" />
-          <span>Copy image</span>
+          <span><bdi>{{ t('wikirealms-postcard-copy-image') }}</bdi></span>
         </button>
         <button type="button" :disabled="!model || busy" @click="onDownload">
           <Icon name="download" :size="15" />
-          <span>Download</span>
+          <span><bdi>{{ t('wikirealms-postcard-download') }}</bdi></span>
         </button>
         <button type="button" :disabled="!model || busy" @click="onCopyLetter">
           <Icon name="prose" :size="15" />
-          <span>Copy letter</span>
+          <span><bdi>{{ t('wikirealms-postcard-copy-letter') }}</bdi></span>
         </button>
         <button type="button" :disabled="!model || busy" @click="onShare">
           <Icon name="external" :size="15" />
-          <span>Share</span>
+          <span><bdi>{{ t('wikirealms-share') }}</bdi></span>
         </button>
       </div>
     </template>

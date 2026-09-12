@@ -1,6 +1,8 @@
 <script setup>
+import { computed } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * The scrim's utilities, on a screen too narrow to hold them.
@@ -20,7 +22,7 @@ import Sheet from '../design/Sheet.vue'
  * width, which is the difference between an overflow menu and a second
  * shell.
  */
-defineProps({
+const props = defineProps({
   show: Boolean,
   /** Share needs a realm underfoot. */
   canShare: { type: Boolean, default: false },
@@ -28,42 +30,66 @@ defineProps({
 
 defineEmits(['search', 'guide', 'settings', 'share', 'close'])
 
-const TOOLS = [
-  { event: 'search', icon: 'search', label: 'Search realms', hint: 'Leave for a different world' },
+const { t } = useI18n()
+
+const tools = computed(() => [
+  {
+    event: 'search',
+    icon: 'search',
+    label: t('wikirealms-scrim-search-aria'),
+    hint: t('wikirealms-tools-search-hint'),
+  },
   {
     event: 'share',
     icon: 'share',
-    label: 'Share',
-    hint: 'This realm, or the trail you walked',
+    label: t('wikirealms-share'),
+    hint: t('wikirealms-tools-share-hint'),
     needsShare: true,
   },
-  { event: 'guide', icon: 'guide', label: 'About WikiRealms', hint: 'What this is and how it works' },
-  { event: 'settings', icon: 'settings', label: 'Settings', hint: 'Layers, rendering, motion' },
-]
+  {
+    event: 'guide',
+    icon: 'guide',
+    label: t('wikirealms-scrim-about-aria'),
+    hint: t('wikirealms-tools-about-hint'),
+  },
+  {
+    event: 'settings',
+    icon: 'settings',
+    label: t('wikirealms-settings-title'),
+    hint: t('wikirealms-tools-settings-hint'),
+  },
+])
 </script>
 
 <template>
-  <Sheet id="tools" :open="show" label="Tools" :snap-points="[0.5, 0.8]" :snap="0" @close="$emit('close')">
+  <Sheet
+    id="tools"
+    :open="show"
+    :label="t('wikirealms-scrim-tools')"
+    :snap-points="[0.5, 0.8]"
+    :snap="0"
+    @close="$emit('close')"
+  >
     <template #header>
-      <h2 class="tools__title">Tools</h2>
+      <h2 class="tools__title"><bdi>{{ t('wikirealms-scrim-tools') }}</bdi></h2>
     </template>
 
     <ul class="tools__list">
-      <li v-for="tool in TOOLS" :key="tool.event">
+      <li v-for="tool in tools" :key="tool.event">
         <button
           type="button"
-          :disabled="tool.needsShare && !canShare"
+          :disabled="tool.needsShare && !props.canShare"
           @click="$emit(tool.event)"
         >
           <Icon :name="tool.icon" :size="18" />
           <span>
-            <strong>{{ tool.label }}</strong>
+            <strong><bdi>{{ tool.label }}</bdi></strong>
             <small>
-              {{
-                tool.needsShare && !canShare
-                  ? 'Open a realm first'
+              <bdi>{{
+                tool.needsShare && !props.canShare
+                  ? t('wikirealms-share-need-realm')
                   : tool.hint
-              }}
+              }}</bdi>
             </small>
           </span>
         </button>
@@ -98,7 +124,7 @@ const TOOLS = [
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .tools__list button:hover:not(:disabled) {

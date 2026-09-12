@@ -1,9 +1,11 @@
 <script setup>
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
+import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Search, once there is somewhere to be.
@@ -14,23 +16,55 @@ import { useArticleSearch } from '../composables/useArticleSearch.js'
  * have arrived. From then on the way onward is portals; search is for
  * leaving the map entirely, which is a deliberate act and belongs behind a
  * deliberate gesture.
+ *
+ * Language is chosen here with the query — the same control as on launch —
+ * so switching editions is always choosing where to go next, not retitling
+ * the world already underfoot.
  */
 const props = defineProps({
   show: Boolean,
+  language: { type: String, default: DEFAULT_LANGUAGE },
+  showAllWikipedias: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'close'])
+const emit = defineEmits(['select', 'close', 'update:language'])
 
-const { query, results, status, errorMessage, setQuery, clear } = useArticleSearch()
+const { t } = useI18n()
+const searchLanguage = ref(props.language || DEFAULT_LANGUAGE)
+
+watch(
+  () => props.language,
+  (code) => {
+    if (code && code !== searchLanguage.value) searchLanguage.value = code
+  },
+)
+
+const { query, results, status, errorMessage, setQuery, clear } = useArticleSearch({
+  language: () => searchLanguage.value,
+})
+
+watch(searchLanguage, () => {
+  if (query.value.trim()) setQuery(query.value)
+})
 
 // A palette should never reopen holding the last search: it is a fresh
 // question every time it is asked.
 watch(
   () => props.show,
   (open) => {
-    if (!open) clear()
+    if (!open) {
+      clear()
+      // Abandoning search drops an uncommitted edition pick — language only
+      // sticks when an article is chosen (or prefs change from outside).
+      searchLanguage.value = props.language || DEFAULT_LANGUAGE
+    }
   },
 )
+
+function onLanguage(code) {
+  searchLanguage.value = code
+  emit('update:language', code)
+}
 
 function onSelect(result) {
   emit('select', result)
@@ -42,7 +76,7 @@ function onSelect(result) {
   <Sheet
     id="search"
     :open="show"
-    label="Search Wikipedia"
+    :label="t('wikirealms-search-sheet-label')"
     presentation="dialog"
     :snap-points="[0.5, 0.9]"
     :snap="0"
@@ -50,8 +84,8 @@ function onSelect(result) {
   >
     <template #header>
       <div class="palette__bar">
-        <p class="palette__label">Travel to another realm</p>
-        <button class="palette__close" type="button" aria-label="Close search" @click="$emit('close')">
+        <p class="palette__label"><bdi>{{ t('wikirealms-search-travel-label') }}</bdi></p>
+        <button class="palette__close" type="button" :aria-label="t('wikirealms-search-close')" @click="$emit('close')">
           <Icon name="close" :size="18" />
         </button>
       </div>
@@ -59,18 +93,19 @@ function onSelect(result) {
 
     <SearchBar
       autofocus
-      placeholder="Name a realm…"
+      :language="searchLanguage"
+      :show-all-wikipedias="showAllWikipedias"
       :query="query"
       :results="results"
       :status="status"
       :error-message="errorMessage"
       @update:query="setQuery"
+      @update:language="onLanguage"
       @select="onSelect"
     />
 
     <p v-if="results.length === 0 && status === 'idle'" class="palette__hint">
-      Searching leaves the world you are in and starts a new journey. To carry on
-      from here, take a portal. Press <kbd>Esc</kbd> to stay.
+      <bdi>{{ t('wikirealms-search-hint', 'Esc') }}</bdi>
     </p>
   </Sheet>
 </template>
@@ -110,15 +145,13 @@ function onSelect(result) {
 
 .palette__hint {
   margin: var(--spacing-md) 0 0;
-  color: var(--ink-3);
-  font-size: var(--text-xs);
-  line-height: 1.55;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  line-height: 1.5;
 }
 
 .palette__hint kbd {
-  padding: 1px 5px;
-  border: 1px solid var(--edge-line);
-  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
+  font-size: var(--text-xs);
 }
 </style>

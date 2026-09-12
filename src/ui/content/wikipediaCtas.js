@@ -10,6 +10,7 @@
  * not world math. Rendering modules must not import this file.
  */
 import { BIOME } from '../../engine/generation/terrain.js'
+import { t, tBdiHtml } from '../i18n/banana.js'
 import { LUSHNESS_BAND_COPY } from './lushnessBands.js'
 
 /** Master switches and thresholds. Edit here to retune without UI prefs. */
@@ -60,7 +61,9 @@ export const WIKIPEDIA_CTA_SURFACES = Object.freeze({
 })
 
 /** Shared eyebrow for diegetic contribution invites (Ledger callouts). */
-export const FIELD_TASK_EYEBROW = 'Field task'
+export function fieldTaskEyebrow() {
+  return t('wikirealms-field-task-eyebrow')
+}
 
 /**
  * Bands below this article's citation average (same vocabulary as the
@@ -122,7 +125,7 @@ export function isCiteCtaBand(densityBand) {
 function citeNotice(ctx) {
   const copy = LUSHNESS_BAND_COPY[ctx.densityBand]
   if (!copy) return null
-  return `${copy.name} — ${copy.comparison}. Select this peak in the Ledger for how to help.`
+  return t('wikirealms-cta-cite-tooltip', copy.name, copy.comparison)
 }
 
 /**
@@ -133,9 +136,9 @@ function citeFieldNotice(ctx) {
   const copy = LUSHNESS_BAND_COPY[ctx.densityBand]
   if (!copy) return null
   if (ctx.densityBand === BIOME.DUNES) {
-    return `${copy.name} ground — no references yet. Open the section on Wikipedia and see what still needs a source.`
+    return t('wikirealms-cta-cite-field-barren', copy.name)
   }
-  return `${copy.name} ground — ${copy.comparison}. Citations grow the forest; open the section on Wikipedia to help.`
+  return t('wikirealms-cta-cite-field', copy.name, copy.comparison)
 }
 
 /**
@@ -144,11 +147,13 @@ function citeFieldNotice(ctx) {
  */
 function citeLabel(ctx) {
   if (!ctx.anchor) return null
-  const topic = ctx.sectionTitle ? `“${ctx.sectionTitle}”` : 'this section'
+  const topic = ctx.sectionTitle
+    ? t('wikirealms-cta-cite-topic-named', ctx.sectionTitle)
+    : t('wikirealms-cta-cite-topic-section')
   if (ctx.densityBand === BIOME.DUNES) {
-    return `Help seed ${topic} with citations on Wikipedia`
+    return t('wikirealms-cta-cite-seed-section', topic)
   }
-  return `Help add citations to ${topic} on Wikipedia`
+  return t('wikirealms-cta-cite-add-section', topic)
 }
 
 /**
@@ -181,9 +186,9 @@ function isSparseArticle(ctx) {
  */
 function sparseArticleNotice(ctx) {
   if ((ctx.citationRate ?? 0) <= 0) {
-    return 'Barren ground — this realm cites almost nothing yet. Open the article on Wikipedia and seed it with sources; citations grow the forest.'
+    return t('wikirealms-cta-sparse-article-barren')
   }
-  return 'Sparse ground — thin references across the article. Citations grow the forest; open it on Wikipedia to help seed what is missing.'
+  return t('wikirealms-cta-sparse-article')
 }
 
 /**
@@ -192,9 +197,9 @@ function sparseArticleNotice(ctx) {
  */
 function sparseArticleLabel(ctx) {
   if ((ctx.citationRate ?? 0) <= 0) {
-    return 'Help seed this article with citations on Wikipedia'
+    return t('wikirealms-cta-sparse-article-seed-label')
   }
-  return 'Help add citations to this article on Wikipedia'
+  return t('wikirealms-cta-sparse-article-add-label')
 }
 
 /**
@@ -225,7 +230,7 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     match: (ctx) => isCiteCtaBand(ctx.densityBand) && !ctx.isAggregate,
     eyebrow: (ctx) =>
       // Field-task framing only where there is room for notice + action.
-      ctx.anchor ? FIELD_TASK_EYEBROW : null,
+      ctx.anchor ? fieldTaskEyebrow() : null,
     notice: (ctx) => (ctx.anchor ? citeFieldNotice(ctx) : citeNotice(ctx)),
     label: citeLabel,
     href: (ctx) =>
@@ -240,7 +245,7 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     // as land, and the citation invite matches the section field task.
     priority: 15,
     match: (ctx) => Boolean(ctx.articleUrl) && isSparseArticle(ctx),
-    eyebrow: () => FIELD_TASK_EYEBROW,
+    eyebrow: () => fieldTaskEyebrow(),
     notice: sparseArticleNotice,
     label: sparseArticleLabel,
     href: (ctx) => ctx.articleUrl ?? '',
@@ -257,10 +262,9 @@ export const WIKIPEDIA_CTAS = Object.freeze([
       const sections = ctx.sectionCount ?? Infinity
       return Boolean(ctx.articleUrl) && words <= maxWords && sections <= maxSections
     },
-    eyebrow: () => FIELD_TASK_EYEBROW,
-    notice: () =>
-      'This map is still flooding — short articles leave little land above the water. Enlarge the article on Wikipedia and the realm grows with it.',
-    label: () => 'Enlarge the map on Wikipedia',
+    eyebrow: () => fieldTaskEyebrow(),
+    notice: () => t('wikirealms-cta-grow-small-notice'),
+    label: () => t('wikirealms-cta-grow-small-label'),
     href: (ctx) => buildArticleEditUrl(ctx.articleUrl ?? ''),
   }),
 
@@ -270,7 +274,7 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     surfaces: Object.freeze([WIKIPEDIA_CTA_SURFACES.LEDGER_HEADER]),
     priority: 30,
     match: (ctx) => Boolean(ctx.stale && ctx.articleUrl),
-    label: () => 'View the latest — or help keep it accurate',
+    label: () => t('wikirealms-cta-stale-label'),
     href: (ctx) => ctx.articleUrl ?? '',
   }),
 
@@ -283,14 +287,13 @@ export const WIKIPEDIA_CTAS = Object.freeze([
       const min = WIKIPEDIA_CTA_CONFIG.stewardship.minPortalHops
       return (ctx.portalHops ?? 0) >= min
     },
-    prose: () => `
-      <p class="trail-cta__lead">You have walked the network — Wikipedia stays free because people fund and edit it.</p>
+    prose: () =>
+      `<p class="trail-cta__lead">${tBdiHtml('wikirealms-cta-trail-lead')}</p>
       <p class="trail-cta__actions">
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">Become an editor</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-become-editor')}</a>
         <span class="trail-cta__sep" aria-hidden="true">·</span>
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">Donate</a>
-      </p>
-    `.trim(),
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-donate')}</a>
+      </p>`.trim(),
   }),
 
   Object.freeze({
@@ -299,14 +302,13 @@ export const WIKIPEDIA_CTAS = Object.freeze([
     surfaces: Object.freeze([WIKIPEDIA_CTA_SURFACES.FIELD_GUIDE_FOOTER]),
     priority: 40,
     match: () => true,
-    prose: () => `
-      <p class="guide-cta__lead">Barren slopes need citations. Flooded maps need prose. Wikipedia is free because people fund and edit it.</p>
+    prose: () =>
+      `<p class="guide-cta__lead">${tBdiHtml('wikirealms-cta-guide-lead')}</p>
       <p class="guide-cta__actions">
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">Become an editor</a>
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.introduction}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-become-editor')}</a>
         <span class="guide-cta__sep" aria-hidden="true">·</span>
-        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">Donate</a>
-      </p>
-    `.trim(),
+        <a href="${WIKIPEDIA_CTA_CONFIG.urls.donate}" target="_blank" rel="noopener noreferrer">${tBdiHtml('wikirealms-cta-donate')}</a>
+      </p>`.trim(),
   }),
 ])
 

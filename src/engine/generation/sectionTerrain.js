@@ -691,7 +691,15 @@ function computeWaterLevelShift(totalArticleSize) {
  * @param {{ width: number, height: number, rng: () => number, peaks: object[], totalArticleSize: number, articleCitationRate?: number }} options
  * @returns {{ width: number, height: number, heightMap: Float64Array, lushnessMap: Float32Array, biomeMap: Uint8Array, sectionOwnershipMap: Int32Array, peaks: object[] }}
  */
-export function generateSectionTerrain({ width, height, rng, peaks, totalArticleSize, articleCitationRate = 0 }) {
+export function generateSectionTerrain({
+  width,
+  height,
+  rng,
+  peaks,
+  totalArticleSize,
+  articleCitationRate = 0,
+  useAbsoluteCeiling = true,
+}) {
   const cellCount = width * height
   const waterLevelShift = computeWaterLevelShift(totalArticleSize)
 
@@ -700,7 +708,7 @@ export function generateSectionTerrain({ width, height, rng, peaks, totalArticle
   // a copy taken before this runs carries `lushness: undefined` — which
   // reads as 0, which the dunes veto then reports as "cites nothing" on
   // every subsection summit in the world.
-  annotatePeakLushness(peaks, articleCitationRate)
+  annotatePeakLushness(peaks, articleCitationRate, { useAbsoluteCeiling })
 
   const sections = peaks.filter((p) => p.depth <= 1)
   const subsections = peaks.filter((p) => p.depth > 1)

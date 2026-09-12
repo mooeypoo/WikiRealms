@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
+import { useI18n } from '../i18n/banana.js'
 import { placeCard } from '../rendering/anchorPlacement.js'
+
+const { t } = useI18n()
 
 /**
  * Where a portal goes, asked at the portal.
@@ -81,16 +84,18 @@ const style = computed(() =>
           role="dialog"
           aria-labelledby="preview-title"
         >
-          <p class="preview__label">Portal to</p>
-          <h2 id="preview-title" class="preview__title">{{ portal.targetTitle }}</h2>
-          <p class="preview__blurb">Travels to another article's world</p>
+          <p class="preview__label"><bdi>{{ t('wikirealms-portal-to') }}</bdi></p>
+          <h2 id="preview-title" class="preview__title"><bdi>{{ portal.targetTitle }}</bdi></h2>
+          <p class="preview__blurb"><bdi>{{ t('wikirealms-portal-blurb') }}</bdi></p>
 
           <div class="preview__actions">
             <button class="preview__go" type="button" data-autofocus @click="$emit('travel', portal)">
-              Travel
+              <bdi>{{ t('wikirealms-portal-travel') }}</bdi>
               <Icon name="chevron-right" :size="15" />
             </button>
-            <button class="preview__stay" type="button" @click="$emit('dismiss')">Stay</button>
+            <button class="preview__stay" type="button" @click="$emit('dismiss')">
+              <bdi>{{ t('wikirealms-portal-stay') }}</bdi>
+            </button>
           </div>
         </section>
       </div>
@@ -126,6 +131,7 @@ const style = computed(() =>
 }
 
 .preview {
+  /* Screen-space card: transform from JS places it (exception 2). */
   position: absolute;
   top: 0;
   left: 0;
@@ -192,6 +198,11 @@ const style = computed(() =>
 
 .preview__go:hover {
   background: rgba(var(--accent-rgb), 0.24);
+}
+
+[dir='rtl'] .preview__go :deep(svg) {
+  /* Chevron only — exception (4); layout stays logical. */
+  transform: scaleX(-1);
 }
 
 .preview__stay {

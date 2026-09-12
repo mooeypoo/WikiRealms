@@ -1,5 +1,6 @@
 <script setup>
 import Icon from '../design/Icon.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Where you are, and the way to everything you have to ask for.
@@ -21,6 +22,8 @@ defineProps({
 })
 
 defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 'tools'])
+
+const { t } = useI18n()
 </script>
 
 <template>
@@ -29,14 +32,14 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
       <!-- The mark is the way home, as it is everywhere else on the web.
            The wordmark hides below md, so the affordance has to be the mark
            rather than the pair. -->
-      <button class="scrim__home" type="button" aria-label="Opening screen" @click="$emit('home')">
+      <button class="scrim__home" type="button" :aria-label="t('wikirealms-scrim-home')" @click="$emit('home')">
         <Icon name="mark" :size="18" />
-        <span class="scrim__wordmark">WikiRealms</span>
+        <span class="scrim__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></span>
       </button>
 
       <template v-if="realm">
         <span class="scrim__rule" aria-hidden="true" />
-        <h1 class="scrim__realm">{{ realm }}</h1>
+        <h1 class="scrim__realm"><bdi>{{ realm }}</bdi></h1>
 
         <!-- Always, once there is a realm: the trail panel is where the
              journey actions live now, so it cannot be a control that only
@@ -45,22 +48,22 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
         <button
           class="scrim__trail"
           type="button"
-          :aria-label="`Your trail, ${trailLength} realms — path kept and shareable`"
-          title="Your trail — the path you have walked. Open to revisit stops or share it."
+          :aria-label="t('wikirealms-scrim-trail-aria', trailLength)"
+          :title="t('wikirealms-scrim-trail-title')"
           @click="$emit('trail')"
         >
           <Icon name="trail" :size="15" />
-          <span class="scrim__trail-label">Your trail</span>
+          <span class="scrim__trail-label"><bdi>{{ t('wikirealms-scrim-trail') }}</bdi></span>
           <span class="scrim__trail-count tabular">{{ trailLength }}</span>
         </button>
       </template>
     </div>
 
-    <nav class="scrim__travel" aria-label="Travel">
+    <nav class="scrim__travel" :aria-label="t('wikirealms-scrim-travel')">
       <button
         class="scrim__button"
         type="button"
-        aria-label="Back"
+        :aria-label="t('wikirealms-scrim-back')"
         :disabled="!canGoBack"
         @click="$emit('back')"
       >
@@ -69,7 +72,7 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
       <button
         class="scrim__button"
         type="button"
-        aria-label="Forward"
+        :aria-label="t('wikirealms-scrim-forward')"
         :disabled="!canGoForward"
         @click="$emit('forward')"
       >
@@ -80,22 +83,22 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
     <!-- Below md these four collapse into one control: four 48px targets
          plus a realm name plus the trail chevron do not fit across a phone,
          and shrinking them under 48 is the wrong thing to give up. -->
-    <button class="scrim__button scrim__more" type="button" aria-label="Tools" @click="$emit('tools')">
+    <button class="scrim__button scrim__more" type="button" :aria-label="t('wikirealms-scrim-tools')" @click="$emit('tools')">
       <Icon name="more" :size="17" />
     </button>
 
-    <nav class="scrim__utilities" aria-label="Tools">
-      <button class="scrim__button scrim__tool" type="button" aria-label="Search realms" @click="$emit('search')">
+    <nav class="scrim__utilities" :aria-label="t('wikirealms-scrim-tools')">
+      <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-search-aria')" @click="$emit('search')">
         <Icon name="search" :size="17" />
-        <span class="scrim__label">Search</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-search') }}</bdi></span>
       </button>
-      <button class="scrim__button scrim__tool" type="button" aria-label="About WikiRealms" @click="$emit('guide')">
+      <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-about-aria')" @click="$emit('guide')">
         <Icon name="guide" :size="17" />
-        <span class="scrim__label">About</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-about') }}</bdi></span>
       </button>
-      <button class="scrim__button scrim__tool" type="button" aria-label="Settings" @click="$emit('settings')">
+      <button class="scrim__button scrim__tool" type="button" :aria-label="t('wikirealms-scrim-settings')" @click="$emit('settings')">
         <Icon name="settings" :size="17" />
-        <span class="scrim__label">Settings</span>
+        <span class="scrim__label"><bdi>{{ t('wikirealms-scrim-settings') }}</bdi></span>
       </button>
     </nav>
   </header>
@@ -105,8 +108,7 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
 .scrim {
   position: fixed;
   top: 0;
-  right: 0;
-  left: 0;
+  inset-inline: 0;
   z-index: var(--z-instruments);
   display: flex;
   align-items: center;
@@ -123,6 +125,12 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
     rgba(var(--surface-1-rgb), 0) 100%
   );
   pointer-events: none;
+}
+
+/* Back / forward glyphs point along the reading direction. */
+[dir='rtl'] .scrim__travel :deep(svg) {
+  /* Back/forward chevrons — exception (4). */
+  transform: scaleX(-1);
 }
 
 .scrim > * {
@@ -293,8 +301,8 @@ defineEmits(['home', 'back', 'forward', 'trail', 'search', 'guide', 'settings', 
 @media (max-width: 767px) {
   .scrim {
     gap: var(--spacing-sm);
-    padding-right: max(var(--spacing-sm), env(safe-area-inset-right, 0px));
-    padding-left: max(var(--spacing-sm), env(safe-area-inset-left, 0px));
+    padding-inline-end: max(var(--spacing-sm), env(safe-area-inset-right, 0px));
+    padding-inline-start: max(var(--spacing-sm), env(safe-area-inset-left, 0px));
   }
 
   .scrim__wordmark,

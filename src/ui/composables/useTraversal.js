@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import * as trail from '../../core/traversal/visitGraph.js'
+import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
 
 /**
  * Vue-reactive adapter over the visit graph.
@@ -18,6 +19,7 @@ export function useTraversal() {
   const graph = ref(trail.createVisitGraph())
 
   const current = computed(() => trail.currentTitle(graph.value))
+  const currentLanguage = computed(() => trail.currentLanguage(graph.value))
   const currentNodeId = computed(() => trail.currentId(graph.value))
   const backstack = computed(() => trail.backTitles(graph.value))
   const forwardstack = computed(() => trail.forwardTitles(graph.value))
@@ -25,13 +27,17 @@ export function useTraversal() {
   const canGoForward = computed(() => trail.canGoForward(graph.value))
 
   /** Arriving somewhere from where you are — portal travel. */
-  function navigateTo(title) {
-    graph.value = trail.visit(graph.value, title)
+  function navigateTo(title, { language } = {}) {
+    graph.value = trail.visit(graph.value, title, {
+      language: language ?? trail.currentLanguage(graph.value) ?? DEFAULT_LANGUAGE,
+    })
   }
 
   /** Starting somewhere unconnected — a search, a shared link, a random realm. */
-  function jumpTo(title) {
-    graph.value = trail.jump(graph.value, title)
+  function jumpTo(title, { language } = {}) {
+    graph.value = trail.jump(graph.value, title, {
+      language: language ?? trail.currentLanguage(graph.value) ?? DEFAULT_LANGUAGE,
+    })
   }
 
   /** Returning to a node already in the journey, without rewriting it. */
@@ -58,7 +64,10 @@ export function useTraversal() {
    */
   function clearTrail() {
     const title = current.value
-    graph.value = title ? trail.jump(trail.createVisitGraph(), title) : trail.createVisitGraph()
+    const language = currentLanguage.value ?? DEFAULT_LANGUAGE
+    graph.value = title
+      ? trail.jump(trail.createVisitGraph(), title, { language })
+      : trail.createVisitGraph()
   }
 
   /**
@@ -74,6 +83,7 @@ export function useTraversal() {
   return {
     graph,
     current,
+    currentLanguage,
     currentNodeId,
     backstack,
     forwardstack,

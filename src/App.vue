@@ -24,13 +24,21 @@ import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
 import { useKeymap } from './ui/design/useKeymap.js'
-import { onHistoryPop, pushRealm, readRealm } from './adapters/urlState.js'
+import { onHistoryPop, pushRealm, languageForRealmUrl, readLanguage, readRealm } from './adapters/urlState.js'
 import { supportsWebGL } from './ui/rendering/webglSupport.js'
 import { useViewport } from './ui/design/useViewport.js'
 import { useTravel } from './ui/design/useTravel.js'
 import { CURRENT_ENGINE_VERSION } from './engine/generation/engineVersion.js'
 import { isWorldStale } from './core/article/staleness.js'
 import { APP_NAME } from './appInfo.js'
+import {
+  articleCacheKey,
+  DEFAULT_LANGUAGE,
+  getEdition,
+  normalizeLanguage,
+} from './core/i18n/wikipediaEditions.js'
+import { journeyForLanguage } from './core/traversal/visitGraph.js'
+import { setUiLocale, t } from './ui/i18n/banana.js'
 
 // three.js is heavy; only load it once a 3D view is actually rendered.
 const WorldView3D = defineAsyncComponent(() => import('./ui/components/WorldView3D.vue'))
@@ -46,6 +54,7 @@ const {
 const {
   graph,
   current,
+  currentLanguage,
   currentNodeId,
   canGoBack,
   canGoForward,
@@ -98,8 +107,8 @@ const selectedPeak = ref(null)
  * "there is a world now", not "there is a spinner".
  */
 const announcement = computed(() => {
-  if (status.value === 'error') return errorMessage.value ?? 'Could not load that article'
-  if (worldStatus.value === 'error') return worldErrorMessage.value ?? 'Could not build that world'
+  if (status.value === 'error') return errorMessage.value ?? t('wikirealms-error-load-article')
+  if (worldStatus.value === 'error') return worldErrorMessage.value ?? t('wikirealms-error-build-world')
   if (worldStatus.value === 'success' && article.value) {
     return `Arrived in ${article.value.title}`
   }
@@ -107,6 +116,33 @@ const announcement = computed(() => {
 })
 
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
+
+/** Active Wikipedia edition: the realm underfoot, else the search default. */
+const activeLanguage = computed(() =>
+  normalizeLanguage(currentLanguage.value ?? preferences.language ?? DEFAULT_LANGUAGE),
+)
+
+/**
+ * Language of the loaded realm. Never falls back to search preferences —
+ * those are for the next query, not for reinterpretating a title already
+ * on the trail or in the address bar.
+ */
+function languageOfCurrentRealm() {
+  return normalizeLanguage(currentLanguage.value ?? DEFAULT_LANGUAGE)
+}
+
+/** Trail UI shows one language at a time so editions do not mix on the map. */
+const trailGraph = computed(() => journeyForLanguage(graph.value, activeLanguage.value))
+
+function applyDocumentLanguage(code) {
+  const edition = getEdition(code)
+  document.documentElement.lang = edition.bcp47 || edition.code
+  // Reading direction for UI chrome (logical CSS, flex/grid). The world
+  // stage is not mirrored — only chrome and text follow dir. See
+  // docs/architecture.md §Direction and .cursor/rules/rtl-layout.mdc.
+  document.documentElement.dir = edition.dir
+  void setUiLocale(edition.code)
+}
 
 /**
  * ONE view axis (docs/ux-vision.md D1). Planet and Flat are two renderings
@@ -138,9 +174,12 @@ const rendersInWebGL = computed(() => {
 function onSelect(result) {
   isSearchOpen.value = false
   showLaunch.value = false
-  // A search is not travel: it starts a journey rather than pretending the
-  // result was reached from wherever the viewer happened to be standing.
-  jumpTo(result.title)
+  // Language rides with the choice: the search field's edition, or English
+  // for curated suggestions. Persist it only now — as the next search
+  // default — never when the picker moves without an article.
+  const language = normalizeLanguage(result.language ?? preferences.language ?? DEFAULT_LANGUAGE)
+  if (language !== preferences.language) updatePreferences({ language })
+  jumpTo(result.title, { language })
 }
 
 function onPortalClick({ portal, anchor }) {
@@ -202,7 +241,7 @@ function confirmTravel(portal) {
     onDive: () => worldViewRef.value?.diveTo?.(portal),
     // Behind the wash: navigateTo triggers the fetch and the ~120ms
     // synchronous generate, which would stutter anything still moving.
-    onArrive: () => navigateTo(portal.targetArticleId),
+    onArrive: () => navigateTo(portal.targetArticleId, { language: languageOfCurrentRealm() }),
   })
 }
 
@@ -258,7 +297,7 @@ function toggleHideHud() {
  * Everywhere visited, not the depth of the branch you happen to be on: the
  * badge and the panel it opens should be counting the same thing.
  */
-const trailSize = computed(() => Object.keys(graph.value.realms).length)
+const trailSize = computed(() => Object.keys(trailGraph.value.realms).length)
 
 function toggleLegend() {
   if (showLegend.value) {
@@ -321,7 +360,7 @@ function onShareClick() {
 function onShareRealm() {
   showShareMenu.value = false
   if (article.value?.title) {
-    shareArticle(article.value.title)
+    shareArticle(article.value.title, { language: article.value.language ?? languageOfCurrentRealm() })
   }
 }
 
@@ -343,16 +382,18 @@ function onTrailPostcard() {
  */
 function onTrailClear() {
   const title = current.value
+  const language = languageOfCurrentRealm()
+  const key = title ? articleCacheKey(language, title) : null
   clearTrail()
-  if (title && articleCache.value[title]) {
-    articleCache.value = { [title]: articleCache.value[title] }
+  if (key && articleCache.value[key]) {
+    articleCache.value = { [key]: articleCache.value[key] }
   } else {
     articleCache.value = {}
   }
   // Replace the address-bar entry so Back does not try to replay a graph
   // we just erased (unknown node ids already fall through to jumpTo).
-  pushRealm(current.value, currentNodeId.value, { replace: true })
-  showToast('Trail cleared')
+  pushRealm(current.value, currentNodeId.value, { replace: true, language })
+  showToast(t('wikirealms-trail-cleared'))
 }
 
 // Every shortcut in the app is declared here, in one registry. The Field
@@ -360,11 +401,11 @@ function onTrailClear() {
 // documentation cannot drift apart the way they had.
 const { register } = useKeymap()
 
-register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
+register({ keys: 'h', label: 'wikirealms-keymap-hide', group: 'wikirealms-keymap-group-view', run: toggleHideHud })
 register({
   keys: 'l',
-  label: 'What am I looking at?',
-  group: 'View',
+  label: 'wikirealms-keymap-legend',
+  group: 'wikirealms-keymap-group-view',
   enabled: () => Boolean(world.value),
   run: toggleLegend,
 })
@@ -380,30 +421,50 @@ register({
     worldViewRef.value?.cancelDive?.()
   },
 })
-register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
-register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
+register({
+  keys: ['?', 'i'],
+  label: 'wikirealms-keymap-about',
+  group: 'wikirealms-keymap-group-view',
+  run: () => (showInfoHub.value = !showInfoHub.value),
+})
+register({
+  keys: 's',
+  label: 'wikirealms-keymap-settings',
+  group: 'wikirealms-keymap-group-view',
+  run: () => (showSettings.value = !showSettings.value),
+})
 register({
   keys: ['mod+k', '/'],
-  label: 'Search for a realm',
-  group: 'Travel',
+  label: 'wikirealms-keymap-search',
+  group: 'wikirealms-keymap-group-travel',
   // Only once there is somewhere to leave: before that the launch screen
   // already has the field, focused.
   enabled: () => Boolean(current.value),
   run: () => (isSearchOpen.value = true),
 })
-register({ keys: 'v', label: 'Switch between planet and flat', group: 'View', run: toggleWorldShape })
-register({ keys: 'c', label: 'Recentre the view', group: 'View', run: recenterView })
+register({
+  keys: 'v',
+  label: 'wikirealms-keymap-shape',
+  group: 'wikirealms-keymap-group-view',
+  run: toggleWorldShape,
+})
+register({
+  keys: 'c',
+  label: 'wikirealms-keymap-recenter',
+  group: 'wikirealms-keymap-group-view',
+  run: recenterView,
+})
 register({
   keys: 'ArrowLeft',
-  label: 'Back through your trail',
-  group: 'Travel',
+  label: 'wikirealms-keymap-back',
+  group: 'wikirealms-keymap-group-travel',
   enabled: () => canGoBack.value,
   run: goBack,
 })
 register({
   keys: 'ArrowRight',
-  label: 'Forward through your trail',
-  group: 'Travel',
+  label: 'wikirealms-keymap-forward',
+  group: 'wikirealms-keymap-group-travel',
   enabled: () => canGoForward.value,
   run: goForward,
 })
@@ -428,17 +489,41 @@ onMounted(() => {
     articleCache.value = { ...restored.articleCache }
   }
 
-  // A shared link wins over the restored session: someone following one
-  // means to land where it points, not where they last were.
-  const sharedRealm = readRealm()
-  if (sharedRealm && sharedRealm !== current.value) jumpTo(sharedRealm)
+  // A shared link is a (realm, language) pair and wins over the restored
+  // session. Missing `lang` means English — never the search preference,
+  // which would reopen an English title on the wrong Wikipedia.
+  const urlRealm = readRealm()
+  const urlLang = readLanguage()
+  if (urlRealm) {
+    const pairLanguage = languageForRealmUrl()
+    if (urlRealm !== current.value || pairLanguage !== languageOfCurrentRealm()) {
+      jumpTo(urlRealm, { language: pairLanguage })
+    }
+    if (pairLanguage !== preferences.language) updatePreferences({ language: pairLanguage })
+  } else if (urlLang && urlLang !== preferences.language) {
+    updatePreferences({ language: urlLang })
+  }
 
-  pushRealm(current.value, currentNodeId.value, { replace: true })
+  applyDocumentLanguage(activeLanguage.value)
 
-  stopHistoryListener = onHistoryPop((state, realm) => {
+  pushRealm(current.value, currentNodeId.value, {
+    replace: true,
+    language: languageOfCurrentRealm(),
+  })
+
+  stopHistoryListener = onHistoryPop((state, realm, lang) => {
     replayingHistory = true
-    if (state.nodeId && graph.value.realms[state.nodeId]) goToNode(state.nodeId)
-    else if (realm) jumpTo(realm)
+    const pairLanguage = normalizeLanguage(lang ?? state.language ?? DEFAULT_LANGUAGE)
+    if (state.nodeId && graph.value.realms[state.nodeId]) {
+      goToNode(state.nodeId)
+      const nodeLang = languageOfCurrentRealm()
+      if (nodeLang !== preferences.language) updatePreferences({ language: nodeLang })
+    } else if (realm) {
+      jumpTo(realm, { language: pairLanguage })
+      if (pairLanguage !== preferences.language) updatePreferences({ language: pairLanguage })
+    } else if (lang && lang !== preferences.language) {
+      updatePreferences({ language: lang })
+    }
     replayingHistory = false
   })
 })
@@ -449,23 +534,31 @@ onUnmounted(() => stopHistoryListener?.())
 // back button retraces the journey instead of leaving the app.
 watch(currentNodeId, (nodeId) => {
   if (replayingHistory) return
-  pushRealm(current.value, nodeId)
+  pushRealm(current.value, nodeId, { language: languageOfCurrentRealm() })
 })
+
+watch(
+  activeLanguage,
+  (code) => {
+    applyDocumentLanguage(code)
+  },
+)
 
 watch(
   current,
   (title) => {
     document.title = title ? `${title} · ${APP_NAME}` : APP_NAME
-    if (title) loadArticle(title)
+    if (title) loadArticle(title, { language: languageOfCurrentRealm() })
   },
   { immediate: true },
 )
 
 watch(article, (newArticle) => {
   if (newArticle) {
-    const previous = articleCache.value[newArticle.title]
+    const key = articleCacheKey(newArticle.language ?? DEFAULT_LANGUAGE, newArticle.title)
+    const previous = articleCache.value[key]
     isStale.value = previous ? isWorldStale(previous.latestRevisionId, newArticle.latestRevisionId) : false
-    articleCache.value = { ...articleCache.value, [newArticle.title]: newArticle }
+    articleCache.value = { ...articleCache.value, [key]: newArticle }
     buildWorld(newArticle)
   } else {
     clearWorld()
@@ -608,12 +701,20 @@ watch([graph, articleCache], () => {
     <Launch
       v-if="!current || showLaunch"
       :dismissible="Boolean(current)"
+      :language="preferences.language ?? 'en'"
+      :show-all-wikipedias="preferences.showAllWikipedias === true"
       @select="onSelect"
       @guide="showInfoHub = true"
       @close="showLaunch = false"
     />
 
-    <CommandPalette :show="isSearchOpen" @select="onSelect" @close="isSearchOpen = false" />
+    <CommandPalette
+      :show="isSearchOpen"
+      :language="preferences.language ?? 'en'"
+      :show-all-wikipedias="preferences.showAllWikipedias === true"
+      @select="onSelect"
+      @close="isSearchOpen = false"
+    />
 
     <ToolsMenu
       :show="showTools"
@@ -627,7 +728,7 @@ watch([graph, articleCache], () => {
 
     <TrailMenu
       :show="showTrail"
-      :graph="graph"
+      :graph="trailGraph"
       :can-share="Boolean(article)"
       @select="onTrailSelect"
       @home="onHomeClick"
@@ -650,7 +751,7 @@ watch([graph, articleCache], () => {
 
     <TrailPostcard
       :show="showTrailPostcard"
-      :graph="graph"
+      :graph="trailGraph"
       @toast="showToast"
       @close="showTrailPostcard = false"
     />
@@ -660,7 +761,7 @@ watch([graph, articleCache], () => {
       v-if="showHudHidden"
       class="app__reveal"
       type="button"
-      aria-label="Show the interface"
+      :aria-label="t('wikirealms-show-interface')"
       @click="showHudHidden = false"
     >
       <Icon name="eye" :size="18" />
@@ -679,7 +780,7 @@ watch([graph, articleCache], () => {
       @close="showSettings = false"
     />
     <Transition name="toast">
-      <p v-if="toastVisible" class="app__toast">{{ toastMessage }}</p>
+      <p v-if="toastVisible" class="app__toast"><bdi>{{ toastMessage }}</bdi></p>
     </Transition>
   </div>
 </template>
@@ -743,7 +844,7 @@ watch([graph, articleCache], () => {
 .app__reveal {
   position: fixed;
   top: max(var(--spacing-md), env(safe-area-inset-top, 0px));
-  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   z-index: var(--z-instruments);
   display: grid;
   place-items: center;
@@ -755,6 +856,10 @@ watch([graph, articleCache], () => {
   box-shadow: var(--shadow-float);
   color: var(--ink-1);
   opacity: 0.85;
+}
+
+[dir='rtl'] .app__reveal {
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-left, 0px));
 }
 
 .app__reveal:hover {
@@ -854,6 +959,8 @@ watch([graph, articleCache], () => {
 }
 
 .hud--alert {
+  /* Physical centering — exception (1) in docs/architecture.md §Direction.
+     Do not use inset-inline-start: 50% with translateX(-50%). */
   top: 6.5rem;
   left: 50%;
   transform: translateX(-50%);
@@ -861,6 +968,7 @@ watch([graph, articleCache], () => {
 }
 
 .hud--status {
+  /* Physical centering — same exception as .hud--alert. */
   top: 6.5rem;
   left: 50%;
   transform: translateX(-50%);
@@ -883,6 +991,7 @@ watch([graph, articleCache], () => {
 }
 
 .app__toast {
+  /* Physical centering — exception (1) in docs/architecture.md §Direction. */
   position: fixed;
   z-index: var(--z-toast);
   left: 50%;

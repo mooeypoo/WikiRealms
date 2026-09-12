@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { onHistoryPop, pushRealm, readRealm, realmUrl } from '../../src/adapters/urlState.js'
+import { languageForRealmUrl, onHistoryPop, pushRealm, readLanguage, readRealm, realmUrl } from '../../src/adapters/urlState.js'
 
 beforeEach(() => {
   history.replaceState(null, '', '/')
@@ -17,7 +17,7 @@ describe('urlState', () => {
 
     it('accepts the parameter the broken share links used', () => {
       // Those links never worked, since nothing read the parameter — but
-      // honouring the spelling rescues any already pasted somewhere.
+      // honouring the spelling rescues any link already pasted somewhere.
       expect(readRealm('?article=Saturn')).toBe('Saturn')
     })
 
@@ -33,10 +33,33 @@ describe('urlState', () => {
     })
   })
 
+  describe('readLanguage', () => {
+    it('reads a known Wikipedia edition code', () => {
+      expect(readLanguage('?lang=he&realm=שבתאי')).toBe('he')
+    })
+
+    it('returns null for missing or unknown codes', () => {
+      expect(readLanguage('?realm=Saturn')).toBeNull()
+      expect(readLanguage('?lang=not-a-wiki')).toBeNull()
+    })
+  })
+
   describe('realmUrl', () => {
     it('builds a shareable link', () => {
       expect(realmUrl('Cassini Division', 'https://wikirealms.test', '/')).toBe(
         'https://wikirealms.test/?realm=Cassini+Division',
+      )
+    })
+
+    it('includes lang for non-English editions', () => {
+      expect(realmUrl('שבתאי', { language: 'he', origin: 'https://wikirealms.test', pathname: '/' })).toBe(
+        'https://wikirealms.test/?realm=%D7%A9%D7%91%D7%AA%D7%90%D7%99&lang=he',
+      )
+    })
+
+    it('omits lang for English so the pair stays English without a preference', () => {
+      expect(realmUrl('Saturn', { language: 'en', origin: 'https://wikirealms.test', pathname: '/' })).toBe(
+        'https://wikirealms.test/?realm=Saturn',
       )
     })
 
@@ -45,6 +68,16 @@ describe('urlState', () => {
 
       expect(url).toContain('Rock+%26+roll')
       expect(readRealm(new URL(url).search)).toBe('Rock & roll')
+    })
+  })
+
+  describe('languageForRealmUrl', () => {
+    it('treats a missing lang as English, not as “use prefs later”', () => {
+      expect(languageForRealmUrl('?realm=The+Martians+(scientists)')).toBe('en')
+    })
+
+    it('honours an explicit edition on the URL pair', () => {
+      expect(languageForRealmUrl('?realm=%D7%A9%D7%91%D7%AA%D7%90%D7%99&lang=he')).toBe('he')
     })
   })
 
@@ -60,7 +93,14 @@ describe('urlState', () => {
       // cannot say WHERE in the journey a back button should land.
       pushRealm('Titan', 'n4')
 
-      expect(history.state).toMatchObject({ nodeId: 'n4', title: 'Titan' })
+      expect(history.state).toMatchObject({ nodeId: 'n4', title: 'Titan', language: 'en' })
+    })
+
+    it('writes lang into the query for non-English editions', () => {
+      pushRealm('שבתאי', 'r:he:שבתאי', { language: 'he' })
+
+      expect(readLanguage(window.location.search)).toBe('he')
+      expect(readRealm(window.location.search)).toBe('שבתאי')
     })
 
     it('replaces rather than pushes when asked', () => {
@@ -87,7 +127,7 @@ describe('urlState', () => {
       history.replaceState({ nodeId: 'n2', title: 'Saturn' }, '', '?realm=Saturn')
       window.dispatchEvent(new PopStateEvent('popstate', { state: { nodeId: 'n2', title: 'Saturn' } }))
 
-      expect(handler).toHaveBeenCalledWith({ nodeId: 'n2', title: 'Saturn' }, 'Saturn')
+      expect(handler).toHaveBeenCalledWith({ nodeId: 'n2', title: 'Saturn' }, 'Saturn', null)
       stop()
     })
 
@@ -97,7 +137,7 @@ describe('urlState', () => {
 
       window.dispatchEvent(new PopStateEvent('popstate', { state: null }))
 
-      expect(handler).toHaveBeenCalledWith({}, null)
+      expect(handler).toHaveBeenCalledWith({}, null, null)
       stop()
     })
 

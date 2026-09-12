@@ -19,6 +19,7 @@ import {
 } from '../content/wikipediaCtas.js'
 import { buildSectionRows } from '../rendering/sectionRows.js'
 import {
+  displaySectionTitle,
   estimateWordCount,
   formatCount,
   formatPageviews,
@@ -29,6 +30,7 @@ import {
 } from '../rendering/sectionStats.js'
 import WikipediaCtaLink from './WikipediaCtaLink.vue'
 import WikipediaFieldTask from './WikipediaFieldTask.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * What this place is.
@@ -67,6 +69,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:state', 'share', 'select', 'legend', 'dismiss-peek-hint'])
 
+const { t } = useI18n()
+
 /**
  * Below this many rows the whole tree is shown expanded, above it every
  * range starts closed.
@@ -100,16 +104,16 @@ const clearHelm = computed(
 const showLegendLink = computed(() => props.state === 'peek' || props.state === 'collapsed')
 
 const moreLabel = computed(() => {
-  if (props.state === 'peek') return 'Show more — open for sections'
-  if (props.state === 'open') return 'Show more — expand this panel'
-  return 'Show more of this panel'
+  if (props.state === 'peek') return t('wikirealms-ledger-more-peek')
+  if (props.state === 'open') return t('wikirealms-ledger-more-open')
+  return t('wikirealms-ledger-more')
 })
 
 const lessLabel = computed(() => {
-  if (props.state === 'open') return 'Show less — peek at this place'
-  if (props.state === 'full') return 'Show less — open view'
-  if (props.state === 'peek') return 'Show less — collapse this panel'
-  return 'Show less of this panel'
+  if (props.state === 'open') return t('wikirealms-ledger-less-open')
+  if (props.state === 'full') return t('wikirealms-ledger-less-full')
+  if (props.state === 'peek') return t('wikirealms-ledger-less-peek')
+  return t('wikirealms-ledger-less')
 })
 
 /**
@@ -122,45 +126,35 @@ const rows = computed(() => model.value.rows)
 
 const stats = computed(() => [
   {
-    label: 'Sections',
+    label: t('wikirealms-ledger-stat-sections'),
     value: countSections(props.article.sections),
     icon: 'peaks',
-    hint: 'Mountain ranges on the map',
+    hint: t('wikirealms-ledger-stat-sections-hint'),
   },
   {
-    label: 'Citations',
+    label: t('wikirealms-ledger-stat-citations'),
     value: props.article.sections?.citationCount ?? 0,
     icon: 'tree',
-    hint: 'How well sections cite — trees and green',
+    hint: t('wikirealms-ledger-stat-citations-hint'),
   },
   {
-    label: 'Portals',
+    label: t('wikirealms-ledger-stat-portals'),
     value: props.world?.portals?.length ?? 0,
     accent: true,
     icon: 'mark',
-    hint: 'Outbound links you can travel through',
+    hint: t('wikirealms-ledger-stat-portals-hint'),
   },
-  // Was "Links", which read 500 for almost every article — that being the
-  // API's page limit for an anonymous request, which nothing here follows
-  // past. A number that describes our query rather than the article has no
-  // business in an instrument panel, and sitting beside Portals it invited
-  // a comparison between two things that are not comparable.
-  //
-  // Words is uncapped, is a fact about the article, and is the one the
-  // world visibly answers to: length is what sets the waterline.
   {
-    label: 'Words',
+    label: t('wikirealms-ledger-stat-words'),
     value: compactCount(estimateWordCount(props.article.sections?.totalSize ?? 0)),
     icon: 'prose',
-    hint: 'Article length — sets the waterline',
+    hint: t('wikirealms-ledger-stat-words-hint'),
   },
-  // 30-day user pageviews from AQS — how busy the article is. Drives how
-  // many fish swim the oceans; shown here so that signal is readable.
   {
-    label: 'Views',
+    label: t('wikirealms-ledger-stat-views'),
     value: formatPageviews(props.article.pageviews),
     icon: 'fish',
-    hint: '30-day pageviews — fish in the seas track how busy this page is',
+    hint: t('wikirealms-ledger-stat-views-hint'),
   },
 ])
 
@@ -285,7 +279,7 @@ function subsectionSummary(row) {
   if (lowest === highest) return label
 
   const nameAt = (index) => describeBand(LUSHNESS_BANDS[index]).name
-  return `${label}, ${nameAt(lowest)} to ${nameAt(highest)}`
+  return t('wikirealms-ledger-subsection-range', label, nameAt(lowest), nameAt(highest))
 }
 
 /**
@@ -302,7 +296,7 @@ function detailFor(row) {
   // Only when the two differ. On a leaf they are the same number, and
   // printing "of which 520 its own" under "520 words" is noise.
   if (row.hasNestedProse) {
-    facts.push(`${formatWords(estimateWordCount(row.ownSize))} of its own`)
+    facts.push(t('wikirealms-ledger-own-words', formatWords(estimateWordCount(row.ownSize))))
   }
   facts.push(formatPortals(row.portals))
   if (!isExpanded(row)) facts.push(subsectionSummary(row))
@@ -469,16 +463,19 @@ watch(
     :compact="state === 'peek'"
     :snap-points="SNAP_POINTS"
     :snap="snap"
-    :label="`About ${article.title}`"
+    :label="t('wikirealms-ledger-about', article.title)"
     side="left"
     @update:snap="onSnap"
   >
     <!-- Minimised: a bar that names where you are and takes you back in. -->
     <template #collapsed>
       <button class="ledger__restore" type="button" @click="setState('peek')">
-        <span class="ledger__restore-title">{{ article.title }}</span>
+        <span class="ledger__restore-title">
+          <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+          <bdi>{{ article.title }}</bdi>
+        </span>
         <span class="ledger__restore-stats tabular">
-          {{ stats[0].value }} sections · {{ stats[2].value }} portals
+          <bdi>{{ t('wikirealms-ledger-restore-stats', stats[0].value, stats[2].value) }}</bdi>
         </span>
         <Icon name="chevron-up" :size="16" />
       </button>
@@ -487,14 +484,17 @@ watch(
     <template #header>
       <div class="ledger__head" :class="{ 'ledger__head--clear-helm': clearHelm }">
         <div class="ledger__identity">
-          <h2 class="ledger__title">{{ article.title }}</h2>
+          <h2 class="ledger__title">
+            <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+            <bdi>{{ article.title }}</bdi>
+          </h2>
           <p class="ledger__origin tabular">
-            EN.WIKIPEDIA · REV {{ article.latestRevisionId }}
+            {{ (article.language || 'en').toUpperCase() }}.WIKIPEDIA · REV {{ article.latestRevisionId }}
           </p>
         </div>
 
         <div class="ledger__controls">
-          <span class="ledger__meter" :title="`Panel is ${state}`" aria-hidden="true">
+          <span class="ledger__meter" :title="t('wikirealms-ledger-panel-state', state)" aria-hidden="true">
             <span v-for="level in [1, 2, 3]" :key="level" :class="['ledger__bar', { 'is-on': snap + 1 === level }]" />
           </span>
           <button
@@ -513,11 +513,11 @@ watch(
       </div>
 
       <p v-if="showPeekHint" class="ledger__peek-hint" role="status">
-        <span>Pull up for sections and share</span>
+        <span><bdi>{{ t('wikirealms-ledger-peek-hint') }}</bdi></span>
         <button
           type="button"
           class="ledger__peek-hint-dismiss"
-          aria-label="Dismiss hint"
+          :aria-label="t('wikirealms-dismiss-hint')"
           @click="$emit('dismiss-peek-hint')"
         >
           <Icon name="close" :size="14" />
@@ -527,7 +527,7 @@ watch(
       <p v-if="stale" class="ledger__stale">
         <Icon name="alert" :size="14" />
         <span class="ledger__stale-copy">
-          Updated on Wikipedia since this world was made
+          <bdi>{{ t('wikirealms-ledger-stale') }}</bdi>
           <WikipediaCtaLink
             v-if="headerCta?.href && headerCta?.label"
             class="ledger__stale-cta"
@@ -539,7 +539,7 @@ watch(
 
       <dl class="ledger__stats">
         <div v-for="stat in stats" :key="stat.label" :title="stat.hint">
-          <dt>{{ stat.label }}</dt>
+          <dt><bdi>{{ stat.label }}</bdi></dt>
           <dd class="tabular" :class="{ 'is-accent': stat.accent }">{{ stat.value }}</dd>
           <span class="ledger__stat-mark" :class="{ 'is-accent': stat.accent }" aria-hidden="true">
             <Icon :name="stat.icon" :size="17" />
@@ -551,16 +551,16 @@ watch(
     <div ref="body" class="ledger__body">
       <template v-if="state !== 'peek'">
         <div v-if="article.summary" class="ledger__summary">
-          <p :class="{ 'is-clamped': !summaryExpanded }">{{ article.summary }}</p>
+          <p :class="{ 'is-clamped': !summaryExpanded }"><bdi>{{ article.summary }}</bdi></p>
           <button class="ledger__more" type="button" @click="summaryExpanded = !summaryExpanded">
-            {{ summaryExpanded ? 'Show less' : 'Show more' }}
+            <bdi>{{ summaryExpanded ? t('wikirealms-show-less') : t('wikirealms-show-more') }}</bdi>
           </button>
         </div>
-        <p v-else class="ledger__empty">No summary for this article.</p>
+        <p v-else class="ledger__empty"><bdi>{{ t('wikirealms-ledger-no-summary') }}</bdi></p>
 
         <section v-if="rows.length" class="ledger__sections">
           <h3 class="ledger__sections-head">
-            Sections
+            <bdi>{{ t('wikirealms-ledger-stat-sections') }}</bdi>
             <span class="tabular">{{ listSummary }}</span>
           </h3>
 
@@ -570,10 +570,10 @@ watch(
                once, and it is what left no room for the figures that
                actually vary. -->
           <div class="ledger__columns" aria-hidden="true">
-            <span>Range</span>
-            <span>Words</span>
-            <span>Refs</span>
-            <span>Ground</span>
+            <span><bdi>{{ t('wikirealms-ledger-col-range') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-stat-words') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-col-refs') }}</bdi></span>
+            <span><bdi>{{ t('wikirealms-ledger-col-ground') }}</bdi></span>
           </div>
 
           <ul class="ledger__list">
@@ -597,7 +597,11 @@ watch(
                   class="ledger__twist"
                   type="button"
                   :aria-expanded="isExpanded(row)"
-                  :aria-label="`${isExpanded(row) ? 'Hide' : 'Show'} the summits in ${row.title}`"
+                  :aria-label="
+                    isExpanded(row)
+                      ? t('wikirealms-ledger-hide-summits', displaySectionTitle(row.title))
+                      : t('wikirealms-ledger-show-summits', displaySectionTitle(row.title))
+                  "
                   @click="toggle(row)"
                 >
                   <Icon :name="isExpanded(row) ? 'chevron-down' : 'chevron-right'" :size="13" />
@@ -616,7 +620,7 @@ watch(
                   :aria-pressed="row.hasGround ? isSelected(row) : undefined"
                   @click="row.hasGround && onRowClick(row)"
                 >
-                  <span class="ledger__row-title">{{ row.title }}</span>
+                  <span class="ledger__row-title"><bdi>{{ displaySectionTitle(row.title) }}</bdi></span>
                   <span class="ledger__row-figure tabular">{{ formatCount(estimateWordCount(row.subtreeSize)) }}</span>
                   <span class="ledger__row-figure tabular">{{ formatCount(row.refs) }}</span>
 
@@ -636,10 +640,10 @@ watch(
                       <span
                         v-if="meterFor(row).tick"
                         class="ledger__meter-tick"
-                        :style="{ left: meterFor(row).tick }"
+                        :style="{ insetInlineStart: meterFor(row).tick }"
                       />
                     </span>
-                    <span class="ledger__band">{{ bandFor(row).name }}</span>
+                    <span class="ledger__band"><bdi>{{ bandFor(row).name }}</bdi></span>
                   </span>
                   <span v-else class="ledger__ground ledger__ground--none">—</span>
                 </component>
@@ -648,12 +652,12 @@ watch(
               <!-- What the row means, for the one row being read. -->
               <div v-if="isSelected(row)" class="ledger__detail">
                 <p v-if="row.isAggregate" class="ledger__detail-why">
-                  Everything too small for a range of its own, gathered into one.
+                  <bdi>{{ t('wikirealms-ledger-aggregate-why') }}</bdi>
                 </p>
                 <p v-else-if="bandFor(row)" class="ledger__detail-why">
-                  {{ bandFor(row).comparison }}
+                  <bdi>{{ bandFor(row).comparison }}</bdi>
                 </p>
-                <p class="ledger__detail-stats">{{ detailFor(row).join(' · ') }}</p>
+                <p class="ledger__detail-stats"><bdi>{{ detailFor(row).join(' · ') }}</bdi></p>
                 <a
                   v-if="article.url && row.anchor"
                   class="ledger__link"
@@ -661,7 +665,7 @@ watch(
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Read {{ row.title }}
+                  <bdi>{{ t('wikirealms-ledger-read-section', displaySectionTitle(row.title)) }}</bdi>
                   <Icon name="external" :size="12" />
                 </a>
                 <WikipediaFieldTask
@@ -686,12 +690,12 @@ watch(
         <div v-if="state === 'open' || state === 'full'" class="ledger__footer-actions">
           <div class="ledger__footer-links">
             <a v-if="article.url" :href="article.url" target="_blank" rel="noopener noreferrer" class="ledger__link">
-              View on Wikipedia
+              <bdi>{{ t('wikirealms-ledger-view-wikipedia') }}</bdi>
               <Icon name="external" :size="12" />
             </a>
             <button class="ledger__link" type="button" @click="$emit('share')">
               <Icon name="share" :size="13" />
-              Share…
+              <bdi>{{ t('wikirealms-ledger-share') }}</bdi>
             </button>
           </div>
           <WikipediaFieldTask
@@ -710,7 +714,7 @@ watch(
           @click="$emit('legend')"
         >
           <Icon name="legend" :size="13" />
-          Legend
+          <bdi>{{ t('wikirealms-legend-short') }}</bdi>
         </button>
       </div>
     </template>
@@ -728,7 +732,7 @@ watch(
   border: none;
   background: transparent;
   color: var(--ink-1);
-  text-align: left;
+  text-align: start;
 }
 
 .ledger__restore:hover {
@@ -736,7 +740,10 @@ watch(
 }
 
 .ledger__restore-title {
+  display: inline-flex;
   flex: 1;
+  align-items: baseline;
+  gap: 0;
   min-width: 0;
   overflow: hidden;
   font-size: var(--text-md);
@@ -759,11 +766,22 @@ watch(
 
 /* Phone helm sits on the sheet lip at open/full — keep the step controls clear. */
 .ledger__head--clear-helm {
-  padding-right: calc(4 * var(--hit) + var(--spacing-md));
+  padding-inline-end: calc(4 * var(--hit) + var(--spacing-md));
 }
 
 .ledger__identity {
   min-width: 0;
+}
+
+.ledger__lang {
+  flex: none;
+  margin-inline-end: var(--spacing-sm);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  vertical-align: 0.05em;
 }
 
 .ledger__title {
@@ -1000,7 +1018,7 @@ watch(
 
 .ledger__columns span:nth-child(2),
 .ledger__columns span:nth-child(3) {
-  text-align: right;
+  text-align: end;
 }
 
 .ledger__list {
@@ -1025,7 +1043,7 @@ watch(
    ground column in and out down the page and destroy the one thing the
    column is for. */
 .ledger__row-title {
-  padding-left: calc(var(--depth) * 13px);
+  padding-inline-start: calc(var(--depth) * 13px);
   overflow: hidden;
   font-size: var(--text-sm);
   text-overflow: ellipsis;
@@ -1043,8 +1061,8 @@ watch(
   position: absolute;
   top: -6px;
   bottom: -6px;
-  left: calc(var(--depth) * 13px - 7px);
-  border-left: 1px solid var(--edge-hair);
+  inset-inline-start: calc(var(--depth) * 13px - 7px);
+  border-inline-start: 1px solid var(--edge-hair);
 }
 
 .ledger__row.is-groundless .ledger__row-title,
@@ -1068,6 +1086,11 @@ watch(
   color: var(--accent);
 }
 
+[dir='rtl'] .ledger__twist :deep(svg) {
+  /* Expand chevron — exception (4). */
+  transform: scaleX(-1);
+}
+
 .ledger__cells {
   width: 100%;
   min-height: 26px;
@@ -1076,7 +1099,7 @@ watch(
   background: none;
   color: var(--ink-1);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 @media (pointer: coarse) {
@@ -1105,7 +1128,7 @@ button.ledger__cells:hover .ledger__row-title {
 .ledger__row-figure {
   color: var(--ink-2);
   font-size: var(--text-xs);
-  text-align: right;
+  text-align: end;
 }
 
 .ledger__ground {
