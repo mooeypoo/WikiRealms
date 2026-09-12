@@ -7,6 +7,7 @@ import {
   WIKIPEDIA_CTA_SURFACES,
   resolveWikipediaCta,
 } from '../content/wikipediaCtas.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * The map of where you have been.
@@ -30,6 +31,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select', 'home', 'share', 'clear', 'export', 'import', 'close'])
+const { t } = useI18n()
 
 function onFile(event) {
   const file = event.target.files?.[0]
@@ -58,6 +60,10 @@ const stewardshipCta = computed(() =>
   }),
 )
 
+const trailCount = computed(() =>
+  t('wikirealms-trail-count', layout.value.nodes.length, layout.value.links.length),
+)
+
 /**
  * A curve rather than a line, and a wide detour for an edge that runs back
  * up the ranks: a straight line between distant rows reads as a mistake,
@@ -84,25 +90,21 @@ function pathFor(link) {
 </script>
 
 <template>
-  <Sheet id="trail" :open="show" label="Your trail" :snap-points="[0.6, 0.92]" :snap="1" @close="$emit('close')">
+  <Sheet id="trail" :open="show" :label="t('wikirealms-trail-title')" :snap-points="[0.6, 0.92]" :snap="1" @close="$emit('close')">
     <template #header>
       <div class="trail__bar">
-        <h2 class="trail__title">Your trail</h2>
-        <span class="trail__count tabular">
-          {{ layout.nodes.length }} realms · {{ layout.links.length }} portals
-        </span>
+        <h2 class="trail__title"><bdi>{{ t('wikirealms-trail-title') }}</bdi></h2>
+        <span class="trail__count tabular"><bdi>{{ trailCount }}</bdi></span>
       </div>
     </template>
 
     <p v-if="layout.nodes.length === 0" class="trail__empty">
-      Nowhere yet. Travel through a portal and this map will keep the path —
-      you can revisit any stop or share the trail as a postcard.
+      <bdi>{{ t('wikirealms-trail-empty') }}</bdi>
     </p>
 
     <template v-else>
       <p class="trail__lede">
-        Your path through Wikipedia is kept here. Jump to any stop, or share
-        the trail when you want someone else to start from where you are.
+        <bdi>{{ t('wikirealms-trail-lede') }}</bdi>
       </p>
       <div class="trail__map">
         <!-- Hidden from assistive technology on purpose: the list below is
@@ -159,9 +161,9 @@ function pathFor(link) {
       </div>
 
       <p class="trail__key">
-        <span><span class="trail__key-mark is-current" /> where you are</span>
-        <span><span class="trail__key-mark is-junction" /> more than one way in</span>
-        <span><span class="trail__key-mark is-start" /> searched for, not walked to</span>
+        <span><span class="trail__key-mark is-current" /> <bdi>{{ t('wikirealms-trail-key-here') }}</bdi></span>
+        <span><span class="trail__key-mark is-junction" /> <bdi>{{ t('wikirealms-trail-key-junction') }}</bdi></span>
+        <span><span class="trail__key-mark is-start" /> <bdi>{{ t('wikirealms-trail-key-start') }}</bdi></span>
       </p>
 
       <!-- The same map, reachable without a pointer. Ordered by rank so it
@@ -176,12 +178,16 @@ function pathFor(link) {
             @click="$emit('select', node.id)"
           >
             <span class="trail__dot" :class="{ 'is-junction': node.routesIn > 1 }" />
-            <span class="trail__name">{{ node.title }}</span>
+            <span class="trail__name"><bdi>{{ node.title }}</bdi></span>
             <!-- Independent facts: the realm you are standing in may well
                  be the one several routes led to, and that is the more
                  interesting half. -->
-            <span v-if="node.routesIn > 1" class="trail__routes tabular">{{ node.routesIn }} ways in</span>
-            <span v-else-if="node.isStart" class="trail__routes tabular">searched</span>
+            <span v-if="node.routesIn > 1" class="trail__routes tabular"
+              ><bdi>{{ t('wikirealms-trail-ways-in', node.routesIn) }}</bdi></span
+            >
+            <span v-else-if="node.isStart" class="trail__routes tabular"
+              ><bdi>{{ t('wikirealms-trail-searched') }}</bdi></span
+            >
             <Icon v-if="node.isCurrent" name="crosshair" :size="13" class="trail__here" />
           </button>
         </li>
@@ -201,23 +207,23 @@ function pathFor(link) {
       <div class="trail__actions">
         <button type="button" @click="$emit('home')">
           <Icon name="mark" :size="15" />
-          <span>Somewhere new</span>
+          <span><bdi>{{ t('wikirealms-trail-somewhere-new') }}</bdi></span>
         </button>
         <button type="button" :disabled="!canShare" @click="$emit('share')">
           <Icon name="share" :size="15" />
-          <span>Share trail</span>
+          <span><bdi>{{ t('wikirealms-trail-share') }}</bdi></span>
         </button>
         <button type="button" :disabled="!canClear" @click="$emit('clear')">
           <Icon name="renew" :size="15" />
-          <span>Clear trail</span>
+          <span><bdi>{{ t('wikirealms-trail-clear') }}</bdi></span>
         </button>
         <button type="button" @click="$emit('export')">
           <Icon name="download" :size="15" />
-          <span>Save</span>
+          <span><bdi>{{ t('wikirealms-trail-save') }}</bdi></span>
         </button>
         <label>
           <Icon name="upload" :size="15" />
-          <span>Load</span>
+          <span><bdi>{{ t('wikirealms-trail-load') }}</bdi></span>
           <input type="file" accept="application/json" @change="onFile" />
         </label>
       </div>

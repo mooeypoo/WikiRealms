@@ -2,6 +2,7 @@
 import Icon from '../design/Icon.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { biomeColor } from '../rendering/biomeColor.js'
+import { useI18n } from '../i18n/banana.js'
 
 // Halved from 8 when GRID went to 512 × 256 for the planet view — at 8px
 // the equirectangular map would be a 4096px-wide stage to scroll around.
@@ -13,6 +14,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['portal-click'])
+const { t } = useI18n()
 
 /**
  * Reports the marker's own position, not the pointer's, so the preview card
@@ -77,7 +79,7 @@ watch(() => props.world, draw, { flush: 'post' })
           type="button"
           class="world-view__portal"
           :style="portalStyle(portal)"
-          :title="`Travel to ${portal.targetArticleId}`"
+          :title="t('wikirealms-world-travel-to', portal.targetArticleId)"
           @click="onPortalClick(portal, $event)"
         >
           <Icon name="globe" :size="16" />

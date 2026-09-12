@@ -1,4 +1,5 @@
 import { computed, getCurrentInstance, onUnmounted, ref } from 'vue'
+import { t } from '../i18n/banana.js'
 
 /**
  * One keyboard registry for the whole app.
@@ -12,6 +13,9 @@ import { computed, getCurrentInstance, onUnmounted, ref } from 'vue'
  * Here every binding is declared once, with the label it should be shown
  * under, and the Field Guide renders `shortcuts` rather than restating them.
  * A shortcut that is not in this registry does not exist.
+ *
+ * `label` and `group` are banana message keys (resolved when the Field Guide
+ * lists them) so a locale switch updates the list without re-registering.
  */
 
 const bindings = ref([])
@@ -98,8 +102,8 @@ function releaseIfIdle() {
  * @param {object} binding
  * @param {string|string[]} binding.keys combos, e.g. 'mod+k' or ['?', 'i']
  * @param {() => void} binding.run
- * @param {string} [binding.label] shown in the Field Guide; omit to hide
- * @param {string} [binding.group] heading to list it under
+ * @param {string} [binding.label] banana key shown in the Field Guide; omit to hide
+ * @param {string} [binding.group] banana key for the heading to list it under
  * @param {number} [binding.priority] higher wins; overlays sit above the app
  * @param {() => boolean} [binding.enabled]
  * @param {boolean} [binding.allowInField] fires even while typing (Escape)
@@ -109,7 +113,7 @@ export function registerBinding({
   keys,
   run,
   label = null,
-  group = 'General',
+  group = 'wikirealms-keymap-group-general',
   priority = 0,
   enabled = () => true,
   allowInField = false,
@@ -155,8 +159,9 @@ export function useKeymap() {
     const groups = new Map()
     for (const binding of bindings.value) {
       if (!binding.label) continue
-      if (!groups.has(binding.group)) groups.set(binding.group, [])
-      groups.get(binding.group).push({ keys: binding.combos, label: binding.label })
+      const groupLabel = t(binding.group)
+      if (!groups.has(groupLabel)) groups.set(groupLabel, [])
+      groups.get(groupLabel).push({ keys: binding.combos, label: t(binding.label) })
     }
     return [...groups].map(([group, items]) => ({ group, items }))
   })

@@ -4,6 +4,7 @@
  */
 import { currentLanguage, currentTitle, realmsOf } from '../../core/traversal/visitGraph.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { t } from '../i18n/banana.js'
 
 const MAX_PATH_TITLES = 8
 
@@ -32,7 +33,7 @@ export function formatExpeditionPath(titles, maxTitles = MAX_PATH_TITLES) {
   const skipped = titles.length - head - tail
   return [
     ...titles.slice(0, head),
-    `…${skipped} more…`,
+    t('wikirealms-postcard-more', skipped),
     ...titles.slice(titles.length - tail),
   ].join(' → ')
 }
@@ -52,7 +53,11 @@ export function postcardStops(titles, maxTitles = MAX_PATH_TITLES) {
   const head = Math.ceil((maxTitles - 1) / 2)
   const tail = maxTitles - 1 - head
   const skipped = titles.length - head - tail
-  return [...titles.slice(0, head), `…${skipped} more…`, ...titles.slice(titles.length - tail)]
+  return [
+    ...titles.slice(0, head),
+    t('wikirealms-postcard-more', skipped),
+    ...titles.slice(titles.length - tail),
+  ]
 }
 
 /**
@@ -90,15 +95,15 @@ export function buildTrailPostcard(journey, options) {
   const route = formatExpeditionPath(path)
 
   const text = [
-    `Expedition on WikiRealms:`,
+    t('wikirealms-postcard-letter-heading'),
     route,
-    `${realmCount} realm${realmCount === 1 ? '' : 's'} · ${portalCount} portal${portalCount === 1 ? '' : 's'} walked`,
+    t('wikirealms-postcard-stats-letter', realmCount, portalCount),
     '',
-    'Every Wikipedia article is a world — explore knowledge as landscape, then grow the map on Wikipedia itself.',
+    t('wikirealms-postcard-letter-mission'),
   ].join('\n')
 
   return {
-    title: 'WikiRealms expedition',
+    title: t('wikirealms-postcard-share-title'),
     text,
     url,
     clipboardText: `${text}\n${url}`,

@@ -8,6 +8,7 @@ import {
   fieldGuideCtaProse,
 } from '../content/wikipediaCtas.js'
 import { useKeymap } from '../design/useKeymap.js'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * Ported onto <Sheet>: the overlay, backdrop, transitions, Escape handling
@@ -22,7 +23,14 @@ defineProps({
 
 defineEmits(['update:currentTab', 'close'])
 
-const tabs = computed(() => infoTabs)
+const { t } = useI18n()
+
+const tabs = computed(() =>
+  infoTabs.map((tab) => ({
+    ...tab,
+    title: t(tab.titleKey),
+  })),
+)
 
 // Sticky across every tab — copy lives in the Wikipedia CTA registry.
 const contributeFooter = computed(() =>
@@ -39,15 +47,20 @@ const { shortcuts } = useKeymap()
   <Sheet
     id="field-guide"
     :open="show"
-    label="About WikiRealms"
+    :label="t('wikirealms-info-title')"
     :snap-points="[0.5, 0.92]"
     :snap="1"
     @close="$emit('close')"
   >
     <template #header>
       <div class="guide__bar">
-        <h2 class="guide__title">About WikiRealms</h2>
-        <button class="guide__close" type="button" aria-label="Close" @click="$emit('close')">
+        <h2 class="guide__title"><bdi>{{ t('wikirealms-info-title') }}</bdi></h2>
+        <button
+          class="guide__close"
+          type="button"
+          :aria-label="t('wikirealms-info-close')"
+          @click="$emit('close')"
+        >
           <Icon name="close" :size="18" />
         </button>
       </div>
@@ -64,7 +77,7 @@ const { shortcuts } = useKeymap()
           @click="$emit('update:currentTab', tab.id)"
         >
           <Icon :name="tab.icon" :size="14" />
-          <span class="guide__tab-label">{{ tab.title }}</span>
+          <span class="guide__tab-label"><bdi>{{ tab.title }}</bdi></span>
         </button>
       </div>
     </template>
@@ -80,9 +93,9 @@ const { shortcuts } = useKeymap()
 
       <dl v-if="tab.id === 'shortcuts'" class="guide__keys">
         <template v-for="group in shortcuts" :key="group.group">
-          <dt>{{ group.group }}</dt>
+          <dt><bdi>{{ group.group }}</bdi></dt>
           <dd v-for="item in group.items" :key="item.label">
-            <span>{{ item.label }}</span>
+            <span><bdi>{{ item.label }}</bdi></span>
             <span class="guide__combo">
               <kbd v-for="combo in item.keys" :key="combo">{{ combo }}</kbd>
             </span>
@@ -92,7 +105,11 @@ const { shortcuts } = useKeymap()
     </div>
 
     <template v-if="contributeFooter" #footer>
-      <aside class="guide-cta" aria-label="Contribute to Wikipedia" v-html="contributeFooter"></aside>
+      <aside
+        class="guide-cta"
+        :aria-label="t('wikirealms-info-contribute-aria')"
+        v-html="contributeFooter"
+      ></aside>
     </template>
   </Sheet>
 </template>

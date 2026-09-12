@@ -19,6 +19,7 @@ import {
 } from '../content/wikipediaCtas.js'
 import { buildSectionRows } from '../rendering/sectionRows.js'
 import {
+  displaySectionTitle,
   estimateWordCount,
   formatCount,
   formatPageviews,
@@ -295,7 +296,7 @@ function detailFor(row) {
   // Only when the two differ. On a leaf they are the same number, and
   // printing "of which 520 its own" under "520 words" is noise.
   if (row.hasNestedProse) {
-    facts.push(`${formatWords(estimateWordCount(row.ownSize))} of its own`)
+    facts.push(t('wikirealms-ledger-own-words', formatWords(estimateWordCount(row.ownSize))))
   }
   facts.push(formatPortals(row.portals))
   if (!isExpanded(row)) facts.push(subsectionSummary(row))
@@ -598,8 +599,8 @@ watch(
                   :aria-expanded="isExpanded(row)"
                   :aria-label="
                     isExpanded(row)
-                      ? t('wikirealms-ledger-hide-summits', row.title)
-                      : t('wikirealms-ledger-show-summits', row.title)
+                      ? t('wikirealms-ledger-hide-summits', displaySectionTitle(row.title))
+                      : t('wikirealms-ledger-show-summits', displaySectionTitle(row.title))
                   "
                   @click="toggle(row)"
                 >
@@ -619,7 +620,7 @@ watch(
                   :aria-pressed="row.hasGround ? isSelected(row) : undefined"
                   @click="row.hasGround && onRowClick(row)"
                 >
-                  <span class="ledger__row-title"><bdi>{{ row.title }}</bdi></span>
+                  <span class="ledger__row-title"><bdi>{{ displaySectionTitle(row.title) }}</bdi></span>
                   <span class="ledger__row-figure tabular">{{ formatCount(estimateWordCount(row.subtreeSize)) }}</span>
                   <span class="ledger__row-figure tabular">{{ formatCount(row.refs) }}</span>
 
@@ -651,12 +652,12 @@ watch(
               <!-- What the row means, for the one row being read. -->
               <div v-if="isSelected(row)" class="ledger__detail">
                 <p v-if="row.isAggregate" class="ledger__detail-why">
-                  Everything too small for a range of its own, gathered into one.
+                  <bdi>{{ t('wikirealms-ledger-aggregate-why') }}</bdi>
                 </p>
                 <p v-else-if="bandFor(row)" class="ledger__detail-why">
                   <bdi>{{ bandFor(row).comparison }}</bdi>
                 </p>
-                <p class="ledger__detail-stats">{{ detailFor(row).join(' · ') }}</p>
+                <p class="ledger__detail-stats"><bdi>{{ detailFor(row).join(' · ') }}</bdi></p>
                 <a
                   v-if="article.url && row.anchor"
                   class="ledger__link"
@@ -664,7 +665,7 @@ watch(
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Read {{ row.title }}
+                  <bdi>{{ t('wikirealms-ledger-read-section', displaySectionTitle(row.title)) }}</bdi>
                   <Icon name="external" :size="12" />
                 </a>
                 <WikipediaFieldTask

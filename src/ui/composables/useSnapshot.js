@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { createSnapshot, restoreSnapshot } from '../../core/snapshot/snapshot.js'
 import { loadSnapshotFromStorage, saveSnapshotToStorage } from '../../adapters/snapshotStorage.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Orchestrates building/parsing session snapshots and persisting them,
@@ -34,7 +35,7 @@ export function useSnapshot({
       errorMessage.value = null
       return restored
     } catch (error) {
-      errorMessage.value = error?.message ?? 'Failed to import snapshot'
+      errorMessage.value = error?.message ?? t('wikirealms-error-import-snapshot')
       throw error
     }
   }

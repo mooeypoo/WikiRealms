@@ -1,7 +1,7 @@
 export const infoHubContent = {
   startHere: {
     id: 'start-here',
-    title: 'Start here',
+    titleKey: 'wikirealms-info-tab-start',
     icon: 'map',
     content: `
       <p>WikiRealms turns a Wikipedia article into a place you can explore.</p>
@@ -17,7 +17,7 @@ export const infoHubContent = {
   },
   journey: {
     id: 'journey',
-    title: 'Journey',
+    titleKey: 'wikirealms-info-tab-journey',
     icon: 'trail',
     content: `
       <p>Every portal you take is kept on your trail — a map of the part of Wikipedia you have walked.</p>
@@ -30,7 +30,7 @@ export const infoHubContent = {
   },
   howWorlds: {
     id: 'how-worlds',
-    title: 'How worlds form',
+    titleKey: 'wikirealms-info-tab-how-worlds',
     icon: 'layers',
     content: `
       <p>Each world is generated from the article's outline, prose length, and citations — the same article always produces the same place.</p>
@@ -50,7 +50,7 @@ export const infoHubContent = {
   },
   about: {
     id: 'about',
-    title: 'About',
+    titleKey: 'wikirealms-info-tab-about',
     icon: 'mark',
     content: `
       <p>Created by <strong>Moriel Schottlender</strong> — an experiment in seeing knowledge networks as places.</p>
@@ -73,7 +73,7 @@ export const infoHubContent = {
   },
   shortcuts: {
     id: 'shortcuts',
-    title: 'Keyboard',
+    titleKey: 'wikirealms-info-tab-keyboard',
     icon: 'legend',
     content: `
       <p data-shortcuts>Every shortcut the app has registered, listed below.</p>

@@ -107,8 +107,8 @@ const selectedPeak = ref(null)
  * "there is a world now", not "there is a spinner".
  */
 const announcement = computed(() => {
-  if (status.value === 'error') return errorMessage.value ?? 'Could not load that article'
-  if (worldStatus.value === 'error') return worldErrorMessage.value ?? 'Could not build that world'
+  if (status.value === 'error') return errorMessage.value ?? t('wikirealms-error-load-article')
+  if (worldStatus.value === 'error') return worldErrorMessage.value ?? t('wikirealms-error-build-world')
   if (worldStatus.value === 'success' && article.value) {
     return `Arrived in ${article.value.title}`
   }
@@ -389,11 +389,11 @@ function onTrailClear() {
 // documentation cannot drift apart the way they had.
 const { register } = useKeymap()
 
-register({ keys: 'h', label: 'Hide the interface', group: 'View', run: toggleHideHud })
+register({ keys: 'h', label: 'wikirealms-keymap-hide', group: 'wikirealms-keymap-group-view', run: toggleHideHud })
 register({
   keys: 'l',
-  label: 'What am I looking at?',
-  group: 'View',
+  label: 'wikirealms-keymap-legend',
+  group: 'wikirealms-keymap-group-view',
   enabled: () => Boolean(world.value),
   run: toggleLegend,
 })
@@ -409,30 +409,50 @@ register({
     worldViewRef.value?.cancelDive?.()
   },
 })
-register({ keys: ['?', 'i'], label: 'About WikiRealms', group: 'View', run: () => (showInfoHub.value = !showInfoHub.value) })
-register({ keys: 's', label: 'Settings', group: 'View', run: () => (showSettings.value = !showSettings.value) })
+register({
+  keys: ['?', 'i'],
+  label: 'wikirealms-keymap-about',
+  group: 'wikirealms-keymap-group-view',
+  run: () => (showInfoHub.value = !showInfoHub.value),
+})
+register({
+  keys: 's',
+  label: 'wikirealms-keymap-settings',
+  group: 'wikirealms-keymap-group-view',
+  run: () => (showSettings.value = !showSettings.value),
+})
 register({
   keys: ['mod+k', '/'],
-  label: 'Search for a realm',
-  group: 'Travel',
+  label: 'wikirealms-keymap-search',
+  group: 'wikirealms-keymap-group-travel',
   // Only once there is somewhere to leave: before that the launch screen
   // already has the field, focused.
   enabled: () => Boolean(current.value),
   run: () => (isSearchOpen.value = true),
 })
-register({ keys: 'v', label: 'Switch between planet and flat', group: 'View', run: toggleWorldShape })
-register({ keys: 'c', label: 'Recentre the view', group: 'View', run: recenterView })
+register({
+  keys: 'v',
+  label: 'wikirealms-keymap-shape',
+  group: 'wikirealms-keymap-group-view',
+  run: toggleWorldShape,
+})
+register({
+  keys: 'c',
+  label: 'wikirealms-keymap-recenter',
+  group: 'wikirealms-keymap-group-view',
+  run: recenterView,
+})
 register({
   keys: 'ArrowLeft',
-  label: 'Back through your trail',
-  group: 'Travel',
+  label: 'wikirealms-keymap-back',
+  group: 'wikirealms-keymap-group-travel',
   enabled: () => canGoBack.value,
   run: goBack,
 })
 register({
   keys: 'ArrowRight',
-  label: 'Forward through your trail',
-  group: 'Travel',
+  label: 'wikirealms-keymap-forward',
+  group: 'wikirealms-keymap-group-travel',
   enabled: () => canGoForward.value,
   run: goForward,
 })

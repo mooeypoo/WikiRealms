@@ -26,6 +26,20 @@ describe('banana-i18n UI messages', () => {
     expect(t('wikirealms-search-placeholder', 'עברית')).toContain('עברית')
   })
 
+  it('translates section and portal popup pills in Hebrew', async () => {
+    await setUiLocale('he')
+    expect(t('wikirealms-stat-words', '1', 1)).toBe('1 מילה')
+    expect(t('wikirealms-stat-words', '1,200', 1200)).toBe('1,200 מילים')
+    expect(t('wikirealms-stat-sources', 46, 38)).toBe('46 הפניות ב־38 משפטים')
+    expect(t('wikirealms-stat-no-refs-in-sentences', 7)).toBe('ללא הפניות ב־7 משפטים')
+    expect(t('wikirealms-stat-subsections', 3)).toBe('3 תת־פרקים')
+    expect(t('wikirealms-stat-portals-leave', 1)).toBe('1 שער יוצא מכאן')
+    expect(t('wikirealms-band-wooded')).toBe('מיוער')
+    expect(t('wikirealms-portal-to')).toBe('שער אל')
+    expect(t('wikirealms-portal-travel')).toBe('עברו')
+    expect(t('wikirealms-portal-stay')).toBe('הישארו')
+  })
+
   it('loads Persian starter messages for featured RTL editions', async () => {
     await setUiLocale('fa')
     expect(t('wikirealms-settings-title')).toBe('تنظیمات')
