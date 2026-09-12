@@ -63,6 +63,24 @@ describe('Launch', () => {
     expect(chosen.text()).toContain(wrapper.emitted('select')[0][0].title)
   })
 
+  it('keeps curated demos marked English when search language is not', async () => {
+    const { setUiLocale } = await import('../../../src/ui/i18n/banana.js')
+    await setUiLocale('he')
+    const wrapper = mount(Launch, { props: { language: 'he' } })
+
+    for (const chip of wrapper.findAll('.launch__realms button')) {
+      expect(chip.find('.launch__lang').text()).toBe('EN')
+      expect(chip.attributes('aria-label')).toContain('ויקיפדיה באנגלית')
+    }
+    expect(wrapper.find('.launch__label').text()).toContain('אנגלית')
+    expect(wrapper.find('.launch__extra .launch__lang').text()).toBe('EN')
+
+    await wrapper.findAll('.launch__realms button')[0].trigger('click')
+    expect(wrapper.emitted('select')[0][0].language).toBe('en')
+
+    await setUiLocale('en')
+  })
+
   it('picks somewhere for the undecided, from beyond what is on screen', async () => {
     const wrapper = mount(Launch)
     const shown = wrapper.findAll('.launch__realms button').map((chip) =>

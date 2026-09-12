@@ -21,8 +21,8 @@ import { useI18n } from '../i18n/banana.js'
  * into the command palette, because from then on the way onward is portals.
  *
  * Curated suggestions are always English Wikipedia articles — the shelf is
- * vetted for what those pages generate. Searching another edition uses the
- * language control on the search field itself.
+ * vetted for what those pages generate. The section label, EN chips, and
+ * aria names say so even when search is set to another edition.
  */
 const props = defineProps({
   /**
@@ -138,12 +138,18 @@ function chooseEnglish(title) {
         <p class="launch__label"><bdi>{{ t('wikirealms-launch-suggestions-label') }}</bdi></p>
         <ul class="launch__realms">
           <li v-for="realm in suggestions" :key="realm.title">
-            <button type="button" @click="chooseEnglish(realm.title)">
+            <button
+              type="button"
+              :aria-label="t('wikirealms-launch-suggestion-aria', realm.title)"
+              @click="chooseEnglish(realm.title)"
+            >
               <strong>
-                <span class="launch__lang">EN</span>
+                <span class="launch__lang" aria-hidden="true">
+                  <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+                </span>
                 <bdi>{{ realm.title }}</bdi>
               </strong>
-              <span><bdi>{{ realm.hint }}</bdi></span>
+              <span aria-hidden="true"><bdi>{{ realm.hint }}</bdi></span>
             </button>
           </li>
         </ul>
@@ -152,9 +158,13 @@ function chooseEnglish(title) {
           <button
             class="launch__extra"
             type="button"
+            :aria-label="t('wikirealms-launch-surprise-aria')"
             @click="chooseEnglish(randomRealm(suggestions.map((realm) => realm.title)).title)"
           >
             <Icon name="crosshair" :size="14" />
+            <span class="launch__lang" aria-hidden="true">
+              <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+            </span>
             <bdi>{{ t('wikirealms-launch-surprise') }}</bdi>
           </button>
           <button class="launch__extra" type="button" @click="$emit('guide')">
@@ -272,12 +282,19 @@ function chooseEnglish(title) {
 }
 
 .launch__lang {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--edge-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2, transparent);
   color: var(--ink-2);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.06em;
+  line-height: 1.3;
 }
 
 .launch__realms strong {
