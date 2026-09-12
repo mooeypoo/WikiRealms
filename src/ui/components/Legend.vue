@@ -288,9 +288,10 @@ function pinTitle(item) {
 }
 
 .legend__key {
+  /* Dock to the inline end; safe-area env() is physical (exception 3). */
   position: absolute;
   top: 50%;
-  right: max(var(--spacing-md), env(safe-area-inset-right, 0px));
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   display: grid;
   gap: var(--spacing-md);
   width: min(320px, calc(100vw - 24px));
@@ -303,6 +304,10 @@ function pinTitle(item) {
   box-shadow: var(--shadow-panel);
   transform: translateY(-50%);
   cursor: default;
+}
+
+[dir='rtl'] .legend__key {
+  inset-inline-end: max(var(--spacing-md), env(safe-area-inset-left, 0px));
 }
 
 .legend__head {
@@ -413,13 +418,17 @@ function pinTitle(item) {
 @media (max-width: 767px) {
   .legend__key {
     top: auto;
-    right: var(--spacing-sm);
     /* Sit above the phone helm strip so Legend stays readable and closable. */
     bottom: calc(var(--hit) + var(--spacing-lg) + env(safe-area-inset-bottom, 0px));
-    left: var(--spacing-sm);
+    inset-inline: var(--spacing-sm);
     width: auto;
     max-height: 56dvh;
     transform: none;
+  }
+
+  [dir='rtl'] .legend__key {
+    /* inset-inline already mirrored; reset desktop safe-area override. */
+    inset-inline-end: var(--spacing-sm);
   }
 }
 </style>

@@ -1087,6 +1087,7 @@ watch(
 }
 
 [dir='rtl'] .ledger__twist :deep(svg) {
+  /* Expand chevron — exception (4). */
   transform: scaleX(-1);
 }
 

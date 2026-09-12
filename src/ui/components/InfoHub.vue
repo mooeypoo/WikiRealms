@@ -288,7 +288,7 @@ const { shortcuts } = useKeymap()
 .guide__prose :deep(ol),
 .guide__prose :deep(ul) {
   margin: 0 0 var(--spacing-md);
-  padding-left: 1.2em;
+  padding-inline-start: 1.2em;
   display: grid;
   gap: var(--spacing-sm);
 }
@@ -317,7 +317,7 @@ const { shortcuts } = useKeymap()
   display: grid;
   gap: var(--spacing-sm);
   margin: 0 0 var(--spacing-md);
-  padding-left: 1.15em;
+  padding-inline-start: 1.15em;
 }
 
 .guide__prose :deep(.info-hub__bullets li) {
@@ -327,7 +327,7 @@ const { shortcuts } = useKeymap()
 .guide__prose :deep(.info-hub__callout) {
   margin: 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  border-left: 2px solid var(--edge-accent);
+  border-inline-start: 2px solid var(--edge-accent);
   background: var(--accent-wash);
   color: var(--ink-1);
   font-size: var(--text-sm);

@@ -9,6 +9,10 @@
  * Visible UI copy should go through <I18nText> (or an explicit <bdi>) so
  * untranslated LTR fallbacks stay isolated inside RTL documents. Keep
  * plain `t()` for attributes — aria-label, title, placeholder.
+ *
+ * Layout direction is separate: `getUiDir()` / `useI18n().uiDir` follow the
+ * edition. Chrome uses logical CSS under `document.dir`; the world does
+ * not flip. See docs/architecture.md §Direction.
  */
 import { computed, ref, shallowRef } from 'vue'
 import Banana from 'banana-i18n'

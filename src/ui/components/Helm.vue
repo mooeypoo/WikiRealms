@@ -113,6 +113,7 @@ const SHAPES = [
 </template>
 <style scoped>
 .helm {
+  /* Logical dock + physical safe-area env (exception 3); RTL swaps below. */
   position: fixed;
   inset-inline-end: max(var(--spacing-md), env(safe-area-inset-right, 0px));
   bottom: calc(max(var(--spacing-md), env(safe-area-inset-bottom, 0px)) + var(--helm-lift, 0px));

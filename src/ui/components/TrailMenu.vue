@@ -405,7 +405,7 @@ function pathFor(link) {
   color: var(--ink-2);
   font: inherit;
   font-size: var(--text-sm);
-  text-align: left;
+  text-align: start;
 }
 
 .trail__stop:hover {

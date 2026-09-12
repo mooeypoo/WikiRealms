@@ -129,6 +129,7 @@ const { t } = useI18n()
 
 /* Back / forward glyphs point along the reading direction. */
 [dir='rtl'] .scrim__travel :deep(svg) {
+  /* Back/forward chevrons — exception (4). */
   transform: scaleX(-1);
 }
 

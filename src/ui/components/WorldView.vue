@@ -102,6 +102,7 @@ watch(() => props.world, draw, { flush: 'post' })
 }
 
 .world-view__canvas {
+  /* World stage — physical origin; the map itself never mirrors with dir. */
   position: absolute;
   top: 0;
   left: 0;

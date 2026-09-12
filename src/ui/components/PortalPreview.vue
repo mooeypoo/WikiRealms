@@ -131,6 +131,7 @@ const style = computed(() =>
 }
 
 .preview {
+  /* Screen-space card: transform from JS places it (exception 2). */
   position: absolute;
   top: 0;
   left: 0;
@@ -200,6 +201,7 @@ const style = computed(() =>
 }
 
 [dir='rtl'] .preview__go :deep(svg) {
+  /* Chevron only — exception (4); layout stays logical. */
   transform: scaleX(-1);
 }
 
@@ -221,9 +223,5 @@ const style = computed(() =>
 .preview-enter-from,
 .preview-leave-to {
   opacity: 0;
-}
-
-[dir='rtl'] .preview__go :deep(svg) {
-  transform: scaleX(-1);
 }
 </style>

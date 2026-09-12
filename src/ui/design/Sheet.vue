@@ -607,6 +607,7 @@ function onScrimDismiss() {
 .sheet-drawer-enter-from,
 .sheet-drawer-leave-to {
   opacity: 0;
+  /* Physical slide — transforms do not flip with dir; RTL overrides below. */
   transform: translateX(-8%);
 }
 

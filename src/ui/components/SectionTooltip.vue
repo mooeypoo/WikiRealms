@@ -71,8 +71,8 @@ const ctaNotice = computed(
 </template>
 <style scoped>
 .section-tooltip {
-  /* translate() from the reactive props positions the top-left anchor of
-     the tooltip; the caret sits below it via the ::before pseudo-element. */
+  /* Screen-space placement from JS (exception 2): top-left is the summit
+     anchor in canvas pixels; margins nudge the card up/center over it. */
   position: absolute;
   top: 0;
   left: 0;
@@ -107,6 +107,7 @@ const ctaNotice = computed(
   content: '';
   position: absolute;
   bottom: -6px;
+  /* Physical center of the tooltip box — exception (1); not reading-order. */
   left: 50%;
   transform: translateX(-50%) rotate(45deg);
   width: 10px;

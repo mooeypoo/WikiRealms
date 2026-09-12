@@ -128,6 +128,9 @@ const trailGraph = computed(() => journeyForLanguage(graph.value, activeLanguage
 function applyDocumentLanguage(code) {
   const edition = getEdition(code)
   document.documentElement.lang = edition.bcp47 || edition.code
+  // Reading direction for UI chrome (logical CSS, flex/grid). The world
+  // stage is not mirrored — only chrome and text follow dir. See
+  // docs/architecture.md §Direction and .cursor/rules/rtl-layout.mdc.
   document.documentElement.dir = edition.dir
   void setUiLocale(edition.code)
 }
@@ -935,6 +938,8 @@ watch([graph, articleCache], () => {
 }
 
 .hud--alert {
+  /* Physical centering — exception (1) in docs/architecture.md §Direction.
+     Do not use inset-inline-start: 50% with translateX(-50%). */
   top: 6.5rem;
   left: 50%;
   transform: translateX(-50%);
@@ -942,6 +947,7 @@ watch([graph, articleCache], () => {
 }
 
 .hud--status {
+  /* Physical centering — same exception as .hud--alert. */
   top: 6.5rem;
   left: 50%;
   transform: translateX(-50%);
@@ -964,6 +970,7 @@ watch([graph, articleCache], () => {
 }
 
 .app__toast {
+  /* Physical centering — exception (1) in docs/architecture.md §Direction. */
   position: fixed;
   z-index: var(--z-toast);
   left: 50%;
