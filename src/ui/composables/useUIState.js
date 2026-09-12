@@ -16,9 +16,10 @@ export const useUIState = () => {
   // ===== PREFERENCES (synced to localStorage) =====
   const PREFERENCES_STORAGE_KEY = 'wikirealms:preferences';
   const preferences = reactive({
-    // Wikipedia language edition to search and load (e.g. 'en', 'de', 'he').
-    // The seeded catalog lists every open Wikipedia; the picker may show a
-    // featured subset until the viewer opts into all editions.
+    // Last Wikipedia edition the viewer *arrived* in via search or a shared
+    // link — the default for the next search field only. Never use this to
+    // reinterpret an existing realm title or URL pair; language rides with
+    // the article (trail node / ?realm=&lang=).
     language: 'en',
     // When false, the language picker lists featured editions only.
     showAllWikipedias: false,

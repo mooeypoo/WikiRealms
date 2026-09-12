@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { onHistoryPop, pushRealm, readLanguage, readRealm, realmUrl } from '../../src/adapters/urlState.js'
+import { languageForRealmUrl, onHistoryPop, pushRealm, readLanguage, readRealm, realmUrl } from '../../src/adapters/urlState.js'
 
 beforeEach(() => {
   history.replaceState(null, '', '/')
@@ -57,11 +57,27 @@ describe('urlState', () => {
       )
     })
 
+    it('omits lang for English so the pair stays English without a preference', () => {
+      expect(realmUrl('Saturn', { language: 'en', origin: 'https://wikirealms.test', pathname: '/' })).toBe(
+        'https://wikirealms.test/?realm=Saturn',
+      )
+    })
+
     it('escapes a title that would otherwise break the query string', () => {
       const url = realmUrl('Rock & roll', 'https://wikirealms.test', '/')
 
       expect(url).toContain('Rock+%26+roll')
       expect(readRealm(new URL(url).search)).toBe('Rock & roll')
+    })
+  })
+
+  describe('languageForRealmUrl', () => {
+    it('treats a missing lang as English, not as “use prefs later”', () => {
+      expect(languageForRealmUrl('?realm=The+Martians+(scientists)')).toBe('en')
+    })
+
+    it('honours an explicit edition on the URL pair', () => {
+      expect(languageForRealmUrl('?realm=%D7%A9%D7%91%D7%AA%D7%90%D7%99&lang=he')).toBe('he')
     })
   })
 

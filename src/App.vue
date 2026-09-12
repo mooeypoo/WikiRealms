@@ -24,7 +24,7 @@ import { useSnapshot } from './ui/composables/useSnapshot.js'
 import { useShare } from './ui/composables/useShare.js'
 import { useUIState } from './ui/composables/useUIState.js'
 import { useKeymap } from './ui/design/useKeymap.js'
-import { onHistoryPop, pushRealm, readLanguage, readRealm } from './adapters/urlState.js'
+import { onHistoryPop, pushRealm, languageForRealmUrl, readLanguage, readRealm } from './adapters/urlState.js'
 import { supportsWebGL } from './ui/rendering/webglSupport.js'
 import { useViewport } from './ui/design/useViewport.js'
 import { useTravel } from './ui/design/useTravel.js'
@@ -117,10 +117,19 @@ const announcement = computed(() => {
 
 const citationAtmosphere = computed(() => Math.min(0.7, Math.log1p(world.value?.citationCount ?? 0) / 10))
 
-/** Active Wikipedia edition: preference, overridden by the realm underfoot. */
+/** Active Wikipedia edition: the realm underfoot, else the search default. */
 const activeLanguage = computed(() =>
   normalizeLanguage(currentLanguage.value ?? preferences.language ?? DEFAULT_LANGUAGE),
 )
+
+/**
+ * Language of the loaded realm. Never falls back to search preferences —
+ * those are for the next query, not for reinterpretating a title already
+ * on the trail or in the address bar.
+ */
+function languageOfCurrentRealm() {
+  return normalizeLanguage(currentLanguage.value ?? DEFAULT_LANGUAGE)
+}
 
 /** Trail UI shows one language at a time so editions do not mix on the map. */
 const trailGraph = computed(() => journeyForLanguage(graph.value, activeLanguage.value))
@@ -166,9 +175,9 @@ function onSelect(result) {
   isSearchOpen.value = false
   showLaunch.value = false
   // Language rides with the choice: the search field's edition, or English
-  // for curated suggestions. Remember it only as the next search default —
-  // it does not retitle the realm already underfoot until we jump.
-  const language = result.language ?? preferences.language ?? DEFAULT_LANGUAGE
+  // for curated suggestions. Persist it only now — as the next search
+  // default — never when the picker moves without an article.
+  const language = normalizeLanguage(result.language ?? preferences.language ?? DEFAULT_LANGUAGE)
   if (language !== preferences.language) updatePreferences({ language })
   jumpTo(result.title, { language })
 }
@@ -232,7 +241,7 @@ function confirmTravel(portal) {
     onDive: () => worldViewRef.value?.diveTo?.(portal),
     // Behind the wash: navigateTo triggers the fetch and the ~120ms
     // synchronous generate, which would stutter anything still moving.
-    onArrive: () => navigateTo(portal.targetArticleId, { language: activeLanguage.value }),
+    onArrive: () => navigateTo(portal.targetArticleId, { language: languageOfCurrentRealm() }),
   })
 }
 
@@ -351,7 +360,7 @@ function onShareClick() {
 function onShareRealm() {
   showShareMenu.value = false
   if (article.value?.title) {
-    shareArticle(article.value.title, { language: article.value.language ?? activeLanguage.value })
+    shareArticle(article.value.title, { language: article.value.language ?? languageOfCurrentRealm() })
   }
 }
 
@@ -373,7 +382,7 @@ function onTrailPostcard() {
  */
 function onTrailClear() {
   const title = current.value
-  const language = activeLanguage.value
+  const language = languageOfCurrentRealm()
   const key = title ? articleCacheKey(language, title) : null
   clearTrail()
   if (key && articleCache.value[key]) {
@@ -480,27 +489,41 @@ onMounted(() => {
     articleCache.value = { ...restored.articleCache }
   }
 
-  // A shared link wins over the restored session: someone following one
-  // means to land where it points, not where they last were.
-  const sharedLanguage = readLanguage()
-  const sharedRealm = readRealm()
-  if (sharedLanguage) updatePreferences({ language: sharedLanguage })
-  const language = normalizeLanguage(sharedLanguage ?? preferences.language ?? DEFAULT_LANGUAGE)
-  applyDocumentLanguage(language)
-  if (sharedRealm && (sharedRealm !== current.value || language !== currentLanguage.value)) {
-    jumpTo(sharedRealm, { language })
+  // A shared link is a (realm, language) pair and wins over the restored
+  // session. Missing `lang` means English — never the search preference,
+  // which would reopen an English title on the wrong Wikipedia.
+  const urlRealm = readRealm()
+  const urlLang = readLanguage()
+  if (urlRealm) {
+    const pairLanguage = languageForRealmUrl()
+    if (urlRealm !== current.value || pairLanguage !== languageOfCurrentRealm()) {
+      jumpTo(urlRealm, { language: pairLanguage })
+    }
+    if (pairLanguage !== preferences.language) updatePreferences({ language: pairLanguage })
+  } else if (urlLang && urlLang !== preferences.language) {
+    updatePreferences({ language: urlLang })
   }
+
+  applyDocumentLanguage(activeLanguage.value)
 
   pushRealm(current.value, currentNodeId.value, {
     replace: true,
-    language: currentLanguage.value ?? language,
+    language: languageOfCurrentRealm(),
   })
 
   stopHistoryListener = onHistoryPop((state, realm, lang) => {
     replayingHistory = true
-    if (lang) updatePreferences({ language: lang })
-    if (state.nodeId && graph.value.realms[state.nodeId]) goToNode(state.nodeId)
-    else if (realm) jumpTo(realm, { language: lang ?? preferences.language })
+    const pairLanguage = normalizeLanguage(lang ?? state.language ?? DEFAULT_LANGUAGE)
+    if (state.nodeId && graph.value.realms[state.nodeId]) {
+      goToNode(state.nodeId)
+      const nodeLang = languageOfCurrentRealm()
+      if (nodeLang !== preferences.language) updatePreferences({ language: nodeLang })
+    } else if (realm) {
+      jumpTo(realm, { language: pairLanguage })
+      if (pairLanguage !== preferences.language) updatePreferences({ language: pairLanguage })
+    } else if (lang && lang !== preferences.language) {
+      updatePreferences({ language: lang })
+    }
     replayingHistory = false
   })
 })
@@ -511,7 +534,7 @@ onUnmounted(() => stopHistoryListener?.())
 // back button retraces the journey instead of leaving the app.
 watch(currentNodeId, (nodeId) => {
   if (replayingHistory) return
-  pushRealm(current.value, nodeId, { language: currentLanguage.value ?? preferences.language })
+  pushRealm(current.value, nodeId, { language: languageOfCurrentRealm() })
 })
 
 watch(
@@ -525,7 +548,7 @@ watch(
   current,
   (title) => {
     document.title = title ? `${title} · ${APP_NAME}` : APP_NAME
-    if (title) loadArticle(title, { language: currentLanguage.value ?? preferences.language })
+    if (title) loadArticle(title, { language: languageOfCurrentRealm() })
   },
   { immediate: true },
 )
@@ -681,7 +704,6 @@ watch([graph, articleCache], () => {
       :language="preferences.language ?? 'en'"
       :show-all-wikipedias="preferences.showAllWikipedias === true"
       @select="onSelect"
-      @update:language="updatePreferences({ language: $event })"
       @guide="showInfoHub = true"
       @close="showLaunch = false"
     />
@@ -691,7 +713,6 @@ watch([graph, articleCache], () => {
       :language="preferences.language ?? 'en'"
       :show-all-wikipedias="preferences.showAllWikipedias === true"
       @select="onSelect"
-      @update:language="updatePreferences({ language: $event })"
       @close="isSearchOpen = false"
     />
 

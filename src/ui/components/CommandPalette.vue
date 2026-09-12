@@ -52,7 +52,12 @@ watch(searchLanguage, () => {
 watch(
   () => props.show,
   (open) => {
-    if (!open) clear()
+    if (!open) {
+      clear()
+      // Abandoning search drops an uncommitted edition pick — language only
+      // sticks when an article is chosen (or prefs change from outside).
+      searchLanguage.value = props.language || DEFAULT_LANGUAGE
+    }
   },
 )
 

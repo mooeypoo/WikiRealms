@@ -24,12 +24,14 @@ vi.mock('../src/adapters/snapshotStorage.js', () => ({
 }))
 
 import { supportsWebGL } from '../src/ui/rendering/webglSupport.js'
-import { currentTitle } from '../src/core/traversal/visitGraph.js'
+import { currentTitle, createVisitGraph, jump } from '../src/core/traversal/visitGraph.js'
 import { resetKeymap } from '../src/ui/design/useKeymap.js'
 import { resetOverlays } from '../src/ui/design/useOverlays.js'
 import { searchWikipediaTitles } from '../src/adapters/wikipediaSearchAdapter.js'
 import { fetchWikipediaArticle } from '../src/adapters/wikipediaArticleAdapter.js'
 import { saveSnapshotToStorage, loadSnapshotFromStorage } from '../src/adapters/snapshotStorage.js'
+import { readLanguage, readRealm } from '../src/adapters/urlState.js'
+import { useUIState } from '../src/ui/composables/useUIState.js'
 
 /**
  * The Ledger is teleported to <body>, so it is not inside the wrapper's own
@@ -120,6 +122,9 @@ enableAutoUnmount(afterEach)
 beforeEach(() => {
   vi.useFakeTimers()
   localStorage.clear()
+  // Preferences are a module singleton — clearing storage alone leaves a
+  // leftover language from a prior test still in memory.
+  useUIState().updatePreferences({ language: 'en', showAllWikipedias: false })
   // The URL is session state now, so it leaks between tests: without this a
   // test inherits the previous one's realm and opens straight into it.
   history.replaceState(null, '', '/')
@@ -690,6 +695,113 @@ describe('App URL state', () => {
 
     expect(window.location.search).toContain('realm=Albert')
     expect(history.state).toMatchObject({ title: 'Albert Einstein' })
+  })
+
+  it('does not reinterpret an English URL realm with a leftover Hebrew preference', async () => {
+    // The bug: prefs.language=he + ?realm=EnglishTitle (no lang) reopened the
+    // English title on he.wikipedia and wrote lang=he back into the URL.
+    useUIState().updatePreferences({ language: 'he' })
+    history.replaceState(null, '', '?realm=The+Martians+%28scientists%29')
+    loadSnapshotFromStorage.mockReturnValue({
+      schemaVersion: '4.0',
+      createdAt: '2026-09-12T00:00:00Z',
+      appVersion: '0.1.0',
+      engineVersion: 'v1',
+      worlds: {},
+      navigation: {
+        graph: jump(createVisitGraph(), 'The Martians (scientists)', { language: 'en' }),
+      },
+      articleCache: {},
+      generationCache: {},
+      uiState: {},
+    })
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'en:1',
+      title: 'The Martians (scientists)',
+      language: 'en',
+      summary: 'Scientists.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('The Martians (scientists)', { language: 'en' })
+    expect(readLanguage(window.location.search)).toBeNull()
+    expect(readRealm(window.location.search)).toBe('The Martians (scientists)')
+  })
+
+  it('keeps a restored Hebrew realm even when the search preference is English', async () => {
+    useUIState().updatePreferences({ language: 'en' })
+    loadSnapshotFromStorage.mockReturnValue({
+      schemaVersion: '4.0',
+      createdAt: '2026-09-12T00:00:00Z',
+      appVersion: '0.1.0',
+      engineVersion: 'v1',
+      worlds: {},
+      navigation: {
+        graph: jump(createVisitGraph(), 'שבתאי', { language: 'he' }),
+      },
+      articleCache: {},
+      generationCache: {},
+      uiState: {},
+    })
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'he:1',
+      title: 'שבתאי',
+      language: 'he',
+      summary: 'כוכב.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('שבתאי', { language: 'he' })
+    expect(readLanguage(window.location.search)).toBe('he')
+    expect(readRealm(window.location.search)).toBe('שבתאי')
+  })
+
+  it('loads the language that rides with a shared link', async () => {
+    history.replaceState(null, '', '?realm=%D7%A9%D7%91%D7%AA%D7%90%D7%99&lang=he')
+    fetchWikipediaArticle.mockResolvedValue({
+      articleId: 'he:1',
+      title: 'שבתאי',
+      language: 'he',
+      summary: 'כוכב.',
+      latestRevisionId: 1,
+      categories: [],
+      links: [],
+      images: [],
+      sections: { lead: { ownSize: 10, links: [] }, totalSize: 10, sections: [] },
+    })
+
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    expect(fetchWikipediaArticle).toHaveBeenCalledWith('שבתאי', { language: 'he' })
+    expect(useUIState().preferences.language).toBe('he')
+  })
+
+  it('does not persist a search-language change until an article is chosen', async () => {
+    mount(App, { attachTo: document.body })
+    await flushPromises()
+
+    const select = document.querySelector('.search-bar__lang-select')
+    select.value = 'he'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(useUIState().preferences.language).toBe('en')
+    expect(JSON.parse(localStorage.getItem('wikirealms:preferences')).language).toBe('en')
   })
 })
 

@@ -32,13 +32,28 @@ export function readRealm(search = window.location.search) {
 
 /**
  * Reads the Wikipedia language edition from a URL.
- * Unknown or missing codes return null so the caller can fall back to prefs.
+ * Unknown or missing codes return null so the caller can fall back carefully.
  */
 export function readLanguage(search = window.location.search) {
   const params = new URLSearchParams(search)
   const code = params.get(LANG_PARAM)?.trim()
   if (!code || !isKnownEdition(code)) return null
   return code
+}
+
+/**
+ * Language for a URL that already names a realm.
+ *
+ * Share links are a (title, language) pair. English omits `lang`, so a
+ * missing code means English — never the viewer's search preference. Mixing
+ * a bookmarked English title with a leftover Hebrew preference is what
+ * produced "English title on he.wikipedia" 404s.
+ *
+ * @param {string} [search]
+ * @returns {string}
+ */
+export function languageForRealmUrl(search = window.location.search) {
+  return normalizeLanguage(readLanguage(search) ?? DEFAULT_LANGUAGE)
 }
 
 /**
