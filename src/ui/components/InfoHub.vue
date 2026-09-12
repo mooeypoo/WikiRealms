@@ -23,12 +23,13 @@ defineProps({
 
 defineEmits(['update:currentTab', 'close'])
 
-const { t } = useI18n()
+const { t, uiDir } = useI18n()
 
 const tabs = computed(() =>
   infoTabs.map((tab) => ({
     ...tab,
     title: t(tab.titleKey),
+    content: typeof tab.content === 'function' ? tab.content() : tab.content,
   })),
 )
 
@@ -88,6 +89,7 @@ const { shortcuts } = useKeymap()
       :key="tab.id"
       class="guide__prose"
       role="tabpanel"
+      :dir="uiDir"
     >
       <div v-html="tab.content"></div>
 
@@ -107,6 +109,7 @@ const { shortcuts } = useKeymap()
     <template v-if="contributeFooter" #footer>
       <aside
         class="guide-cta"
+        :dir="uiDir"
         :aria-label="t('wikirealms-info-contribute-aria')"
         v-html="contributeFooter"
       ></aside>

@@ -40,6 +40,15 @@ describe('banana-i18n UI messages', () => {
     expect(t('wikirealms-portal-stay')).toBe('הישארו')
   })
 
+  it('translates Field Guide long prose in Hebrew', async () => {
+    await setUiLocale('he')
+    expect(t('wikirealms-info-start-lead')).toContain('WikiRealms')
+    expect(t('wikirealms-info-start-peaks')).toContain('פסגות')
+    expect(t('wikirealms-info-how-summary')).toBe('איך נבנה עולם')
+    expect(t('wikirealms-info-about-credits')).toBe('קרדיטים')
+    expect(t('wikirealms-info-shortcuts-lead')).toContain('קיצור')
+  })
+
   it('loads Persian starter messages for featured RTL editions', async () => {
     await setUiLocale('fa')
     expect(t('wikirealms-settings-title')).toBe('تنظیمات')

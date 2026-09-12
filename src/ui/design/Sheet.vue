@@ -431,10 +431,14 @@ function onScrimDismiss() {
   outline-offset: -2px;
 }
 
-/* Centred, for a surface that wants the viewer's whole attention. */
+/* Centred, for a surface that wants the viewer's whole attention.
+   Use physical `left` with `translate(-50%, …)` — both are physical axes.
+   `inset-inline-start: 50%` under dir=rtl pins the *start* edge at mid
+   viewport, then translate still shifts left, so the dialog leaves the
+   screen on medium widths. Centering is direction-agnostic. */
 .sheet--dialog {
   top: 50%;
-  inset-inline-start: 50%;
+  left: 50%;
   width: min(560px, 92vw);
   max-height: 86dvh;
   transform: translate(-50%, -50%);

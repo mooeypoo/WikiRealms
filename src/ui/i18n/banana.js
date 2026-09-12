@@ -13,7 +13,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import Banana from 'banana-i18n'
 import en from '../../../i18n/en.json'
-import { DEFAULT_LANGUAGE, normalizeLanguage } from '../../core/i18n/wikipediaEditions.js'
+import { DEFAULT_LANGUAGE, getEdition, normalizeLanguage } from '../../core/i18n/wikipediaEditions.js'
 
 const locale = ref(DEFAULT_LANGUAGE)
 const banana = shallowRef(createBanana(DEFAULT_LANGUAGE))
@@ -88,6 +88,12 @@ export function getUiLocale() {
   return locale.value
 }
 
+/** Document direction for the active UI locale (`ltr` | `rtl`). */
+export function getUiDir() {
+  void locale.value
+  return getEdition(locale.value).dir
+}
+
 /**
  * Switch the UI message locale. Loads a message file when one exists;
  * otherwise banana falls back toward English.
@@ -113,9 +119,11 @@ export async function setUiLocale(code) {
  */
 export function useI18n() {
   const uiLocale = computed(() => locale.value)
+  const uiDir = computed(() => getEdition(locale.value).dir)
   return {
     t,
     uiLocale,
+    uiDir,
     setUiLocale,
   }
 }
