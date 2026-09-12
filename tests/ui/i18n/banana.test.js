@@ -56,10 +56,27 @@ describe('banana-i18n UI messages', () => {
     expect(t('wikirealms-scrim-search')).toBe('جستجو')
   })
 
-  it('falls back to English for locales without a message file yet', async () => {
+  it('loads German, French, and Spanish starter packs for featured LTR editions', async () => {
     await setUiLocale('de')
-    expect(t('wikirealms-settings-title')).toBe('Settings')
+    expect(t('wikirealms-settings-title')).toBe('Einstellungen')
+    expect(t('wikirealms-scrim-search')).toBe('Suche')
+    expect(t('wikirealms-share')).toBe('Teilen')
+
+    await setUiLocale('fr')
+    expect(t('wikirealms-settings-title')).toBe('Paramètres')
+    expect(t('wikirealms-scrim-search')).toBe('Recherche')
+    expect(t('wikirealms-share')).toBe('Partager')
+
+    await setUiLocale('es')
+    expect(t('wikirealms-settings-title')).toBe('Ajustes')
+    expect(t('wikirealms-scrim-search')).toBe('Buscar')
+    expect(t('wikirealms-share')).toBe('Compartir')
+  })
+
+  it('falls back to English for locales without a message file yet', async () => {
     await setUiLocale('ar')
+    expect(t('wikirealms-settings-title')).toBe('Settings')
+    await setUiLocale('ja')
     expect(t('wikirealms-settings-title')).toBe('Settings')
   })
 

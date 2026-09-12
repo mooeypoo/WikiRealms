@@ -1,4 +1,23 @@
-import { t } from '../i18n/banana.js'
+/**
+ * The facts a section reports about itself, in the words both surfaces
+ * use for them.
+ *
+ * Two places describe a section: the tooltip that appears when you hover
+ * its summit, and the Ledger row you get when you click it. They were
+ * computing the same figures separately and phrasing them differently —
+ * the tooltip said "1,240 words" and the Ledger said "1.2K W" for the
+ * same section, and both divided character counts by 5.5 in their own
+ * copy of the arithmetic.
+ *
+ * A reader who hovers a mountain and then clicks it should be reading the
+ * same sentence twice, in more detail the second time. Not two dialects.
+ *
+ * Phrasing goes through banana-i18n so the tooltip and Ledger stay on one
+ * vocabulary when the UI locale changes. Number grouping follows the UI
+ * locale's BCP-47 tag (via getEdition).
+ */
+import { getEdition } from '../../core/i18n/wikipediaEditions.js'
+import { getUiLocale, t } from '../i18n/banana.js'
 
 /** Engine id for the folded leftover-sections peak — keep for lookups. */
 export const AGGREGATE_SECTION_TITLE = 'Miscellaneous'
@@ -17,24 +36,6 @@ export function displaySectionTitle(title) {
 }
 
 /**
- * The facts a section reports about itself, in the words both surfaces
- * use for them.
- *
- * Two places describe a section: the tooltip that appears when you hover
- * its summit, and the Ledger row you get when you click it. They were
- * computing the same figures separately and phrasing them differently —
- * the tooltip said "1,240 words" and the Ledger said "1.2K W" for the
- * same section, and both divided character counts by 5.5 in their own
- * copy of the arithmetic.
- *
- * A reader who hovers a mountain and then clicks it should be reading the
- * same sentence twice, in more detail the second time. Not two dialects.
- *
- * Phrasing goes through banana-i18n so the tooltip and Ledger stay on one
- * vocabulary when the UI locale changes.
- */
-
-/**
  * Rough "words" estimate from own-size (character count). Wikipedia's
  * average English-prose word length is ~5.1 chars including trailing
  * space, so dividing by 5.5 undershoots slightly — matches the "words
@@ -48,15 +49,25 @@ export function estimateWordCount(ownSizeChars) {
 }
 
 /**
+ * Thousands separators for the active UI locale (e.g. en → 1,200, de → 1.200).
+ * @param {number} n
+ * @returns {string}
+ */
+export function formatInteger(n) {
+  const int = Math.max(0, Math.round(Number(n) || 0))
+  const locale = getEdition(getUiLocale()).bcp47 || 'en'
+  return int.toLocaleString(locale)
+}
+
+/**
  * Formats an integer with thousands separators (e.g. 1200 -> "1,200
- * words"). Pure so tests don't depend on Intl.NumberFormat being
- * English-locale-only on every runner.
+ * words" in English UI).
  *
  * @param {number} n
  */
 export function formatWords(n) {
   const int = Math.max(0, Math.round(Number(n) || 0))
-  return t('wikirealms-stat-words', int.toLocaleString('en-US'), int)
+  return t('wikirealms-stat-words', formatInteger(int), int)
 }
 
 /**
@@ -102,7 +113,7 @@ export function formatPortals(count) {
 
 /** A bare integer with thousands separators, for a column that carries its own heading. */
 export function formatCount(n) {
-  return Math.max(0, Math.round(Number(n) || 0)).toLocaleString('en-US')
+  return formatInteger(n)
 }
 
 /**

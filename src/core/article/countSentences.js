@@ -15,6 +15,13 @@
  * items reports zero for ordinary paragraphs.
  *
  * Pure and deterministic: the same element always yields the same count.
+ *
+ * Sentence models (per Wikipedia edition):
+ * - `latin-punct` — `.?!` plus a following capital / boundary (English, …)
+ * - `unicode-punct` — broader terminators, no capital required (Hebrew, Arabic, …)
+ * - `char-estimate` — CJK / Thai-family: count ideographic terminators when
+ *   present; otherwise estimate from length with a denser chars/sentence
+ *   divisor (scripts without spaces pack more claims per character).
  */
 import { CITATION_MARKER_SELECTOR } from './citationMarkers.js'
 
@@ -49,13 +56,18 @@ const BLOCK_SELECTOR =
 const ITEM_SELECTOR = 'li, tr, dd'
 
 /**
- * Characters per sentence, used only to estimate a denominator for prose
- * where nothing was detected at all (see countSentenceUnits).
- *
- * 110 = ~20 words at the ~5.5 chars-per-word figure sectionTooltip.js
- * already uses for English Wikipedia prose.
+ * Characters per sentence for Latin / unicode-punct length fallback.
+ * 110 = ~20 words at the ~5.5 chars-per-word figure sectionStats uses.
  */
-const CHARS_PER_SENTENCE = 110
+const CHARS_PER_SENTENCE_LATIN = 110
+
+/**
+ * Characters per sentence for CJK / Thai-family length fallback.
+ * Ideographic and unspaced scripts pack more claims per character than
+ * English prose; ~40 matches common CJK Wikipedia heuristics better than
+ * applying the Latin 110 divisor (which under-counts denseness badly).
+ */
+const CHARS_PER_SENTENCE_DENSE = 40
 
 /**
  * Sentence-ending punctuation, accepted when followed by a block
@@ -74,14 +86,27 @@ const CHARS_PER_SENTENCE = 110
  * and lands in the denominator, where it makes lushness conservative.
  *
  * For languages without capital sentence starts (Arabic, Hebrew, …) use
- * `unicode-punct` via countProseSentences(..., { sentenceModel }). For
- * CJK / Thai-family scripts use `char-estimate`, which prefers the length
- * fallback over Latin punctuation matches.
+ * `unicode-punct`. For CJK / Thai-family use `char-estimate`.
  */
 const SENTENCE_END_LATIN = /[.!?]+(?=\s*\n|\s+\p{Lu}|\s*$)/gu
 
 /** Broader terminator set; does not require a following capital letter. */
 const SENTENCE_END_UNICODE = /[.!?。．؟！…]+(?=\s*\n|\s+|\s*$)/gu
+
+/**
+ * Ideographic / fullwidth terminators common in CJK Wikipedia prose.
+ * No capital-letter lookahead — those scripts do not mark sentence starts
+ * that way. Thai-family text rarely uses these; length fallback covers it.
+ */
+const SENTENCE_END_CJK = /[。．！？…]+/gu
+
+/**
+ * @param {'latin-punct' | 'unicode-punct' | 'char-estimate'} sentenceModel
+ * @returns {number}
+ */
+export function charsPerSentence(sentenceModel) {
+  return sentenceModel === 'char-estimate' ? CHARS_PER_SENTENCE_DENSE : CHARS_PER_SENTENCE_LATIN
+}
 
 /**
  * The element's text, with inline citation markers removed and block
@@ -116,15 +141,12 @@ export function blockSeparatedText(el) {
  */
 export function countProseSentences(text, { sentenceModel = 'latin-punct' } = {}) {
   if (!text || text.trim().length === 0) return 0
-  if (sentenceModel === 'char-estimate') {
-    // Latin punctuation is rare in these scripts; trust length estimation
-    // in countSentenceUnits rather than a handful of false matches.
-    return 0
-  }
   // `match` with a global regex resets lastIndex before it starts, so the
   // shared pattern is safe here. `test` and `exec` would NOT be — they
   // advance lastIndex and would make consecutive calls disagree.
-  const pattern = sentenceModel === 'unicode-punct' ? SENTENCE_END_UNICODE : SENTENCE_END_LATIN
+  let pattern = SENTENCE_END_LATIN
+  if (sentenceModel === 'unicode-punct') pattern = SENTENCE_END_UNICODE
+  else if (sentenceModel === 'char-estimate') pattern = SENTENCE_END_CJK
   const matches = text.match(pattern)
   return matches ? matches.length : 0
 }
@@ -185,5 +207,6 @@ export function countSentenceUnits(el, proseLength, { sentenceModel = 'latin-pun
     countStructuralItems(el, { sentenceModel })
   if (counted > 0) return counted
   if (proseLength <= 0) return 0
-  return Math.max(1, Math.round(proseLength / CHARS_PER_SENTENCE))
+  const divisor = charsPerSentence(sentenceModel)
+  return Math.max(1, Math.round(proseLength / divisor))
 }
