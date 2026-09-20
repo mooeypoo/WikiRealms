@@ -94,6 +94,47 @@ export function articleCacheKey(language, title) {
   return `${normalizeLanguage(language)}:${title}`
 }
 
+/**
+ * Language code for badges and pickers. Always Latin (EN, HE, DE) —
+ * never a translation string, never an autonym.
+ * @param {string} [code]
+ */
+export function editionCodeLabel(code) {
+  return normalizeLanguage(code).toUpperCase()
+}
+
+/**
+ * Full language name in the UI locale (English, Hebrew, Deutsch…).
+ * Codes stay on `editionCodeLabel`; this is the part that may translate.
+ * Falls back to the catalog's English name when Intl has no data.
+ * @param {string} code Wikipedia edition code
+ * @param {string} [uiLocale] UI / banana locale
+ */
+export function displayLanguageName(code, uiLocale = DEFAULT_LANGUAGE) {
+  const edition = getEdition(code)
+  const localeTag = getEdition(uiLocale).bcp47 || normalizeLanguage(uiLocale)
+  try {
+    const name = new Intl.DisplayNames([localeTag], { type: 'language' }).of(
+      edition.bcp47 || edition.code,
+    )
+    if (name && name.toLowerCase() !== (edition.bcp47 || edition.code).toLowerCase()) {
+      return name
+    }
+  } catch {
+    // Intl.DisplayNames missing or locale unknown — use the catalog.
+  }
+  return edition.name
+}
+
+/**
+ * One line for a language <option>: Latin code, then the translated name.
+ * @param {string} code
+ * @param {string} [uiLocale]
+ */
+export function formatEditionOption(code, uiLocale = DEFAULT_LANGUAGE) {
+  return `${editionCodeLabel(code)} · ${displayLanguageName(code, uiLocale)}`
+}
+
 export function catalogMeta() {
   return {
     generatedAt: catalog.generatedAt,

@@ -5,7 +5,8 @@ import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { useOverlays } from '../design/useOverlays.js'
 import { pickRealms, randomRealm } from '../content/realms.js'
-import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { APP_NAME } from '../../appInfo.js'
+import { DEFAULT_LANGUAGE, editionCodeLabel } from '../../core/i18n/wikipediaEditions.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -103,7 +104,7 @@ function chooseEnglish(title) {
              world, the realm in the scrim is the h1 and this is a dialog
              inside it — two h1s would leave a screen reader with two
              answers to "what is this page". -->
-        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></component>
+        <component :is="dismissible ? 'h2' : 'h1'" class="launch__wordmark"><bdi>{{ APP_NAME }}</bdi></component>
         <button
           v-if="dismissible"
           class="launch__close"
@@ -145,7 +146,7 @@ function chooseEnglish(title) {
             >
               <strong>
                 <span class="launch__lang" aria-hidden="true">
-                  <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+                  <bdi>{{ editionCodeLabel(DEFAULT_LANGUAGE) }}</bdi>
                 </span>
                 <bdi>{{ realm.title }}</bdi>
               </strong>
@@ -163,7 +164,7 @@ function chooseEnglish(title) {
           >
             <Icon name="crosshair" :size="14" />
             <span class="launch__lang" aria-hidden="true">
-              <bdi>{{ t('wikirealms-launch-edition-badge') }}</bdi>
+              <bdi>{{ editionCodeLabel(DEFAULT_LANGUAGE) }}</bdi>
             </span>
             <bdi>{{ t('wikirealms-launch-surprise') }}</bdi>
           </button>

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { copyText, shareLink } from '../../adapters/shareTarget.js'
 import { realmUrl } from '../../adapters/urlState.js'
+import { APP_NAME } from '../../appInfo.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
 import { t } from '../i18n/banana.js'
 
@@ -37,7 +38,7 @@ export function useShare() {
     if (!title) return
 
     const outcome = await shareLink({
-      title: t('wikirealms-app-name'),
+      title: APP_NAME,
       text: t('wikirealms-share-explore', title),
       url: realmUrl(title, { language }),
     })

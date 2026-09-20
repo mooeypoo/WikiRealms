@@ -30,6 +30,7 @@ import {
 } from '../rendering/sectionStats.js'
 import WikipediaCtaLink from './WikipediaCtaLink.vue'
 import WikipediaFieldTask from './WikipediaFieldTask.vue'
+import { editionCodeLabel } from '../../core/i18n/wikipediaEditions.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -70,6 +71,7 @@ const props = defineProps({
 const emit = defineEmits(['update:state', 'share', 'select', 'legend', 'dismiss-peek-hint'])
 
 const { t } = useI18n()
+const languageCode = computed(() => editionCodeLabel(props.article.language))
 
 /**
  * Below this many rows the whole tree is shown expanded, above it every
@@ -471,7 +473,7 @@ watch(
     <template #collapsed>
       <button class="ledger__restore" type="button" @click="setState('peek')">
         <span class="ledger__restore-title">
-          <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+          <span class="ledger__lang"><bdi>{{ languageCode }}</bdi></span>
           <bdi>{{ article.title }}</bdi>
         </span>
         <span class="ledger__restore-stats tabular">
@@ -485,11 +487,11 @@ watch(
       <div class="ledger__head" :class="{ 'ledger__head--clear-helm': clearHelm }">
         <div class="ledger__identity">
           <h2 class="ledger__title">
-            <span class="ledger__lang">{{ (article.language || 'en').toUpperCase() }}</span>
+            <span class="ledger__lang"><bdi>{{ languageCode }}</bdi></span>
             <bdi>{{ article.title }}</bdi>
           </h2>
           <p class="ledger__origin tabular">
-            {{ (article.language || 'en').toUpperCase() }}.WIKIPEDIA · REV {{ article.latestRevisionId }}
+            <bdi>{{ languageCode }}</bdi>.WIKIPEDIA · REV {{ article.latestRevisionId }}
           </p>
         </div>
 

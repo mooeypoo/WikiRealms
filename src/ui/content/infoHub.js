@@ -11,9 +11,34 @@
  * period at the logical end. Bare `<bdi>` would auto-detect LTR from the
  * Latin brand and break that — so we only wrap a message in `<bdi>` when
  * the resolved text has no RTL letters (English fallback inside an RTL UI).
- * Short Latin proper names in links still use `tBdiHtml`.
+ * Proper names that must stay English (author name and site, asset packs,
+ * artists, license codes) are hardcoded and wrapped with `bdiHtml`, not
+ * message keys. Shortcut glyphs are inserted from the keymap.
  */
-import { getUiDir, t, tBdiHtml } from '../i18n/banana.js'
+import {
+  APP_AUTHOR_NAME,
+  APP_AUTHOR_SITE_LABEL,
+  APP_AUTHOR_SITE_URL,
+  APP_REPOSITORY_URL,
+  CC0_LICENSE,
+} from '../../appInfo.js'
+import { bdiHtml, getUiDir, t, tBdiHtml } from '../i18n/banana.js'
+import { formatKeyHtml } from '../design/useKeymap.js'
+
+/**
+ * Credit names and URLs. English originals — not translation strings.
+ * @type {Readonly<{ href: string, name: string }>}
+ */
+const FISH_PACK = Object.freeze({ href: 'https://quaternius.com', name: 'Cute Fish Pack' })
+const QUATERNIUS = Object.freeze({
+  href: 'https://www.patreon.com/quaternius',
+  name: 'Quaternius',
+})
+const TOWN_KIT = Object.freeze({
+  href: 'https://kenney.nl/assets/fantasy-town-kit',
+  name: 'Fantasy Town Kit',
+})
+const KENNEY = Object.freeze({ href: 'https://kenney.nl', name: 'Kenney' })
 
 /** Hebrew, Arabic, and neighbouring RTL script blocks. */
 const RTL_LETTER = /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0780-\u07BF\u08A0-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/
@@ -38,6 +63,11 @@ function link(href, labelHtml) {
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${labelHtml}</a>`
 }
 
+/** Outbound link whose visible name is English and isolated for RTL. */
+function namedLink({ href, name }) {
+  return link(href, bdiHtml(name))
+}
+
 function startHereHtml() {
   return `
       <p>${proseMessage('wikirealms-info-start-lead')}</p>
@@ -48,7 +78,7 @@ function startHereHtml() {
         <li>${proseMessage('wikirealms-info-start-portals')}</li>
         <li>${proseMessage('wikirealms-info-start-trail')}</li>
       </ul>
-      <p class="info-hub__callout">${proseMessage('wikirealms-info-start-callout')}</p>
+      <p class="info-hub__callout">${proseMessage('wikirealms-info-start-callout', formatKeyHtml('l'))}</p>
     `
 }
 
@@ -82,34 +112,22 @@ function howWorldsHtml() {
 }
 
 function aboutHtml() {
-  const fishPack = link('https://quaternius.com', tBdiHtml('wikirealms-info-about-fish-pack'))
-  const quaternius = link(
-    'https://www.patreon.com/quaternius',
-    tBdiHtml('wikirealms-info-about-quaternius'),
-  )
-  const townKit = link(
-    'https://kenney.nl/assets/fantasy-town-kit',
-    tBdiHtml('wikirealms-info-about-town-kit'),
-  )
-  const kenney = link('https://kenney.nl', tBdiHtml('wikirealms-info-about-kenney'))
-
+  const cc0 = namedLink({ href: CC0_LICENSE.url, name: CC0_LICENSE.code })
   return `
-      <p>${proseMessage('wikirealms-info-about-by')}</p>
+      <p>${proseMessage('wikirealms-info-about-by', bdiHtml(APP_AUTHOR_NAME))}</p>
       <p>${proseMessage('wikirealms-info-about-pitch')}</p>
       <ul class="info-hub__links">
-        <li>${link(
-          'https://github.com/mooeypoo/WikiRealms',
-          tBdiHtml('wikirealms-info-about-source'),
-        )}</li>
-        <li>${link('https://moriel.tech', tBdiHtml('wikirealms-info-about-site'))}</li>
+        <li>${link(APP_REPOSITORY_URL, tBdiHtml('wikirealms-info-about-source'))}</li>
+        <li>${link(APP_AUTHOR_SITE_URL, bdiHtml(APP_AUTHOR_SITE_LABEL))}</li>
       </ul>
       <h3>${proseMessage('wikirealms-info-about-credits')}</h3>
       <p>${proseMessage(
         'wikirealms-info-about-credits-body',
-        fishPack,
-        quaternius,
-        townKit,
-        kenney,
+        namedLink(FISH_PACK),
+        namedLink(QUATERNIUS),
+        namedLink(TOWN_KIT),
+        namedLink(KENNEY),
+        cc0,
       )}</p>
     `
 }

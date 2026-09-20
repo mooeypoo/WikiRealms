@@ -9,6 +9,17 @@ export const APP_NAME = 'WikiRealms'
 export const APP_VERSION = '0.1.0'
 export const APP_REPOSITORY_URL = 'https://github.com/mooeypoo/WikiRealms'
 
+/** Author identity — English originals, not translation strings. */
+export const APP_AUTHOR_NAME = 'Moriel Schottlender'
+export const APP_AUTHOR_SITE_URL = 'https://moriel.tech'
+export const APP_AUTHOR_SITE_LABEL = 'moriel.tech'
+
+/** SPDX-style license code and canonical (English) deed URL. */
+export const CC0_LICENSE = Object.freeze({
+  code: 'CC0',
+  url: 'https://creativecommons.org/publicdomain/zero/1.0/',
+})
+
 /** One-line pitch — keep in sync with Launch.vue and index.html meta. */
 export const APP_DESCRIPTION =
   'Every Wikipedia article is a world. Its sections become mountain ranges, its references grow the forests, and its links are portals out.'

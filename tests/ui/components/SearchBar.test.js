@@ -1,8 +1,13 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import SearchBar from '../../../src/ui/components/SearchBar.vue'
+import { setUiLocale } from '../../../src/ui/i18n/banana.js'
 
 enableAutoUnmount(afterEach)
+
+afterEach(async () => {
+  await setUiLocale('en')
+})
 
 const RESULTS = [
   { title: 'Einstein', description: 'German physicist' },
@@ -46,6 +51,16 @@ describe('SearchBar', () => {
     await select.setValue('he')
 
     expect(wrapper.emitted('update:language')).toEqual([['he']])
+  })
+
+  it('labels the language dropdown with a Latin code and a translated name', async () => {
+    await setUiLocale('he')
+    const wrapper = mountSearch({ language: 'he' })
+    const hebrew = wrapper.findAll('option').find((option) => option.element.value === 'he')
+
+    expect(hebrew.text()).toMatch(/^HE · /)
+    expect(hebrew.text()).toContain('עברית')
+    expect(wrapper.find('.search-bar__result-lang').text()).toBe('HE')
   })
 
   describe('the keyboard', () => {

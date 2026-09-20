@@ -7,7 +7,7 @@ import {
   WIKIPEDIA_CTA_SURFACES,
   fieldGuideCtaProse,
 } from '../content/wikipediaCtas.js'
-import { useKeymap } from '../design/useKeymap.js'
+import { formatKeyLabel, useKeymap } from '../design/useKeymap.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -99,7 +99,7 @@ const { shortcuts } = useKeymap()
           <dd v-for="item in group.items" :key="item.label">
             <span><bdi>{{ item.label }}</bdi></span>
             <span class="guide__combo">
-              <kbd v-for="combo in item.keys" :key="combo">{{ combo }}</kbd>
+              <kbd v-for="combo in item.keys" :key="combo"><bdi>{{ formatKeyLabel(combo) }}</bdi></kbd>
             </span>
           </dd>
         </template>

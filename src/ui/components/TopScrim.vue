@@ -1,5 +1,6 @@
 <script setup>
 import Icon from '../design/Icon.vue'
+import { APP_NAME } from '../../appInfo.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -34,7 +35,7 @@ const { t } = useI18n()
            rather than the pair. -->
       <button class="scrim__home" type="button" :aria-label="t('wikirealms-scrim-home')" @click="$emit('home')">
         <Icon name="mark" :size="18" />
-        <span class="scrim__wordmark"><bdi>{{ t('wikirealms-app-name') }}</bdi></span>
+        <span class="scrim__wordmark"><bdi>{{ APP_NAME }}</bdi></span>
       </button>
 
       <template v-if="realm">

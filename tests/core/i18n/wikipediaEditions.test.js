@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_LANGUAGE,
+  displayLanguageName,
+  editionCodeLabel,
+  formatEditionOption,
   getEdition,
   isKnownEdition,
   listEditions,
@@ -29,6 +32,16 @@ describe('wikipediaEditions catalog', () => {
     expect(isKnownEdition('nope')).toBe(false)
     expect(normalizeLanguage('nope')).toBe(DEFAULT_LANGUAGE)
     expect(wikipediaApiRoot('de')).toBe('https://de.wikipedia.org/w/api.php')
+  })
+
+  it('keeps badge codes Latin and translates the full language name', () => {
+    expect(editionCodeLabel('he')).toBe('HE')
+    expect(editionCodeLabel('en')).toBe('EN')
+    expect(displayLanguageName('he', 'en')).toBe('Hebrew')
+    expect(displayLanguageName('he', 'he')).toMatch(/עברית/)
+    expect(formatEditionOption('he', 'en')).toBe('HE · Hebrew')
+    expect(formatEditionOption('he', 'he')).toMatch(/^HE · /)
+    expect(formatEditionOption('he', 'he')).toContain('עברית')
   })
 })
 

@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import de from '../../../i18n/de.json'
+import en from '../../../i18n/en.json'
+import es from '../../../i18n/es.json'
+import fa from '../../../i18n/fa.json'
+import fr from '../../../i18n/fr.json'
+import he from '../../../i18n/he.json'
+import { APP_NAME } from '../../../src/appInfo.js'
 import { getEdition } from '../../../src/core/i18n/wikipediaEditions.js'
 import { bdiHtml, setUiLocale, t, tBdiHtml } from '../../../src/ui/i18n/banana.js'
+
+const LOCALES = { en, de, es, fa, fr, he }
 
 describe('banana-i18n UI messages', () => {
   beforeEach(async () => {
@@ -8,7 +17,7 @@ describe('banana-i18n UI messages', () => {
   })
 
   it('resolves English chrome strings', () => {
-    expect(t('wikirealms-app-name')).toBe('WikiRealms')
+    expect(APP_NAME).toBe('WikiRealms')
     expect(t('wikirealms-search-placeholder', 'German')).toBe('Search German Wikipedia')
     expect(t('wikirealms-scrim-trail-aria', 1)).toBe(
       'Your trail, 1 realm — path kept and shareable',
@@ -84,6 +93,28 @@ describe('banana-i18n UI messages', () => {
     expect(bdiHtml('Settings')).toBe('<bdi>Settings</bdi>')
     expect(bdiHtml('A <B>')).toBe('<bdi>A &lt;B&gt;</bdi>')
     expect(tBdiHtml('wikirealms-settings-title')).toBe('<bdi>Settings</bdi>')
+  })
+
+  it('does not expose author site or asset names as translation keys', () => {
+    expect(en).not.toHaveProperty('wikirealms-info-about-site')
+    expect(en).not.toHaveProperty('wikirealms-info-about-fish-pack')
+    expect(en).not.toHaveProperty('wikirealms-info-about-quaternius')
+    expect(en).not.toHaveProperty('wikirealms-info-about-town-kit')
+    expect(en).not.toHaveProperty('wikirealms-info-about-kenney')
+  })
+
+  it('keeps wordmarks, badges, author names, license codes, and keys out of messages', () => {
+    const locked = /Moriel Schottlender|מוריאל|موریل|<kbd>L<\/kbd>|\(CC0\)/
+    for (const [code, messages] of Object.entries(LOCALES)) {
+      expect(messages, code).not.toHaveProperty('wikirealms-app-name')
+      expect(messages, code).not.toHaveProperty('wikirealms-launch-edition-badge')
+      expect(messages['wikirealms-info-about-by'], code).toContain('$1')
+      expect(messages['wikirealms-info-about-credits-body'], code).toContain('$5')
+      expect(messages['wikirealms-legend-dismiss-desktop'], code).toContain('$1')
+      expect(messages['wikirealms-info-start-callout'], code).toContain('$1')
+      expect(messages['wikirealms-search-hint'], code).toContain('$1')
+      expect(JSON.stringify(messages), code).not.toMatch(locked)
+    }
   })
 })
 

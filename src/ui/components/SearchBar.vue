@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import Icon from '../design/Icon.vue'
 import Spinner from './Spinner.vue'
-import { getEdition, listEditions } from '../../core/i18n/wikipediaEditions.js'
+import { displayLanguageName, editionCodeLabel, formatEditionOption, listEditions } from '../../core/i18n/wikipediaEditions.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -28,13 +28,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:query', 'update:language', 'select'])
 
-const { t } = useI18n()
+const { t, uiLocale } = useI18n()
 const field = ref(null)
 const active = ref(-1)
 
-const edition = computed(() => getEdition(props.language))
 const editions = computed(() => listEditions({ featuredOnly: !props.showAllWikipedias }))
-const placeholder = computed(() => t('wikirealms-search-placeholder', edition.value.name))
+const placeholder = computed(() =>
+  t('wikirealms-search-placeholder', displayLanguageName(props.language, uiLocale.value)),
+)
 
 watch(
   () => props.results,
@@ -68,7 +69,7 @@ function onLanguageChange(event) {
 }
 
 function editionOptionLabel(item) {
-  return `${item.code.toUpperCase()} · ${item.autonym}`
+  return formatEditionOption(item.code, uiLocale.value)
 }
 
 defineExpose({ focus: () => field.value?.focus() })
@@ -129,7 +130,7 @@ defineExpose({ focus: () => field.value?.focus() })
           @mousemove="active = index"
         >
           <strong>
-            <span class="search-bar__result-lang">{{ language.toUpperCase() }}</span>
+            <span class="search-bar__result-lang"><bdi>{{ editionCodeLabel(language) }}</bdi></span>
             <bdi>{{ result.title }}</bdi>
           </strong>
           <span v-if="result.description"><bdi>{{ result.description }}</bdi></span>

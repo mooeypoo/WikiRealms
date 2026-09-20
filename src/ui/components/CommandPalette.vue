@@ -5,6 +5,7 @@ import Sheet from '../design/Sheet.vue'
 import SearchBar from './SearchBar.vue'
 import { useArticleSearch } from '../composables/useArticleSearch.js'
 import { DEFAULT_LANGUAGE } from '../../core/i18n/wikipediaEditions.js'
+import { formatKeyHtml } from '../design/useKeymap.js'
 import { useI18n } from '../i18n/banana.js'
 
 /**
@@ -104,9 +105,11 @@ function onSelect(result) {
       @select="onSelect"
     />
 
-    <p v-if="results.length === 0 && status === 'idle'" class="palette__hint">
-      <bdi>{{ t('wikirealms-search-hint', 'Esc') }}</bdi>
-    </p>
+    <p
+      v-if="results.length === 0 && status === 'idle'"
+      class="palette__hint"
+      v-html="t('wikirealms-search-hint', formatKeyHtml('escape'))"
+    ></p>
   </Sheet>
 </template>
 

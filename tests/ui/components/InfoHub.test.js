@@ -77,6 +77,35 @@ describe('InfoHub', () => {
     expect(about?.innerHTML).toContain('https://quaternius.com')
     expect(about?.innerHTML).toContain('Fantasy Town Kit')
     expect(about?.innerHTML).toContain('https://kenney.nl/assets/fantasy-town-kit')
+    expect(about?.innerHTML).toContain('<bdi>moriel.tech</bdi>')
+    expect(about?.innerHTML).toContain('href="https://moriel.tech"')
+    expect(about?.innerHTML).toContain('<bdi>Cute Fish Pack</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Quaternius</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Fantasy Town Kit</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Kenney</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Moriel Schottlender</bdi>')
+    expect(about?.innerHTML).toContain('href="https://creativecommons.org/publicdomain/zero/1.0/"')
+    expect(about?.textContent).toContain('CC0')
+    wrapper.unmount()
+  })
+
+  it('keeps author site and asset names English under Hebrew UI', async () => {
+    const { setUiLocale } = await import('../../../src/ui/i18n/banana.js')
+    await setUiLocale('he')
+    const wrapper = mountGuide({ currentTab: 'about' })
+    const about = [...document.querySelectorAll('.guide__prose')].find((el) =>
+      el.innerHTML.includes('moriel.tech'),
+    )
+
+    expect(about?.innerHTML).toContain('<bdi>moriel.tech</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Cute Fish Pack</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Quaternius</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Fantasy Town Kit</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Kenney</bdi>')
+    expect(about?.innerHTML).toContain('<bdi>Moriel Schottlender</bdi>')
+    expect(about?.innerHTML).toContain('href="https://creativecommons.org/publicdomain/zero/1.0/"')
+    expect(about?.textContent).toContain('CC0')
+    expect(about?.textContent).not.toContain('מוריאל')
     wrapper.unmount()
   })
 

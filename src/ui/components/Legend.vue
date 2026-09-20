@@ -13,6 +13,7 @@ import {
   lushnessCeilingNote,
 } from '../content/legend.js'
 import { useI18n } from '../i18n/banana.js'
+import { formatKeyHtml } from '../design/useKeymap.js'
 import { legendKeyReserves, placeLegendPins } from '../rendering/legendPinPlacement.js'
 
 /**
@@ -64,7 +65,7 @@ onUnmounted(() => window.removeEventListener('resize', measureFrame))
 
 const dismissCopy = computed(() =>
   viewport.atLeast('md')
-    ? t('wikirealms-legend-dismiss-desktop')
+    ? t('wikirealms-legend-dismiss-desktop', formatKeyHtml('l'))
     : t('wikirealms-legend-dismiss-mobile'),
 )
 
@@ -213,7 +214,7 @@ function pinTitle(item) {
             </ul>
           </section>
 
-          <p class="legend__dismiss"><bdi>{{ dismissCopy }}</bdi></p>
+          <p class="legend__dismiss" v-html="dismissCopy"></p>
         </aside>
       </div>
     </Transition>
