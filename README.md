@@ -99,6 +99,6 @@ tests/           Mirrors `src/`, kept separate so the app can ship cleanly.
 docs/            Design notes: vision, generation, model, architecture.
 ```
 
-A world key is conceptually `article + revision + engine version`. Change the article on Wikipedia and the planet can go stale; change the generator and old worlds remain reproducible from their engine version.
+A world key is conceptually `articleId + revision + engine version`. `articleId` is already per Wikipedia (`en:736`, `de:736`): language edition plus that wiki's page id, so the same title on two Wikipedias is two worlds. Change the article on Wikipedia and the planet can go stale; change the generator and old worlds remain reproducible from their engine version.
 
 Further reading: [`docs/vision.md`](docs/vision.md), [`docs/generation.md`](docs/generation.md), [`docs/architecture.md`](docs/architecture.md).
