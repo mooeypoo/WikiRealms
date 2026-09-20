@@ -84,7 +84,8 @@ export function computeShrunkRate(citations, sentences, articleRate) {
  * @param {number} articleRate
  * @returns {number} in [ceilingFloor, 1]
  */
-export function computeLushnessCeiling(articleRate) {
+export function computeLushnessCeiling(articleRate, { useAbsoluteCeiling = true } = {}) {
+  if (!useAbsoluteCeiling) return 1
   const reached = smoothstep(0, LUSHNESS.articleRateSaturation, articleRate)
   return LUSHNESS.ceilingFloor + (1 - LUSHNESS.ceilingFloor) * reached
 }
@@ -127,16 +128,21 @@ export function relativeRateToUnit(ratio) {
  *
  * @param {{ citations?: number, sentences?: number }} section subtree totals
  * @param {number} articleRate from computeArticleCitationRate
+ * @param {{ useAbsoluteCeiling?: boolean }} [options]
  * @returns {number} 0, or in [LUSHNESS.citedFloor, 1]
  */
-export function computeSectionLushness({ citations = 0, sentences = 0 } = {}, articleRate) {
+export function computeSectionLushness(
+  { citations = 0, sentences = 0 } = {},
+  articleRate,
+  { useAbsoluteCeiling = true } = {},
+) {
   // No citations anywhere in the article: nothing to compare, and no
   // section has earned any greenery.
   if (!(articleRate > 0)) return 0
   if (citations <= 0) return 0
 
   const ratio = computeShrunkRate(citations, sentences, articleRate) / articleRate
-  const lushness = relativeRateToUnit(ratio) * computeLushnessCeiling(articleRate)
+  const lushness = relativeRateToUnit(ratio) * computeLushnessCeiling(articleRate, { useAbsoluteCeiling })
   return Math.min(1, Math.max(LUSHNESS.citedFloor, lushness))
 }
 
@@ -150,13 +156,15 @@ export function computeSectionLushness({ citations = 0, sentences = 0 } = {}, ar
  *
  * @param {object[]} peaks
  * @param {number} articleRate
+ * @param {{ useAbsoluteCeiling?: boolean }} [options]
  * @returns {object[]} the same array
  */
-export function annotatePeakLushness(peaks, articleRate) {
+export function annotatePeakLushness(peaks, articleRate, { useAbsoluteCeiling = true } = {}) {
   for (const peak of peaks) {
     peak.lushness = computeSectionLushness(
       { citations: peak.citationCount ?? 0, sentences: peak.subtreeSentenceCount ?? 0 },
       articleRate,
+      { useAbsoluteCeiling },
     )
   }
   return peaks

@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { normalizeCombo, registerBinding, resetKeymap, useKeymap } from '../../../src/ui/design/useKeymap.js'
+import {
+  formatKeyHtml,
+  formatKeyLabel,
+  normalizeCombo,
+  registerBinding,
+  resetKeymap,
+  useKeymap,
+} from '../../../src/ui/design/useKeymap.js'
 
 afterEach(() => resetKeymap())
 
-function press(key, { target = document.body, ...modifiers } = {}) {
-  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
+function press(key, { target = document.body, code, ...modifiers } = {}) {
+  const event = new KeyboardEvent('keydown', { key, code, bubbles: true, cancelable: true, ...modifiers })
   Object.defineProperty(event, 'target', { value: target })
   window.dispatchEvent(event)
   return event
@@ -134,6 +141,22 @@ describe('useKeymap', () => {
     press('h')
 
     expect(run).not.toHaveBeenCalled()
+  })
+
+  it('labels keys in Latin from the binding, not from a translation', () => {
+    expect(formatKeyLabel('l')).toBe('L')
+    expect(formatKeyLabel('escape')).toBe('Esc')
+    expect(formatKeyHtml('l')).toBe('<bdi><kbd>L</kbd></bdi>')
+    expect(formatKeyHtml('escape')).toBe('<bdi><kbd>Esc</kbd></bdi>')
+  })
+
+  it('matches the physical US-QWERTY letter even when the layout prints another character', () => {
+    const run = vi.fn()
+    registerBinding({ keys: 'l', run })
+
+    press('ל', { code: 'KeyL' })
+
+    expect(run).toHaveBeenCalledOnce()
   })
 
   it('is the single source for the shortcut list', () => {

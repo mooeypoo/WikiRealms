@@ -1,6 +1,7 @@
 <script setup>
 import Icon from '../design/Icon.vue'
 import Sheet from '../design/Sheet.vue'
+import { useI18n } from '../i18n/banana.js'
 
 /**
  * One share door, two intents.
@@ -19,12 +20,21 @@ defineProps({
 })
 
 defineEmits(['share-realm', 'share-trail', 'close'])
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <Sheet id="share" :open="show" label="Share" :snap-points="[0.42, 0.72]" :snap="0" @close="$emit('close')">
+  <Sheet
+    id="share"
+    :open="show"
+    :label="t('wikirealms-share')"
+    :snap-points="[0.42, 0.72]"
+    :snap="0"
+    @close="$emit('close')"
+  >
     <template #header>
-      <h2 class="share__title">Share</h2>
+      <h2 class="share__title"><bdi>{{ t('wikirealms-share') }}</bdi></h2>
     </template>
 
     <ul class="share__list">
@@ -32,9 +42,13 @@ defineEmits(['share-realm', 'share-trail', 'close'])
         <button type="button" @click="$emit('share-realm')">
           <Icon name="share" :size="18" />
           <span>
-            <strong>Share this realm</strong>
+            <strong><bdi>{{ t('wikirealms-share-realm') }}</bdi></strong>
             <small>
-              {{ realmTitle ? `A link to ${realmTitle} as a world` : 'A link to this world' }}
+              <bdi>{{
+                realmTitle
+                  ? t('wikirealms-share-realm-hint-named', realmTitle)
+                  : t('wikirealms-share-realm-hint')
+              }}</bdi>
             </small>
           </span>
         </button>
@@ -43,13 +57,13 @@ defineEmits(['share-realm', 'share-trail', 'close'])
         <button type="button" :disabled="!canShareTrail" @click="$emit('share-trail')">
           <Icon name="trail" :size="18" />
           <span>
-            <strong>Share my trail</strong>
+            <strong><bdi>{{ t('wikirealms-share-trail') }}</bdi></strong>
             <small>
-              {{
+              <bdi>{{
                 canShareTrail
-                  ? `Your path through ${trailLength} realm${trailLength === 1 ? '' : 's'} as a postcard`
-                  : 'Open a realm first, then share the path you walked'
-              }}
+                  ? t('wikirealms-share-trail-hint', trailLength)
+                  : t('wikirealms-share-trail-need-realm')
+              }}</bdi>
             </small>
           </span>
         </button>
@@ -84,7 +98,7 @@ defineEmits(['share-realm', 'share-trail', 'close'])
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  text-align: left;
+  text-align: start;
 }
 
 .share__list button:hover:not(:disabled) {

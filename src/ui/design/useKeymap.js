@@ -1,4 +1,5 @@
 import { computed, getCurrentInstance, onUnmounted, ref } from 'vue'
+import { escapeHtml, t } from '../i18n/banana.js'
 
 /**
  * One keyboard registry for the whole app.
@@ -12,6 +13,9 @@ import { computed, getCurrentInstance, onUnmounted, ref } from 'vue'
  * Here every binding is declared once, with the label it should be shown
  * under, and the Field Guide renders `shortcuts` rather than restating them.
  * A shortcut that is not in this registry does not exist.
+ *
+ * `label` and `group` are banana message keys (resolved when the Field Guide
+ * lists them) so a locale switch updates the list without re-registering.
  */
 
 const bindings = ref([])
@@ -45,29 +49,81 @@ export function normalizeCombo(combo) {
   return [...ordered, key].join('+')
 }
 
-function comboFromEvent(event) {
-  const key = event.key.toLowerCase()
+function isApplePlatform() {
+  return /mac|iphone|ipad/i.test(globalThis.navigator?.platform ?? globalThis.navigator?.userAgent ?? '')
+}
+
+/**
+ * Visible shortcut label. Always Latin / symbols from the binding — never
+ * a translation string. Letter keys are US-QWERTY positions (KeyL is L
+ * even when another layout prints a different character there).
+ * @param {string} combo canonical combo from `normalizeCombo`
+ * @param {{ apple?: boolean }} [options]
+ */
+export function formatKeyLabel(combo, { apple = isApplePlatform() } = {}) {
+  const parts = normalizeCombo(combo).split('+')
+  const named = {
+    escape: 'Esc',
+    arrowleft: '←',
+    arrowright: '→',
+    arrowup: '↑',
+    arrowdown: '↓',
+    mod: apple ? '⌘' : 'Ctrl',
+    ctrl: 'Ctrl',
+    alt: apple ? '⌥' : 'Alt',
+    shift: apple ? '⇧' : 'Shift',
+  }
+  const shown = parts.map((part) => {
+    if (named[part]) return named[part]
+    if (part.length === 1) return part.toUpperCase()
+    return part.charAt(0).toUpperCase() + part.slice(1)
+  })
+  // Apple modifier glyphs sit against the key (⌘K); everything else uses +.
+  const glue = apple && parts.includes('mod') ? '' : '+'
+  return shown.join(glue)
+}
+
+/** Isolated `<kbd>` wrapping `formatKeyLabel`, for HTML message placeholders. */
+export function formatKeyHtml(combo, options) {
+  return `<bdi><kbd>${escapeHtml(formatKeyLabel(combo, options))}</kbd></bdi>`
+}
+
+function letterFromCode(code) {
+  const match = /^Key([A-Z])$/.exec(code ?? '')
+  return match ? match[1].toLowerCase() : null
+}
+
+function comboFromKeyName(keyName, event) {
+  const key = keyName.toLowerCase()
   const modifiers = []
-  // A combo is declared with `mod`, so report the pressed modifier as `mod`
-  // on whichever platform it is; ctrl on a Mac stays literally ctrl.
-  const isApple = /mac|iphone|ipad/i.test(globalThis.navigator?.platform ?? globalThis.navigator?.userAgent ?? '')
+  const isApple = isApplePlatform()
   const modPressed = isApple ? event.metaKey : event.ctrlKey
   if (modPressed) modifiers.push('mod')
   if (event.ctrlKey && !modPressed) modifiers.push('ctrl')
   if (event.altKey) modifiers.push('alt')
-  // A printable key already encodes Shift in the character itself: pressing
-  // "?" reports key "?" WITH shiftKey set, so folding shift into the combo
-  // would make it 'shift+?' and no sane declaration would ever match it.
   if (event.shiftKey && key.length > 1) modifiers.push('shift')
   return [...modifiers, key].join('+')
 }
 
+/**
+ * Combos this event should match: the character produced (`event.key`) and,
+ * for letter keys, the physical US-QWERTY position (`event.code`). UI
+ * language does not move the L key; a Hebrew layout still fires `l` from
+ * KeyL.
+ */
+function combosFromEvent(event) {
+  const combos = new Set([comboFromKeyName(event.key, event)])
+  const letter = letterFromCode(event.code)
+  if (letter) combos.add(comboFromKeyName(letter, event))
+  return combos
+}
+
 function handleKeydown(event) {
-  const pressed = comboFromEvent(event)
+  const pressed = combosFromEvent(event)
   const typing = isTypingTarget(event.target)
 
   const candidates = bindings.value
-    .filter((binding) => binding.combos.includes(pressed))
+    .filter((binding) => binding.combos.some((combo) => pressed.has(combo)))
     .filter((binding) => binding.allowInField || !typing)
     .filter((binding) => binding.enabled())
     .sort((a, b) => b.priority - a.priority)
@@ -98,8 +154,8 @@ function releaseIfIdle() {
  * @param {object} binding
  * @param {string|string[]} binding.keys combos, e.g. 'mod+k' or ['?', 'i']
  * @param {() => void} binding.run
- * @param {string} [binding.label] shown in the Field Guide; omit to hide
- * @param {string} [binding.group] heading to list it under
+ * @param {string} [binding.label] banana key shown in the Field Guide; omit to hide
+ * @param {string} [binding.group] banana key for the heading to list it under
  * @param {number} [binding.priority] higher wins; overlays sit above the app
  * @param {() => boolean} [binding.enabled]
  * @param {boolean} [binding.allowInField] fires even while typing (Escape)
@@ -109,7 +165,7 @@ export function registerBinding({
   keys,
   run,
   label = null,
-  group = 'General',
+  group = 'wikirealms-keymap-group-general',
   priority = 0,
   enabled = () => true,
   allowInField = false,
@@ -155,8 +211,9 @@ export function useKeymap() {
     const groups = new Map()
     for (const binding of bindings.value) {
       if (!binding.label) continue
-      if (!groups.has(binding.group)) groups.set(binding.group, [])
-      groups.get(binding.group).push({ keys: binding.combos, label: binding.label })
+      const groupLabel = t(binding.group)
+      if (!groups.has(groupLabel)) groups.set(groupLabel, [])
+      groups.get(groupLabel).push({ keys: binding.combos, label: t(binding.label) })
     }
     return [...groups].map(([group, items]) => ({ group, items }))
   })

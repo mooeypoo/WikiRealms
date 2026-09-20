@@ -84,3 +84,29 @@ That suggests:
 - a preference for client-side session state at first
 
 If the app later needs more durable in-memory caching or a long-lived backend process, the architecture should allow that shift without rewriting the core engine.
+
+## Direction (RTL / LTR)
+
+UI language tracks the active Wikipedia edition. `document.documentElement.dir`
+is set from that edition (`ltr` or `rtl`).
+
+**The world does not flip.** Terrain, portals in world/grid space, and camera
+math stay in physical screen coordinates.
+
+**UI chrome does mirror.** Prefer logical CSS (`inset-inline-*`,
+`padding-inline-*`, `border-inline-*`, `text-align: start`). Flex and grid
+follow `dir` automatically.
+
+Physical `left` / `right` / `translate(±50%)` are exceptions and must stay rare:
+
+1. **Centering** — use physical `left: 50%` with physical `translate(-50%, …)`,
+   or flex centering. Never mix `inset-inline-start: 50%` with physical
+   translate (that combination shoves dialogs off-screen under RTL).
+2. **Projected UI** — tooltips and cards placed from JS viewport pixels.
+3. **Safe-area** — `env(safe-area-inset-left/right)` are physical; dock with
+   logical inset plus a `[dir='rtl']` env swap when needed.
+4. **Directional icons** — `scaleX(-1)` under RTL for chevrons only.
+
+Agent guidance lives in `.cursor/rules/rtl-layout.mdc`. Sheet dialog centering
+is guarded in `tests/ui/design/Sheet.test.js` and
+`tests/architecture/rtlLayout.test.js`.

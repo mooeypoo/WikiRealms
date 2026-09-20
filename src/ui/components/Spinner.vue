@@ -1,5 +1,11 @@
+<script setup>
+import { useI18n } from '../i18n/banana.js'
+
+const { t } = useI18n()
+</script>
+
 <template>
-  <span class="spinner" role="status" aria-label="Loading"></span>
+  <span class="spinner" role="status" :aria-label="t('wikirealms-loading')"></span>
 </template>
 
 <style scoped>

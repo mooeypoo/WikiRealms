@@ -16,7 +16,7 @@ function makeGraph() {
 function makeState(overrides = {}) {
   return {
     graph: makeGraph(),
-    articleCache: { 'Albert Einstein': { title: 'Albert Einstein' } },
+    articleCache: { 'en:Albert Einstein': { title: 'Albert Einstein', language: 'en' } },
     engineVersion: 'v1',
     ...overrides,
   }
@@ -48,7 +48,7 @@ describe('createSnapshot', () => {
       engineVersion: 'v1',
       worlds: {},
       navigation: { graph: makeGraph() },
-      articleCache: { 'Albert Einstein': { title: 'Albert Einstein' } },
+      articleCache: { 'en:Albert Einstein': { title: 'Albert Einstein', language: 'en' } },
       generationCache: {},
       uiState: {},
     })
@@ -80,7 +80,7 @@ describe('restoreSnapshot', () => {
 
     expect(restoreSnapshot(snapshot)).toEqual({
       graph: makeGraph(),
-      articleCache: { 'Albert Einstein': { title: 'Albert Einstein' } },
+      articleCache: { 'en:Albert Einstein': { title: 'Albert Einstein', language: 'en' } },
     })
   })
 
@@ -121,7 +121,7 @@ describe('restoreSnapshot', () => {
 
       expect(currentTitle(graph)).toBe('Albert Einstein')
       expect(backTitles(graph)).toEqual(['Physics'])
-      expect(articleCache).toEqual({ Physics: { title: 'Physics' } })
+      expect(articleCache).toEqual({ 'en:Physics': { title: 'Physics', language: 'en' } })
     })
 
     it('keeps a forward stack reachable rather than discarding it', () => {

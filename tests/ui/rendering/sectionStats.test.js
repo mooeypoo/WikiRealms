@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { getEdition } from '../../../src/core/i18n/wikipediaEditions.js'
+import { setUiLocale } from '../../../src/ui/i18n/banana.js'
 import {
   estimateWordCount,
+  formatCount,
+  formatInteger,
   formatPageviews,
   formatSources,
   formatSubsections,
@@ -17,6 +21,10 @@ import {
  * was reading two dialects of the same sentence.
  */
 
+beforeEach(async () => {
+  await setUiLocale('en')
+})
+
 describe('estimateWordCount', () => {
   it('converts characters to words at a ~5.5 chars/word rate', () => {
     expect(estimateWordCount(0)).toBe(0)
@@ -31,11 +39,21 @@ describe('estimateWordCount', () => {
   })
 })
 
-describe('formatWords', () => {
-  it('adds thousands separators and pluralizes correctly', () => {
+describe('formatInteger / formatWords', () => {
+  it('adds thousands separators and pluralizes correctly in English', () => {
     expect(formatWords(0)).toBe('0 words')
     expect(formatWords(1)).toBe('1 word')
     expect(formatWords(1200)).toBe('1,200 words')
+    expect(formatCount(1200)).toBe('1,200')
+  })
+
+  it('groups numbers with the active UI locale', async () => {
+    await setUiLocale('de')
+    expect(formatInteger(1200)).toBe((1200).toLocaleString(getEdition('de').bcp47))
+    expect(formatWords(1200)).toBe(`${formatInteger(1200)} Wörter`)
+
+    await setUiLocale('he')
+    expect(formatInteger(1200)).toBe((1200).toLocaleString(getEdition('he').bcp47))
   })
 })
 

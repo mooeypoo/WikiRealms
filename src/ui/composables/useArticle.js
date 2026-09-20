@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { fetchWikipediaArticle } from '../../adapters/wikipediaArticleAdapter.js'
+import { t } from '../i18n/banana.js'
 
 /**
  * Reactive article-loading state backed by a fetch function (defaults to
@@ -15,13 +16,13 @@ export function useArticle({ fetchFn = fetchWikipediaArticle } = {}) {
 
   let requestToken = 0
 
-  async function loadArticle(title) {
+  async function loadArticle(title, { language } = {}) {
     const token = ++requestToken
     status.value = 'loading'
     errorMessage.value = null
 
     try {
-      const found = await fetchFn(title)
+      const found = await fetchFn(title, language !== undefined ? { language } : undefined)
       if (token !== requestToken) return // a newer load superseded this one
       article.value = found
       status.value = 'success'
@@ -29,7 +30,7 @@ export function useArticle({ fetchFn = fetchWikipediaArticle } = {}) {
       if (token !== requestToken) return
       article.value = null
       status.value = 'error'
-      errorMessage.value = error?.message ?? 'Failed to load article'
+      errorMessage.value = error?.message ?? t('wikirealms-load-article-failed')
     }
   }
 

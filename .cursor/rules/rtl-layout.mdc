@@ -1,0 +1,40 @@
+---
+description: RTL/LTR layout — logical chrome, physical exceptions only
+globs: src/ui/**/*.{vue,css,js}
+alwaysApply: false
+---
+
+# Direction (RTL / LTR)
+
+`document.documentElement.dir` follows the active Wikipedia edition. The
+**world** (terrain, portals in world space, camera) never flips. **UI chrome**
+mirrors with reading direction.
+
+## Default: logical CSS
+
+Prefer `inset-inline-*`, `padding-inline-*`, `margin-inline-*`,
+`border-inline-*`, `text-align: start|end`. Flex/grid already follow `dir`.
+
+## Physical axes are rare — and must be labeled
+
+Use physical `left` / `right` / `translateX(±50%)` only when needed:
+
+1. **Centering** with `left: 50%` + `translate(-50%, …)` — both axes must be
+   physical. Never pair `inset-inline-start: 50%` with physical translate
+   (under `dir=rtl` that pins the start edge mid-viewport then shoves the
+   box further left, off-screen). Prefer flex/`place-items: center` when
+   practical.
+2. **Screen-space JS** (projected tooltips, portal preview cards, legend
+   pins) — coordinates are viewport pixels.
+3. **Safe-area `env()`** — notches are physical; pair logical inset with a
+   `[dir='rtl']` swap of `safe-area-inset-left/right` when docking to an edge.
+4. **Directional icons** — `scaleX(-1)` under `[dir='rtl']` for chevrons only,
+   not for layout containers or the world.
+
+When you write a physical inset or translate for UI, leave a short comment
+naming which exception above applies.
+
+## Text
+
+Visible chrome: `<bdi>` / `I18nText`. Field Guide prose sets `:dir="uiDir"`
+on the panel so mixed Latin+Hebrew inherits the locale direction.

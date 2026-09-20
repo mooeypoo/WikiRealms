@@ -1,6 +1,6 @@
 import { wikimediaFetchInit } from './wikimediaFetch.js'
-
-const REST_BASE = 'https://en.wikipedia.org/w/rest.php/v1/page'
+import { sectionsRestUrl } from '../core/i18n/wikipediaHosts.js'
+import { DEFAULT_LANGUAGE, normalizeLanguage } from '../core/i18n/wikipediaEditions.js'
 
 export class WikipediaSectionsError extends Error {
   constructor(message, { cause } = {}) {
@@ -17,27 +17,30 @@ export class WikipediaSectionsError extends Error {
  * lightweight, cacheable alternative (verified to also allow direct
  * cross-origin browser fetches, unlike the action API).
  * @param {string} title
+ * @param {{ language?: string }} [options]
  */
-export function buildSectionsUrl(title) {
-  const normalized = title.trim().replace(/ /g, '_')
-  return `${REST_BASE}/${encodeURIComponent(normalized)}/with_html`
+export function buildSectionsUrl(title, { language = DEFAULT_LANGUAGE } = {}) {
+  return sectionsRestUrl(title, language)
 }
 
 /**
- * Fetches the rendered HTML for an English Wikipedia article, used to
+ * Fetches the rendered HTML for a language Wikipedia article, used to
  * derive section structure, per-section links, and section anchors (see
  * docs/generation.md — the action API has no concept of sections).
  * @param {string} title
- * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal }} [options]
+ * @param {{ fetchImpl?: typeof fetch, signal?: AbortSignal, language?: string }} [options]
  * @returns {Promise<string>} the article's rendered HTML
  */
-export async function fetchWikipediaSectionsHtml(title, { fetchImpl = fetch, signal } = {}) {
+export async function fetchWikipediaSectionsHtml(
+  title,
+  { fetchImpl = fetch, signal, language = DEFAULT_LANGUAGE } = {},
+) {
   const trimmed = title?.trim() ?? ''
   if (!trimmed) {
     throw new WikipediaSectionsError('An article title is required')
   }
 
-  const url = buildSectionsUrl(trimmed)
+  const url = buildSectionsUrl(trimmed, { language: normalizeLanguage(language) })
 
   let response
   try {

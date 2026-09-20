@@ -5,6 +5,7 @@
  * decides whether one exists.
  */
 import WikipediaCtaLink from './WikipediaCtaLink.vue'
+import { useI18n } from '../i18n/banana.js'
 
 defineProps({
   eyebrow: { type: String, default: '' },
@@ -12,12 +13,14 @@ defineProps({
   href: { type: String, required: true },
   label: { type: String, required: true },
 })
+
+const { t } = useI18n()
 </script>
 
 <template>
-  <aside class="field-task" aria-label="Field task">
-    <p v-if="eyebrow" class="field-task__eyebrow tabular">{{ eyebrow }}</p>
-    <p v-if="notice" class="field-task__notice">{{ notice }}</p>
+  <aside class="field-task" :aria-label="t('wikirealms-field-task-eyebrow')">
+    <p v-if="eyebrow" class="field-task__eyebrow tabular"><bdi>{{ eyebrow }}</bdi></p>
+    <p v-if="notice" class="field-task__notice"><bdi>{{ notice }}</bdi></p>
     <WikipediaCtaLink class="field-task__action" :href="href" :label="label" />
   </aside>
 </template>

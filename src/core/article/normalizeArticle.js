@@ -1,12 +1,14 @@
-const WIKIPEDIA_QUERY_ENDPOINT = 'https://en.wikipedia.org/w/api.php'
+import { actionApiEndpoint } from '../i18n/wikipediaHosts.js'
+import { DEFAULT_LANGUAGE, normalizeLanguage } from '../i18n/wikipediaEditions.js'
 
 /**
  * Builds the MediaWiki Action API URL to fetch a single article's identity,
  * latest revision, and the minimal content features needed by the app.
  * @param {string} title
+ * @param {{ language?: string }} [options]
  */
-export function buildArticleQueryUrl(title) {
-  const url = new URL(WIKIPEDIA_QUERY_ENDPOINT)
+export function buildArticleQueryUrl(title, { language = DEFAULT_LANGUAGE } = {}) {
+  const url = new URL(actionApiEndpoint(normalizeLanguage(language)))
   url.searchParams.set('action', 'query')
   url.searchParams.set('format', 'json')
   url.searchParams.set('formatversion', '2')
@@ -39,7 +41,8 @@ function stripCategoryPrefix(title) {
  * @param {{ language?: string }} [options]
  * @returns {object} Article
  */
-export function normalizeArticleResponse(raw, { language = 'en' } = {}) {
+export function normalizeArticleResponse(raw, { language = DEFAULT_LANGUAGE } = {}) {
+  const edition = normalizeLanguage(language)
   const page = raw?.query?.pages?.[0]
 
   if (!page) {
@@ -53,9 +56,9 @@ export function normalizeArticleResponse(raw, { language = 'en' } = {}) {
   const revision = page.revisions?.[0]
 
   return {
-    articleId: `${language}:${page.pageid}`,
+    articleId: `${edition}:${page.pageid}`,
     title: page.title,
-    language,
+    language: edition,
     pageId: page.pageid,
     url: page.fullurl ?? '',
     namespace: page.ns,

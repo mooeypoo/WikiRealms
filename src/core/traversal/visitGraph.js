@@ -22,14 +22,21 @@
  *   - a HISTORY: the order you actually moved, which is what back and
  *     forward walk. A graph has no unique "previous"; a history does.
  *
+ * A realm's identity is (language, title): the same title on German and
+ * English Wikipedia are different worlds. Trails may hold multiple
+ * languages in one graph; the UI usually filters to the active edition.
+ *
  * Pure and serializable: every function takes a journey and returns a new
  * one, and the whole thing round-trips through JSON.
  */
+
+import { DEFAULT_LANGUAGE, isKnownEdition, normalizeLanguage } from '../i18n/wikipediaEditions.js'
 
 /**
  * @typedef {object} Realm
  * @property {string} id
  * @property {string} title
+ * @property {string} language Wikipedia edition code
  * @property {number} order when it was first reached, for stable layout
  */
 
@@ -58,11 +65,30 @@ function clone(journey) {
 }
 
 /**
- * A realm's identity is its title. Two arrivals at the same title are the
- * same place, because they generate the same world.
+ * A realm's identity is its language edition and title. Two arrivals at
+ * the same title on the same Wikipedia are the same place.
+ *
+ * @param {string} title
+ * @param {string} [language]
  */
-export function realmId(title) {
-  return `r:${title}`
+export function realmId(title, language = DEFAULT_LANGUAGE) {
+  return `r:${normalizeLanguage(language)}:${title}`
+}
+
+/**
+ * Migrates a pre-4.0 realm id (`r:Title`) or returns a modern id unchanged.
+ * @param {string} id
+ * @param {string} [fallbackLanguage]
+ */
+export function migrateRealmId(id, fallbackLanguage = DEFAULT_LANGUAGE) {
+  if (typeof id !== 'string' || !id.startsWith('r:')) return id
+  const rest = id.slice(2)
+  const colon = rest.indexOf(':')
+  if (colon === -1) return realmId(rest, fallbackLanguage)
+  const maybeLang = rest.slice(0, colon)
+  // Modern ids always start with a known edition code: r:en:Saturn
+  if (isKnownEdition(maybeLang)) return id
+  return realmId(rest, fallbackLanguage)
 }
 
 export function currentRealm(journey) {
@@ -74,6 +100,10 @@ export function currentTitle(journey) {
   return currentRealm(journey)?.title ?? null
 }
 
+export function currentLanguage(journey) {
+  return currentRealm(journey)?.language ?? null
+}
+
 /** Kept for callers that speak in node ids; a realm id IS the node id now. */
 export function currentId(journey) {
   return journey.history[journey.cursor] ?? null
@@ -83,15 +113,57 @@ export function realmsOf(journey) {
   return Object.values(journey.realms).sort((a, b) => a.order - b.order)
 }
 
+/**
+ * Realms for one Wikipedia edition — the trail the UI usually shows.
+ * @param {Journey} journey
+ * @param {string} language
+ */
+export function realmsForLanguage(journey, language) {
+  const code = normalizeLanguage(language)
+  return realmsOf(journey).filter((realm) => realm.language === code)
+}
+
+/**
+ * A journey view containing only realms/edges/history for one language.
+ * Used so the trail map does not mix editions.
+ * @param {Journey} journey
+ * @param {string} language
+ * @returns {Journey}
+ */
+export function journeyForLanguage(journey, language) {
+  const code = normalizeLanguage(language)
+  const realms = {}
+  for (const realm of Object.values(journey.realms)) {
+    if (realm.language === code) realms[realm.id] = realm
+  }
+  const edges = journey.edges.filter((edge) => realms[edge.from] && realms[edge.to])
+  const history = journey.history.filter((id) => realms[id])
+  let cursor = -1
+  const current = currentId(journey)
+  if (current && realms[current]) {
+    cursor = history.lastIndexOf(current)
+  } else if (history.length) {
+    cursor = history.length - 1
+  }
+  return {
+    realms,
+    edges,
+    history,
+    cursor,
+    nextOrder: journey.nextOrder,
+  }
+}
+
 export function neighboursOf(journey, id) {
   return journey.edges.filter((edge) => edge.from === id).map((edge) => journey.realms[edge.to])
 }
 
-function ensureRealm(journey, title) {
-  const id = realmId(title)
+function ensureRealm(journey, title, language) {
+  const code = normalizeLanguage(language)
+  const id = realmId(title, code)
   if (journey.realms[id]) return id
 
-  journey.realms[id] = { id, title, order: journey.nextOrder }
+  journey.realms[id] = { id, title, language: code, order: journey.nextOrder }
   journey.nextOrder += 1
   return id
 }
@@ -113,14 +185,19 @@ function connect(journey, from, to) {
  * Travel: arriving somewhere through a portal from where you are. Records
  * both the realm and the connection, which is what makes the graph a map
  * of the part of Wikipedia this session has walked.
+ *
+ * @param {Journey} journey
+ * @param {string} title
+ * @param {{ language?: string }} [options]
  */
-export function visit(journey, title) {
+export function visit(journey, title, { language } = {}) {
   if (!title) return journey
-  if (currentTitle(journey) === title) return journey
+  const code = normalizeLanguage(language ?? currentLanguage(journey) ?? DEFAULT_LANGUAGE)
+  if (currentTitle(journey) === title && currentLanguage(journey) === code) return journey
 
   const next = clone(journey)
   const from = currentId(journey)
-  const to = ensureRealm(next, title)
+  const to = ensureRealm(next, title, code)
 
   connect(next, from, to)
   pushHistory(next, to)
@@ -131,12 +208,17 @@ export function visit(journey, title) {
  * A jump: a search, a shared link, a curated realm. It records no edge,
  * because no portal was taken — claiming a connection that does not exist
  * would put a road on the map where there is none.
+ *
+ * @param {Journey} journey
+ * @param {string} title
+ * @param {{ language?: string }} [options]
  */
-export function jump(journey, title) {
+export function jump(journey, title, { language } = {}) {
   if (!title) return journey
+  const code = normalizeLanguage(language ?? currentLanguage(journey) ?? DEFAULT_LANGUAGE)
 
   const next = clone(journey)
-  pushHistory(next, ensureRealm(next, title))
+  pushHistory(next, ensureRealm(next, title, code))
   return next
 }
 
@@ -198,13 +280,21 @@ export function forwardTitles(journey) {
  * articles). A history is a claim about the SESSION (I was here, then
  * there). This shape knows the second and not the first, so it asserts only
  * the second. The map fills in properly from the next portal taken.
+ *
+ * @param {{ current?: string|null, backstack?: string[], forwardstack?: string[], language?: string }} [state]
  */
-export function fromLinearHistory({ current = null, backstack = [], forwardstack = [] } = {}) {
+export function fromLinearHistory({
+  current = null,
+  backstack = [],
+  forwardstack = [],
+  language = DEFAULT_LANGUAGE,
+} = {}) {
   const chain = [...backstack, ...(current ? [current] : []), ...forwardstack]
   if (chain.length === 0) return createVisitGraph()
 
+  const code = normalizeLanguage(language)
   let journey = createVisitGraph()
-  for (const title of chain) journey = jump(journey, title)
+  for (const title of chain) journey = jump(journey, title, { language: code })
 
   for (let step = 0; step < forwardstack.length; step += 1) journey = goBack(journey)
 
@@ -216,18 +306,22 @@ export function fromLinearHistory({ current = null, backstack = [], forwardstack
  * links become edges, and the history is the path to where the viewer was —
  * the best that shape can say about the order things happened, since it
  * recorded structure rather than sequence.
+ *
+ * @param {object} tree
+ * @param {{ language?: string }} [options]
  */
-export function fromVisitTree(tree) {
+export function fromVisitTree(tree, { language = DEFAULT_LANGUAGE } = {}) {
   if (!tree?.nodes) return createVisitGraph()
 
+  const code = normalizeLanguage(language)
   let journey = createVisitGraph()
   const ordered = Object.values(tree.nodes).sort((a, b) => order(a.id) - order(b.id))
 
   for (const node of ordered) {
     const next = clone(journey)
-    const to = ensureRealm(next, node.title)
+    const to = ensureRealm(next, node.title, code)
     const parent = node.parentId ? tree.nodes[node.parentId] : null
-    if (parent) connect(next, realmId(parent.title), to)
+    if (parent) connect(next, realmId(parent.title, code), to)
     journey = next
   }
 
@@ -238,9 +332,49 @@ export function fromVisitTree(tree) {
     cursor = cursor.parentId ? tree.nodes[cursor.parentId] : null
   }
 
-  journey.history = path.map(realmId)
+  journey.history = path.map((title) => realmId(title, code))
   journey.cursor = journey.history.length - 1
   return journey
+}
+
+/**
+ * Rewrites a 3.0 title-only journey into language-aware realm ids.
+ * @param {Journey} journey
+ * @param {string} [language]
+ * @returns {Journey}
+ */
+export function migrateJourneyLanguages(journey, language = DEFAULT_LANGUAGE) {
+  if (!isVisitGraph(journey)) return createVisitGraph()
+  const code = normalizeLanguage(language)
+  const next = createVisitGraph()
+  next.nextOrder = journey.nextOrder
+
+  const idMap = new Map()
+  for (const realm of Object.values(journey.realms)) {
+    const lang = realm.language ? normalizeLanguage(realm.language) : code
+    const id = realmId(realm.title, lang)
+    idMap.set(realm.id, id)
+    next.realms[id] = {
+      id,
+      title: realm.title,
+      language: lang,
+      order: realm.order,
+    }
+  }
+
+  next.edges = journey.edges
+    .map((edge) => ({
+      from: idMap.get(edge.from) ?? migrateRealmId(edge.from, code),
+      to: idMap.get(edge.to) ?? migrateRealmId(edge.to, code),
+    }))
+    .filter((edge) => next.realms[edge.from] && next.realms[edge.to])
+
+  next.history = journey.history
+    .map((id) => idMap.get(id) ?? migrateRealmId(id, code))
+    .filter((id) => next.realms[id])
+  next.cursor = Math.min(journey.cursor, next.history.length - 1)
+  if (next.history.length === 0) next.cursor = -1
+  return next
 }
 
 function order(id) {

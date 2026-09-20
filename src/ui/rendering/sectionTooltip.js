@@ -8,7 +8,7 @@
  * hands over the projected clip-space vector and the canvas rect.
  */
 import { lushnessBand } from '../../engine/generation/terrain.js'
-import { estimateWordCount, formatSources, formatWords } from './sectionStats.js'
+import { displaySectionTitle, estimateWordCount, formatSources, formatWords } from './sectionStats.js'
 
 /**
  * Converts a clip-space vector (post-projection: x,y ∈ [-1, 1], z is
@@ -100,7 +100,7 @@ export function buildTooltipModel(peak, peaks, peakIndex = null) {
   const words = estimateWordCount(size)
   const parentIndex = peakIndex ?? peak.sectionIndex ?? -1
   return {
-    title: peak.title ?? 'Untitled section',
+    title: displaySectionTitle(peak.title),
     subsectionCount: countDirectSubsections(peaks ?? [], parentIndex),
     wordsLabel: formatWords(words),
     densityBand: lushnessBand(Number(peak.lushness) || 0),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   blockSeparatedText,
+  charsPerSentence,
   countProseSentences,
   countSentenceUnits,
   countStructuralItems,
@@ -177,5 +178,28 @@ describe('countSentenceUnits', () => {
 
   it('is zero for a section with no prose at all', () => {
     expect(countSentenceUnits(body(''), 0)).toBe(0)
+  })
+
+  it('counts CJK terminators under char-estimate instead of returning zero', () => {
+    const el = body('<p>これは一文です。これは二文です！三文？</p>')
+    expect(countProseSentences(blockSeparatedText(el), { sentenceModel: 'char-estimate' })).toBe(3)
+    expect(countSentenceUnits(el, el.textContent.trim().length, { sentenceModel: 'char-estimate' })).toBe(3)
+  })
+
+  it('uses a denser length fallback for CJK / Thai-family when no terminators fire', () => {
+    expect(charsPerSentence('char-estimate')).toBe(40)
+    expect(charsPerSentence('latin-punct')).toBe(110)
+
+    // Thai-style run with no Latin or ideographic terminators.
+    const prose = 'ก'.repeat(400)
+    const el = body(`<div>${prose}</div>`)
+    const length = el.textContent.trim().length
+
+    expect(countSentenceUnits(el, length, { sentenceModel: 'char-estimate' })).toBe(
+      Math.round(length / 40),
+    )
+    expect(countSentenceUnits(el, length, { sentenceModel: 'char-estimate' })).toBeGreaterThan(
+      countSentenceUnits(el, length, { sentenceModel: 'latin-punct' }),
+    )
   })
 })

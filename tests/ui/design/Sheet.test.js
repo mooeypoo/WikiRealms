@@ -80,6 +80,16 @@ describe('Sheet', () => {
       wrapper.unmount()
     })
 
+    it('centres dialogs with physical left + translate, not logical inline-start', () => {
+      // inset-inline-start: 50% under dir=rtl pins the start edge mid-screen
+      // while translate(-50%) still shifts left — dialogs leave the viewport.
+      const source = readFileSync(resolve(process.cwd(), 'src/ui/design/Sheet.vue'), 'utf8')
+      const dialogBlock = source.match(/\.sheet--dialog\s*\{[^}]+\}/)?.[0] ?? ''
+      expect(dialogBlock).toMatch(/left:\s*50%/)
+      expect(dialogBlock).toMatch(/translate\(-50%,\s*-50%\)/)
+      expect(dialogBlock).not.toMatch(/inset-inline-start:\s*50%/)
+    })
+
     it('puts a drag grip only on a bottom sheet', () => {
       sizeViewport(390, 844)
       const asSheet = mountSheet()

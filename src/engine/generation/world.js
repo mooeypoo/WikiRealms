@@ -79,6 +79,10 @@ export function generateWorld(
     // the article cites is a fact about the article, and folding its
     // smallest sections into one peak must not change it.
     articleCitationRate: computeArticleCitationRate(sectionTree),
+    // Absolute lushness ceilings were calibrated on English Wikipedia
+    // sentence rates. Other sentence models keep relative-within-article
+    // scoring but skip that enwiki absolute gate.
+    useAbsoluteCeiling: article.lushnessSupport !== 'relative' && article.lushnessSupport !== 'experimental',
   })
   const portals = generateSectionPortals(sectionTree, peaks, rng, { width, height })
 

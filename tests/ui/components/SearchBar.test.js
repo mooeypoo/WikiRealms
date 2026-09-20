@@ -1,8 +1,13 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import SearchBar from '../../../src/ui/components/SearchBar.vue'
+import { setUiLocale } from '../../../src/ui/i18n/banana.js'
 
 enableAutoUnmount(afterEach)
+
+afterEach(async () => {
+  await setUiLocale('en')
+})
 
 const RESULTS = [
   { title: 'Einstein', description: 'German physicist' },
@@ -31,12 +36,31 @@ describe('SearchBar', () => {
     expect(wrapper.emitted('update:query')).toEqual([['Sat']])
   })
 
-  it('emits the chosen result', async () => {
-    const wrapper = mountSearch()
+  it('emits the chosen result with the search language', async () => {
+    const wrapper = mountSearch({ language: 'de' })
 
     await wrapper.findAll('[role="option"]')[1].trigger('click')
 
-    expect(wrapper.emitted('select')[0][0].title).toBe('Einsteinium')
+    expect(wrapper.emitted('select')[0][0]).toMatchObject({ title: 'Einsteinium', language: 'de' })
+  })
+
+  it('lets the viewer pick a Wikipedia edition with the query', async () => {
+    const wrapper = mountSearch({ language: 'en' })
+    const select = wrapper.find('select[aria-label="Wikipedia language"]')
+
+    await select.setValue('he')
+
+    expect(wrapper.emitted('update:language')).toEqual([['he']])
+  })
+
+  it('labels the language dropdown with a Latin code and a translated name', async () => {
+    await setUiLocale('he')
+    const wrapper = mountSearch({ language: 'he' })
+    const hebrew = wrapper.findAll('option').find((option) => option.element.value === 'he')
+
+    expect(hebrew.text()).toMatch(/^HE · /)
+    expect(hebrew.text()).toContain('עברית')
+    expect(wrapper.find('.search-bar__result-lang').text()).toBe('HE')
   })
 
   describe('the keyboard', () => {
@@ -66,7 +90,7 @@ describe('SearchBar', () => {
       await wrapper.find('input').trigger('keydown', { key: 'ArrowDown' })
       await wrapper.find('input').trigger('keydown', { key: 'Enter' })
 
-      expect(wrapper.emitted('select')[0][0].title).toBe('Einsteinium')
+      expect(wrapper.emitted('select')[0][0]).toMatchObject({ title: 'Einsteinium', language: 'en' })
     })
 
     it('leaves Enter alone when there is nothing to take', async () => {
